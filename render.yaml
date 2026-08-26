@@ -1,0 +1,29 @@
+# Render Blueprint — lets Render create/configure the backend service
+# automatically from this file (New + → Blueprint, pick this repo).
+# Doing it by hand in the dashboard works exactly as well; see README.md.
+services:
+  - type: web
+    name: nexo-perfil-api
+    runtime: node
+    plan: free
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # Secrets — Render will prompt for these instead of reading a value
+      # from this file. Copy them from backend/.env (Firebase service
+      # account: Project Settings → Service Accounts → Generate new
+      # private key).
+      - key: FIREBASE_PROJECT_ID
+        sync: false
+      - key: FIREBASE_PRIVATE_KEY
+        sync: false
+      - key: FIREBASE_CLIENT_EMAIL
+        sync: false
+      # Optional: restrict CORS to the Firebase Hosting domain once known,
+      # e.g. https://nexo-prueba.web.app. Leaving it unset allows any
+      # origin, which is fine (auth is a Bearer token, not cookies).
+      - key: CORS_ORIGIN
+        sync: false

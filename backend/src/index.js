@@ -1,25 +1,19 @@
 require('dotenv').config();
 
-const functions = require('firebase-functions');
 const createApp = require('./app');
-
-const app = createApp();
+const { loadEnv } = require('./config/env');
 
 /**
- * Dual entry point:
- *  - As a Cloud Function, this module exports `api`, wrapping the Express
- *    app with `functions.https.onRequest`.
- *  - For local development (`npm run dev` / `npm start`, i.e. this file
- *    run directly with `node`), it also starts a plain HTTP listener.
+ * Local/production entry point. Deployed on Render as a plain Node web
+ * service (`npm start` → this file), not as a Firebase Cloud Function —
+ * that path required the Blaze billing plan, which this project doesn't
+ * use. Firebase Auth and Firestore stay on the (free) Spark plan; only
+ * where this Express app *runs* changed.
  */
-exports.api = functions.https.onRequest(app);
+const env = loadEnv();
+const app = createApp();
+const port = Number(env.PORT) || 3000;
 
-if (require.main === module) {
-  const { loadEnv } = require('./config/env');
-  const env = loadEnv();
-  const port = Number(env.PORT) || 3000;
-
-  app.listen(port, () => {
-    console.log(`Nexo Perfil API listening on http://localhost:${port}`);
-  });
-}
+app.listen(port, () => {
+  console.log(`Nexo Perfil API listening on http://localhost:${port}`);
+});

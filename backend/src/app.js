@@ -20,7 +20,11 @@ const { errorHandler } = require('./middleware/errorHandler');
 function createApp(container = createContainer('firestore')) {
   const app = express();
 
-  app.use(cors());
+  // Frontend (Firebase Hosting) and backend (Render) are different origins.
+  // CORS_ORIGIN restricts requests to that domain in production; unset, it
+  // falls back to allowing any origin (fine — auth is a Bearer token, not
+  // cookies, so a permissive default carries no CSRF-style risk).
+  app.use(cors(process.env.CORS_ORIGIN ? { origin: process.env.CORS_ORIGIN } : undefined));
   app.use(express.json());
 
   app.get('/health', (req, res) => res.json({ status: 'ok' }));
