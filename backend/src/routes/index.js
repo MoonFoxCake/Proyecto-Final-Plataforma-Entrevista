@@ -2,7 +2,7 @@ const { Router } = require('express');
 
 const AuthController = require('../controllers/auth.controller');
 
-const createAuthRoutes = require('./auth.routes');
+const { createAuthRoutes } = require('./auth.routes');
 
 /**
  * Builds the `/api/v1` router tree, wiring each sub-router's controller

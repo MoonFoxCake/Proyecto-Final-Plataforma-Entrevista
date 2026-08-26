@@ -1,3 +1,10 @@
+import {
+  onAuthStateChanged as firebaseOnAuthStateChanged,
+  sendEmailVerification,
+  signInWithEmailAndPassword,
+  signOut,
+} from 'firebase/auth';
+import { auth } from '../config/firebase.js';
 import api from './api';
 
 /**
@@ -5,53 +12,67 @@ import api from './api';
  */
 
 /**
- * Registers a new user: creates the Firebase Auth account and, via the
- * backend, the corresponding Firestore user document.
+ * Registers a new candidate.
  *
- * @param {{ email: string, password: string, displayName: string }} data
- * @returns {Promise<object>}
+ * Account creation happens on the backend (`POST /auth/register`, via the
+ * Admin SDK) rather than client-side, so it can atomically create the
+ * Firebase Auth user, tag it with the `candidate` role (custom claims),
+ * and create the Firestore user document in one place.
+ *
+ * Once that succeeds, this briefly signs in to trigger Firebase's
+ * verification email, then signs back out — registration lands the user
+ * on the login screen, not straight into the app, matching the "revisa tu
+ * correo" copy on the success screen.
+ *
+ * @param {{ email: string, password: string, displayName: string, phone?: string, city?: string, country?: string, academicLevel?: string, professionalArea?: string }} data
+ * @returns {Promise<object>} the created user record
  */
 export async function register(data) {
-  // TODO: implement Firebase createUserWithEmailAndPassword, then call
-  // the backend so it creates the Firestore user document, e.g.
-  // const { data: user } = await api.post('/auth/register', data);
-  // return user;
-  throw new Error('Not implemented');
+  const { data: user } = await api.post('/auth/register', data);
+
+  try {
+    const credential = await signInWithEmailAndPassword(auth, data.email, data.password);
+    await sendEmailVerification(credential.user);
+    await signOut(auth);
+  } catch (error) {
+    // Non-fatal: the account was created either way. The user can still
+    // log in and request a new verification email later.
+    console.error('No se pudo enviar el correo de verificación:', error);
+  }
+
+  return user;
 }
 
 /**
  * @param {string} email
  * @param {string} password
- * @returns {Promise<object>}
+ * @returns {Promise<import('firebase/auth').User>}
  */
 export async function login(email, password) {
-  // TODO: implement Firebase signInWithEmailAndPassword
-  throw new Error('Not implemented');
+  const credential = await signInWithEmailAndPassword(auth, email, password);
+  return credential.user;
 }
 
 /**
  * @returns {Promise<void>}
  */
 export async function logout() {
-  // TODO: implement Firebase signOut
-  throw new Error('Not implemented');
+  await signOut(auth);
 }
 
 /**
- * @returns {object|null}
+ * @returns {import('firebase/auth').User|null}
  */
 export function getCurrentUser() {
-  // TODO: return the current Firebase user
-  throw new Error('Not implemented');
+  return auth.currentUser;
 }
 
 /**
  * Subscribes to Firebase Auth state changes.
  *
- * @param {(user: object|null) => void} callback
+ * @param {(user: import('firebase/auth').User|null) => void} callback
  * @returns {() => void} unsubscribe function
  */
 export function onAuthStateChanged(callback) {
-  // TODO: implement Firebase onAuthStateChanged subscription
-  throw new Error('Not implemented');
+  return firebaseOnAuthStateChanged(auth, callback);
 }

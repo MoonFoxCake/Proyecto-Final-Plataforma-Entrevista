@@ -3,7 +3,7 @@ import { onAuthStateChanged } from '../services/authService';
 
 /**
  * @typedef {object} AuthContextValue
- * @property {object|null} user
+ * @property {import('firebase/auth').User|null} user
  * @property {string|null} role
  * @property {boolean} loading
  */
@@ -17,7 +17,10 @@ export const AuthContext = createContext({
 
 /**
  * Wraps the app, subscribing to Firebase auth state and exposing
- * `{ user, role, loading }` via {@link AuthContext}.
+ * `{ user, role, loading }` via {@link AuthContext}. `role` is read from
+ * the ID token's custom claims (see `AuthService.assignRole` on the
+ * backend), not from Firestore, so it's available without an extra API
+ * call and stays in sync whenever the token refreshes.
  */
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
@@ -25,11 +28,21 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // TODO: subscribe via onAuthStateChanged, read the role from custom
-    // claims on the Firebase user, and update state accordingly.
-    // const unsubscribe = onAuthStateChanged((firebaseUser) => { ... });
-    // return unsubscribe;
-    setLoading(false);
+    const unsubscribe = onAuthStateChanged(async (firebaseUser) => {
+      if (!firebaseUser) {
+        setUser(null);
+        setRole(null);
+        setLoading(false);
+        return;
+      }
+
+      const tokenResult = await firebaseUser.getIdTokenResult();
+      setUser(firebaseUser);
+      setRole(tokenResult.claims.role ?? null);
+      setLoading(false);
+    });
+
+    return unsubscribe;
   }, []);
 
   return (

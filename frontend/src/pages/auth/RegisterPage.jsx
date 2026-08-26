@@ -20,6 +20,8 @@ import {
   UserIcon,
 } from '../../components/auth/icons.jsx';
 import { ACADEMIC_LEVELS, PROFESSIONAL_AREAS } from '../../utils/candidateOptions.js';
+import * as authService from '../../services/authService';
+import { getAuthErrorMessage } from '../../utils/firebaseErrors.js';
 
 const INITIAL_FORM = {
   nombre: '',
@@ -37,7 +39,7 @@ const INITIAL_FORM = {
 
 /**
  * Three-step candidate registration wizard: personal data, academic
- * background, then credentials. Submission not wired up yet.
+ * background, then credentials.
  */
 export function RegisterPage() {
   const navigate = useNavigate();
@@ -48,6 +50,7 @@ export function RegisterPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [showPassword2, setShowPassword2] = useState(false);
   const [errors, setErrors] = useState({});
+  const [submitError, setSubmitError] = useState('');
   const [form, setForm] = useState(INITIAL_FORM);
 
   const set = (key) => (e) => {
@@ -94,12 +97,22 @@ export function RegisterPage() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!validateStep()) return;
+    setSubmitError('');
     setLoading(true);
     try {
-      // TODO: call authService.register(form) once the backend accepts the
-      // full candidate profile (currently only { email, password, displayName }).
-      await new Promise((resolve) => setTimeout(resolve, 1100));
+      await authService.register({
+        email: form.email,
+        password: form.password,
+        displayName: `${form.nombre} ${form.apellido}`.trim(),
+        phone: form.telefono,
+        city: form.ciudad,
+        country: form.pais,
+        academicLevel: form.nivel,
+        professionalArea: form.area,
+      });
       setDone(true);
+    } catch (err) {
+      setSubmitError(getAuthErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -344,6 +357,12 @@ export function RegisterPage() {
                 </div>
                 {errors.terminos && <p className="-mt-2 text-xs text-red-500">{errors.terminos}</p>}
               </>
+            )}
+
+            {submitError && (
+              <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
+                {submitError}
+              </div>
             )}
 
             <div className={`flex gap-3 pt-2 ${step > 0 ? 'flex-row' : 'flex-col'}`}>

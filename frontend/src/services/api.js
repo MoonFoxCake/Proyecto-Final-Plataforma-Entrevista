@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { auth } from '../config/firebase.js';
 
 /**
  * Shared axios instance for all API calls. Attaches the current user's
@@ -9,9 +10,8 @@ const api = axios.create({
 });
 
 api.interceptors.request.use(async (config) => {
-  // TODO: fetch the current Firebase user's ID token and attach it, e.g.
-  // const token = await auth.currentUser?.getIdToken();
-  // if (token) config.headers.Authorization = `Bearer ${token}`;
+  const token = await auth.currentUser?.getIdToken();
+  if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
 

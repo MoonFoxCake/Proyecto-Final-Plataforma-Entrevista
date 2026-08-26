@@ -1,17 +1,15 @@
+const { auth } = require('../config/firebase');
 const { UnauthorizedError } = require('../utils/errors');
 
 /**
  * Extracts the Bearer token from the Authorization header, verifies it
- * against Firebase Auth, and injects the decoded user into `req.user`
- * as `{ uid, email, role, orgId }`.
- *
- * For now this returns a mocked user so downstream development
- * (routes/controllers/services) can proceed without a live Firebase
- * project configured.
+ * against Firebase Auth, and injects the decoded user into `req.user` as
+ * `{ uid, email, role, orgId }`. `role`/`orgId` come from custom claims
+ * (see `AuthService.assignRole`) and are `null` until a role is assigned.
  *
  * @type {import('express').RequestHandler}
  */
-function verifyToken(req, res, next) {
+async function verifyToken(req, res, next) {
   const authHeader = req.headers.authorization || '';
   const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
 
@@ -20,16 +18,13 @@ function verifyToken(req, res, next) {
   }
 
   try {
-    // TODO: implement Firebase token verification:
-    // const decoded = await admin.auth().verifyIdToken(token);
-    // req.user = { uid: decoded.uid, email: decoded.email, role: decoded.role, orgId: decoded.orgId };
+    const decoded = await auth.verifyIdToken(token);
 
-    // Mocked user for local development until the above is implemented.
     req.user = {
-      uid: 'mock-uid',
-      email: 'mock.user@example.com',
-      role: 'admin',
-      orgId: 'mock-org',
+      uid: decoded.uid,
+      email: decoded.email,
+      role: decoded.role ?? null,
+      orgId: decoded.orgId ?? null,
     };
 
     return next();

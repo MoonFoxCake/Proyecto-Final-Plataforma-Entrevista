@@ -1,4 +1,5 @@
 import { initializeApp } from 'firebase/app';
+import { getAuth } from 'firebase/auth';
 
 /**
  * Firebase Web SDK config, sourced from Vite env vars (never hardcoded).
@@ -14,3 +15,6 @@ const firebaseConfig = {
 };
 
 export const firebaseApp = initializeApp(firebaseConfig);
+
+/** Firebase Auth instance, used by authService and the axios interceptor. */
+export const auth = getAuth(firebaseApp);

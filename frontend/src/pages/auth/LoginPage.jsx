@@ -1,20 +1,37 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Button, Input } from '../../components/ui';
 import { BrandPanel } from '../../components/auth/BrandPanel.jsx';
-import { ArrowRightIcon, EyeIcon, EyeOffIcon, LockIcon, MailIcon } from '../../components/auth/icons.jsx';
+import { ArrowRightIcon, EyeIcon, EyeOffIcon, LockIcon, MailIcon, SpinnerIcon } from '../../components/auth/icons.jsx';
+import * as authService from '../../services/authService';
+import { getAuthErrorMessage } from '../../utils/firebaseErrors.js';
 
 /**
- * Login form (email + password). Submission not wired up yet.
+ * Login form (email + password), backed by Firebase Auth.
  */
 export function LoginPage() {
+  const navigate = useNavigate();
+  const location = useLocation();
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    // TODO: call authService.login(email, password)
+    setError('');
+    setLoading(true);
+    try {
+      await authService.login(email, password);
+      const redirectTo = location.state?.from?.pathname || '/dashboard';
+      navigate(redirectTo, { replace: true });
+    } catch (err) {
+      setError(getAuthErrorMessage(err));
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -29,6 +46,12 @@ export function LoginPage() {
           </p>
 
           <form onSubmit={handleSubmit} className="mt-9">
+            {error && (
+              <div className="mb-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
+                {error}
+              </div>
+            )}
+
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-[#364153]">
                 Correo electrónico
@@ -78,9 +101,18 @@ export function LoginPage() {
             </div>
 
             <div className="mt-5">
-              <Button type="submit" variant="accent" className="h-12 w-full">
-                Iniciar sesión
-                <ArrowRightIcon className="h-4 w-4" />
+              <Button type="submit" variant="accent" className="h-12 w-full" disabled={loading}>
+                {loading ? (
+                  <>
+                    <SpinnerIcon className="h-4 w-4 animate-spin" />
+                    Iniciando sesión...
+                  </>
+                ) : (
+                  <>
+                    Iniciar sesión
+                    <ArrowRightIcon className="h-4 w-4" />
+                  </>
+                )}
               </Button>
             </div>
           </form>
