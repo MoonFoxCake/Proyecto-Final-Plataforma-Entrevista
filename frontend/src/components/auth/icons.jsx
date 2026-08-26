@@ -74,3 +74,91 @@ export function ArrowRightIcon(props) {
     </svg>
   );
 }
+
+export function ArrowLeftIcon(props) {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" {...props}>
+      <path d="M12.667 8H3.333M7.333 3.333 2.667 8l4.666 4.667" stroke="currentColor" strokeWidth="1.333" />
+    </svg>
+  );
+}
+
+export function UserIcon(props) {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" {...props}>
+      <circle cx="8" cy="5.333" r="2.667" stroke="currentColor" strokeWidth="1.333" />
+      <path d="M2.667 13.333c0-2.577 2.388-4.666 5.333-4.666s5.333 2.09 5.333 4.666" stroke="currentColor" strokeWidth="1.333" />
+    </svg>
+  );
+}
+
+export function PhoneIcon(props) {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" {...props}>
+      <path
+        d="M3.14 2h2.193c.31 0 .58.213.65.516l.57 2.462a.667.667 0 0 1-.192.63L4.99 7c.71 1.512 1.933 2.798 3.409 3.409l1.393-1.372a.667.667 0 0 1 .629-.192l2.462.57c.303.07.517.34.517.65V12.86a1 1 0 0 1-1.076 1c-2.55-.174-4.95-1.28-6.756-3.086C3.756 8.966 2.65 6.567 2.475 4.017a1 1 0 0 1 1-1.017Z"
+        stroke="currentColor"
+        strokeWidth="1.333"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+export function MapPinIcon(props) {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" {...props}>
+      <path
+        d="M13.333 6.667c0 4-5.333 7.666-5.333 7.666s-5.333-3.666-5.333-7.666a5.333 5.333 0 1 1 10.666 0Z"
+        stroke="currentColor"
+        strokeWidth="1.333"
+      />
+      <circle cx="8" cy="6.667" r="1.833" stroke="currentColor" strokeWidth="1.333" />
+    </svg>
+  );
+}
+
+export function GraduationCapIcon(props) {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" {...props}>
+      <path d="M1.333 5.333 8 2l6.667 3.333L8 8.667l-6.667-3.334Z" stroke="currentColor" strokeWidth="1.333" strokeLinejoin="round" />
+      <path d="M4 7v3.333c0 1.105 1.79 2 4 2s4-.895 4-2V7" stroke="currentColor" strokeWidth="1.333" />
+      <path d="M14.667 5.333v4" stroke="currentColor" strokeWidth="1.333" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+export function BriefcaseIcon(props) {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" {...props}>
+      <rect x="1.333" y="4.667" width="13.334" height="8.667" rx="1.333" stroke="currentColor" strokeWidth="1.333" />
+      <path d="M5.333 4.667V3.333A1.333 1.333 0 0 1 6.667 2h2.666a1.333 1.333 0 0 1 1.334 1.333v1.334" stroke="currentColor" strokeWidth="1.333" />
+      <path d="M1.333 8.667h13.334" stroke="currentColor" strokeWidth="1.333" />
+    </svg>
+  );
+}
+
+export function ChevronDownIcon(props) {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" {...props}>
+      <path d="m4 6 4 4 4-4" stroke="currentColor" strokeWidth="1.333" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+export function CheckIcon(props) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" {...props}>
+      <path d="m4 12.5 5.5 5.5L20 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+export function SpinnerIcon(props) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" {...props}>
+      <circle cx="12" cy="12" r="10" stroke="rgba(255,255,255,0.3)" strokeWidth="3" />
+      <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+    </svg>
+  );
+}

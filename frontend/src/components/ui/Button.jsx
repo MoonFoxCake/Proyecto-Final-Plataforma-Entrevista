@@ -5,6 +5,9 @@ const VARIANTS = {
   // Solid accent-teal pill button used by the Nexo Perfil auth screens.
   accent:
     'rounded-xl bg-[#0AADA8] text-sm font-semibold text-white transition-colors hover:bg-[#089490] focus:outline-none focus:ring-2 focus:ring-[#0AADA8]/40 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60',
+  // Secondary action alongside an accent button, e.g. a wizard's "back" step.
+  outline:
+    'rounded-xl border border-[#E5E7EB] text-sm font-semibold text-[#4B5563] transition-colors hover:bg-[#F9FAFB] focus:outline-none focus:ring-2 focus:ring-[#0AADA8]/30 disabled:cursor-not-allowed disabled:opacity-60',
 };
 
 /**
