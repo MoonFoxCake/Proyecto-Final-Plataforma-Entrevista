@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Button, Input } from '../../components/ui';
+import { BrandPanel } from '../../components/auth/BrandPanel.jsx';
+import { ArrowRightIcon, EyeIcon, EyeOffIcon, LockIcon, MailIcon } from '../../components/auth/icons.jsx';
 
 /**
  * Login form (email + password). Submission not wired up yet.
@@ -8,6 +10,7 @@ import { Button, Input } from '../../components/ui';
 export function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -15,31 +18,78 @@ export function LoginPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-surface">
-      <form onSubmit={handleSubmit} className="w-full max-w-sm space-y-4 rounded-lg bg-white p-8 shadow">
-        <h1 className="text-xl font-semibold text-primary">Iniciar sesión</h1>
-        <Input
-          type="email"
-          placeholder="Email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-        />
-        <Input
-          type="password"
-          placeholder="Contraseña"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-        />
-        <Button type="submit" className="w-full">
-          Ingresar
-        </Button>
-        <p className="text-center text-sm text-neutral-600">
-          ¿No tienes cuenta?{' '}
-          <Link to="/register" className="text-secondary">
-            Regístrate
-          </Link>
-        </p>
-      </form>
+    <div className="flex min-h-screen w-full bg-[#F8FAFC]">
+      <BrandPanel />
+
+      <div className="flex flex-1 items-center justify-center bg-white p-8">
+        <div className="w-full max-w-[420px]">
+          <h2 className="font-display text-3xl font-bold leading-9 text-[#101828]">Bienvenido</h2>
+          <p className="mt-2 text-sm leading-5 text-[#6A7282]">
+            Ingresa tus credenciales para acceder a la plataforma.
+          </p>
+
+          <form onSubmit={handleSubmit} className="mt-9">
+            <div>
+              <label htmlFor="email" className="block text-sm font-medium text-[#364153]">
+                Correo electrónico
+              </label>
+              <div className="mt-1.5">
+                <Input
+                  id="email"
+                  type="email"
+                  placeholder="nombre@empresa.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  icon={<MailIcon className="h-4 w-4" />}
+                />
+              </div>
+            </div>
+
+            <div className="mt-5">
+              <label htmlFor="password" className="block text-sm font-medium text-[#364153]">
+                Contraseña
+              </label>
+              <div className="mt-1.5">
+                <Input
+                  id="password"
+                  type={showPassword ? 'text' : 'password'}
+                  placeholder="••••••••"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  icon={<LockIcon className="h-4 w-4" />}
+                  rightElement={
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword((v) => !v)}
+                      className="text-[#99A1AF] hover:text-[#6A7282]"
+                      aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                    >
+                      {showPassword ? <EyeOffIcon className="h-4 w-4" /> : <EyeIcon className="h-4 w-4" />}
+                    </button>
+                  }
+                />
+              </div>
+            </div>
+
+            <div className="mt-5 flex justify-end">
+              <Link to="/forgot-password" className="text-sm font-medium text-[#0AADA8] hover:underline">
+                ¿Olvidaste tu contraseña?
+              </Link>
+            </div>
+
+            <div className="mt-5">
+              <Button type="submit" variant="accent" className="h-12 w-full">
+                Iniciar sesión
+                <ArrowRightIcon className="h-4 w-4" />
+              </Button>
+            </div>
+          </form>
+
+          <p className="mt-6 text-center text-xs leading-4 text-[#D1D5DC]">
+            © 2025 Nexo Perfil · Todos los derechos reservados
+          </p>
+        </div>
+      </div>
     </div>
   );
 }
