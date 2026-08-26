@@ -1,0 +1,13 @@
+rules_version = '2';
+
+// NOTE: All read/write access to Firestore goes through the backend
+// (Cloud Functions using the Firebase Admin SDK), which bypasses these
+// rules. Client-side access is denied by default so that every read and
+// write is mediated by the API layer (auth, role and tenant checks).
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

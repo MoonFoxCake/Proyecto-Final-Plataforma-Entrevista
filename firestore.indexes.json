@@ -1,0 +1,21 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "processes",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "recruiterOrgId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "enrollments",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "processId", "order": "ASCENDING" },
+        { "fieldPath": "candidateId", "order": "ASCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}
