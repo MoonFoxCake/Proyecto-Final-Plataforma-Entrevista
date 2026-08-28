@@ -4,8 +4,13 @@ import { LoginPage } from '../pages/auth/LoginPage.jsx';
 import { RegisterPage } from '../pages/auth/RegisterPage.jsx';
 import { ForgotPasswordPage } from '../pages/auth/ForgotPasswordPage.jsx';
 import { DashboardPage } from '../pages/DashboardPage.jsx';
+import { AdminDashboardPage } from '../pages/AdminDashboardPage.jsx';
+import { CandidateDashboardPage } from '../pages/CandidateDashboardPage.jsx';
+import { CompanyDashboardPage } from '../pages/CompanyDashboardPage.jsx';
 import { RequireAuth } from './RequireAuth.jsx';
+import { RequireRole } from './RequireRole.jsx';
 import { useAuth } from '../hooks/useAuth';
+import { ROLES } from '../utils/constants.js';
 
 /** Sends `/` to the dashboard if already signed in, to `/login` otherwise. */
 function RootRedirect() {
@@ -32,6 +37,18 @@ export function AppRouter() {
 
         <Route element={<RequireAuth />}>
           <Route path="/dashboard" element={<DashboardPage />} />
+
+          <Route element={<RequireRole allowedRoles={[ROLES.ADMIN]} />}>
+            <Route path="/admin-dashboard" element={<AdminDashboardPage />} />
+          </Route>
+
+          <Route element={<RequireRole allowedRoles={[ROLES.CANDIDATE]} />}>
+            <Route path="/candidate-dashboard" element={<CandidateDashboardPage />} />
+          </Route>
+
+          <Route element={<RequireRole allowedRoles={[ROLES.CLIENT]} />}>
+            <Route path="/company-dashboard" element={<CompanyDashboardPage />} />
+          </Route>
         </Route>
       </Routes>
     </BrowserRouter>
