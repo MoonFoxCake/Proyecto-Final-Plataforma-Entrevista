@@ -29,6 +29,8 @@ function createPublicAuthRoutes(authController) {
 function createAuthRoutes(authController) {
   const router = Router();
 
+  router.get('/me', authController.getProfile);
+
   router.post(
     '/set-role',
     checkRole('admin'),

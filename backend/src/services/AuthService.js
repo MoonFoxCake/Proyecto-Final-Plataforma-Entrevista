@@ -59,6 +59,23 @@ class AuthService {
   }
 
   /**
+   * Reads the persisted user profile for a uid. This is the source of truth
+   * for UI role routing, because the Firebase token claim can be stale until
+   * a fresh ID token is issued.
+   *
+   * @param {string} uid
+   * @returns {Promise<object>}
+   */
+  async getProfile(uid) {
+    const user = await this.userRepo.findById(uid);
+    if (!user) {
+      throw new NotFoundError('User not found');
+    }
+
+    return user;
+  }
+
+  /**
    * Assigns a role (and optionally an organization) to a user via
    * Firebase Custom Claims, and mirrors it onto the Firestore user doc.
    *

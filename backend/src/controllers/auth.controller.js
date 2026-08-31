@@ -19,6 +19,16 @@ class AuthController {
   };
 
   /** @type {import('express').RequestHandler} */
+  getProfile = async (req, res, next) => {
+    try {
+      const user = await this.service.getProfile(req.user.uid);
+      res.json({ data: user });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /** @type {import('express').RequestHandler} */
   setRole = async (req, res, next) => {
     try {
       const { uid, role, orgId } = req.body;

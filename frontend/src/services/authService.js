@@ -54,6 +54,18 @@ export async function login(email, password) {
 }
 
 /**
+ * Fetches the current user's persisted profile from the backend. This is the
+ * source of truth for the UI role, because Firestore/user docs can be updated
+ * independently of the ID token claim cache.
+ *
+ * @returns {Promise<object|null>}
+ */
+export async function getProfile() {
+  const { data } = await api.get('/auth/me');
+  return data?.data ?? null;
+}
+
+/**
  * @returns {Promise<void>}
  */
 export async function logout() {

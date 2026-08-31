@@ -1,5 +1,5 @@
 import { createContext, useEffect, useState } from 'react';
-import { onAuthStateChanged } from '../services/authService';
+import { getProfile, onAuthStateChanged } from '../services/authService';
 
 /**
  * @typedef {object} AuthContextValue
@@ -36,10 +36,17 @@ export function AuthProvider({ children }) {
         return;
       }
 
-      const tokenResult = await firebaseUser.getIdTokenResult();
-      setUser(firebaseUser);
-      setRole(tokenResult.claims.role ?? null);
-      setLoading(false);
+      try {
+        const profile = await getProfile();
+        setUser(firebaseUser);
+        setRole(profile?.role ?? null);
+      } catch (error) {
+        console.error('No se pudo cargar el perfil del usuario:', error);
+        setUser(firebaseUser);
+        setRole(null);
+      } finally {
+        setLoading(false);
+      }
     });
 
     return unsubscribe;
