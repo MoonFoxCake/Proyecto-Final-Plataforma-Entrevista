@@ -1,16 +1,17 @@
 import { useEffect, useState } from 'react';
+import { AdminSidebar, ADMIN_SECTIONS, AdminPlaceholderView } from '../components/admin/AdminSidebar.jsx';
 import { Button, FormField, Input } from '../components/ui';
 import {
   ArrowRightIcon,
   BriefcaseIcon,
   CheckIcon,
+  LockIcon,
   MailIcon,
   PhoneIcon,
   SpinnerIcon,
   UserIcon,
 } from '../components/auth/icons.jsx';
 import * as authService from '../services/authService';
-import { DashboardHeader } from '../components/ui/DashboardHeader.jsx';
 
 const INITIAL_FORM = {
   companyName: '',
@@ -22,13 +23,14 @@ const INITIAL_FORM = {
   password2: '',
 };
 
-export function AdminDashboardPage() {
+function CompaniesView() {
   const [form, setForm] = useState(INITIAL_FORM);
   const [companies, setCompanies] = useState([]);
   const [loadingCompanies, setLoadingCompanies] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [created, setCreated] = useState(null);
+  const [sessionCount, setSessionCount] = useState(0);
 
   const loadCompanies = async () => {
     try {
@@ -65,7 +67,8 @@ export function AdminDashboardPage() {
         password: form.password,
       });
       await loadCompanies();
-      setCreated({ email: form.email.trim(), password: form.password, companyName: form.companyName.trim() });
+      setSessionCount((count) => count + 1);
+      setCreated({ email: form.email.trim(), companyName: form.companyName.trim() });
       setForm(INITIAL_FORM);
     } catch (requestError) {
       setError(requestError.response?.data?.error?.message || 'No se pudo crear el usuario de empresa.');
@@ -75,16 +78,13 @@ export function AdminDashboardPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] p-5 sm:p-8">
+    <div className="p-5 sm:p-8">
       <div className="mx-auto max-w-6xl">
-        <div className="mb-8 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
-          <DashboardHeader
-            title="Usuarios de empresa"
-            subtitle="Crea el acceso inicial de cada empresa para que pueda gestionar sus procesos y candidatos."
-          />
+        <div className="mb-6 flex items-start justify-between gap-4">
+          <div><h1 className="font-display text-2xl font-bold text-[#101828]">Usuarios de empresa</h1><p className="mt-1 text-sm text-[#64748B]">Crea el acceso inicial de cada empresa para que pueda gestionar sus procesos y candidatos.</p></div>
           <div className="rounded-2xl border border-[#DDE8F2] bg-white px-5 py-4 shadow-sm">
             <p className="text-xs text-[#6A7282]">Altas en esta sesión</p>
-            <p className="mt-1 font-display text-2xl font-bold text-[#101828]">{companies.length}</p>
+            <p className="mt-1 text-right font-display text-2xl font-bold text-[#0AADA8]">{sessionCount}</p>
           </div>
         </div>
 
@@ -93,7 +93,7 @@ export function AdminDashboardPage() {
             <CheckIcon className="mt-0.5 h-5 w-5 shrink-0" />
             <div>
               <p className="font-semibold">Usuario creado para {created.companyName}</p>
-              <p className="mt-1">Comparte estas credenciales de acceso de forma segura: {created.email} / {created.password}</p>
+              <p className="mt-1">Envía a {created.email} las instrucciones de acceso por un canal seguro.</p>
             </div>
             <button type="button" className="ml-auto text-xs font-semibold underline" onClick={() => setCreated(null)}>Cerrar</button>
           </div>
@@ -101,21 +101,21 @@ export function AdminDashboardPage() {
 
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">
           <section className="rounded-2xl border border-[#E5EAF0] bg-white p-6 shadow-sm">
-            <div className="mb-6 flex items-center gap-3">
+            <div className="mb-6 flex items-center gap-3 border-b border-[#EEF2F6] pb-5">
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#E0F7F6] text-[#0AADA8]"><BriefcaseIcon className="h-5 w-5" /></div>
               <div><h2 className="font-display text-lg font-bold text-[#101828]">Nueva cuenta</h2><p className="text-xs text-[#6A7282]">El usuario recibirá rol de empresa.</p></div>
             </div>
             <form onSubmit={handleSubmit} className="space-y-4" noValidate>
               <FormField label="Empresa" htmlFor="companyName"><Input id="companyName" value={form.companyName} onChange={update('companyName')} placeholder="TechCorp S.A." icon={<BriefcaseIcon className="h-4 w-4" />} required /></FormField>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <FormField label="Nombre" htmlFor="nombre"><Input id="nombre" value={form.nombre} onChange={update('nombre')} placeholder="María" icon={<UserIcon className="h-4 w-4" />} required /></FormField>
                 <FormField label="Apellido" htmlFor="apellido"><Input id="apellido" value={form.apellido} onChange={update('apellido')} placeholder="González" icon={<UserIcon className="h-4 w-4" />} required /></FormField>
               </div>
               <FormField label="Correo corporativo" htmlFor="email"><Input id="email" type="email" value={form.email} onChange={update('email')} placeholder="contacto@empresa.com" icon={<MailIcon className="h-4 w-4" />} required /></FormField>
               <FormField label="Teléfono (opcional)" htmlFor="phone"><Input id="phone" type="tel" value={form.phone} onChange={update('phone')} placeholder="+57 300 000 0000" icon={<PhoneIcon className="h-4 w-4" />} /></FormField>
-              <div className="grid grid-cols-2 gap-3">
-                <FormField label="Contraseña temporal" htmlFor="password"><Input id="password" type="password" value={form.password} onChange={update('password')} placeholder="Mínimo 8 caracteres" required /></FormField>
-                <FormField label="Confirmar" htmlFor="password2"><Input id="password2" type="password" value={form.password2} onChange={update('password2')} placeholder="Repite la contraseña" required /></FormField>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <FormField label="Contraseña temporal" htmlFor="password"><Input id="password" type="password" value={form.password} onChange={update('password')} placeholder="Mínimo 8 caracteres" icon={<LockIcon className="h-4 w-4" />} className="w-full" required /></FormField>
+                <FormField label="Confirmar" htmlFor="password2"><Input id="password2" type="password" value={form.password2} onChange={update('password2')} placeholder="Repite la contraseña" icon={<LockIcon className="h-4 w-4" />} className="w-full" required /></FormField>
               </div>
               {error && <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
               <Button type="submit" variant="accent" className="h-12 w-full" disabled={loading}>
@@ -130,6 +130,18 @@ export function AdminDashboardPage() {
           </section>
         </div>
       </div>
+    </div>
+  );
+}
+export function AdminDashboardPage() {
+  const [activeSection, setActiveSection] = useState('companies');
+  const section = ADMIN_SECTIONS.find((item) => item.id === activeSection);
+  return (
+    <div className="min-h-screen bg-[#F7F9FC] lg:flex">
+      <AdminSidebar activeSection={activeSection} onSelect={setActiveSection} />
+      <main className="min-w-0 flex-1">
+        {activeSection === 'companies' ? <CompaniesView /> : <AdminPlaceholderView section={section} />}
+      </main>
     </div>
   );
 }
