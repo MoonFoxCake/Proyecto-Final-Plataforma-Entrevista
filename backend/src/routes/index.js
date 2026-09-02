@@ -16,7 +16,7 @@ function createApiRouter(container) {
 
   const authController = new AuthController(container.authService);
 
-  router.use('/auth', createAuthRoutes(authController));
+  router.use('/auth', createAuthRoutes(authController, container.authService));
 
   return router;
 }

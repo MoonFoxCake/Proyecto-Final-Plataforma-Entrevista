@@ -162,3 +162,12 @@ export function SpinnerIcon(props) {
     </svg>
   );
 }
+
+export function LogOutIcon(props) {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" {...props}>
+      <path d="M6.333 2.667H3.667A1.333 1.333 0 0 0 2.333 4v8c0 .736.597 1.333 1.334 1.333h2.666" stroke="currentColor" strokeWidth="1.333" strokeLinecap="round" />
+      <path d="M8.667 5.333 11.333 8l-2.666 2.667M11.333 8H5.667" stroke="currentColor" strokeWidth="1.333" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}

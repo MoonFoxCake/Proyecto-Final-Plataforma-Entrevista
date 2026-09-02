@@ -11,7 +11,7 @@ export function DashboardPage() {
 
   const dashboardByRole = {
     [ROLES.ADMIN]: '/admin-dashboard',
-    [ROLES.CLIENT]: '/company-dashboard',
+    [ROLES.COMPANY]: '/company-dashboard',
     [ROLES.CANDIDATE]: '/candidate-dashboard',
   };
 

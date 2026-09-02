@@ -12,6 +12,9 @@ class IUserRepository {
   /** @param {string} orgId @returns {Promise<object[]>} */
   async findByOrganization(orgId) { throw new Error('Not implemented'); }
 
+  /** @returns {Promise<object[]>} */
+  async findAll() { throw new Error('Not implemented'); }
+
   /** @param {object} data @returns {Promise<object>} */
   async create(data) { throw new Error('Not implemented'); }
 

@@ -24,6 +24,10 @@ class InMemoryUserRepository extends IUserRepository {
     return this.data.filter((item) => item.orgId === orgId);
   }
 
+  async findAll() {
+    return [...this.data];
+  }
+
   async create(data) {
     const item = { id: generateId(), ...data, createdAt: new Date() };
     this.data.push(item);

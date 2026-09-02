@@ -47,7 +47,7 @@ function createContainer(type = 'firestore') {
 
   return {
     repos,
-    authService: new AuthService(repos.userRepo),
+    authService: new AuthService(repos.userRepo, repos.organizationRepo),
     tenantService: new TenantService(repos.organizationRepo),
   };
 }

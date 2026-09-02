@@ -15,6 +15,12 @@ class InMemoryOrganizationRepository extends IOrganizationRepository {
     return this.data.find((item) => item.id === id) || null;
   }
 
+  async findByCompanyName(companyName) {
+    return this.data.find((item) => [item.companyName, item.name].some(
+      (name) => typeof name === 'string' && name.trim().toLowerCase() === companyName
+    )) || null;
+  }
+
   async findAll() {
     return [...this.data];
   }

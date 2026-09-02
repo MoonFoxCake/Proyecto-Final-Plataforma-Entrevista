@@ -1,5 +1,5 @@
 import { createContext, useEffect, useState } from 'react';
-import { getProfile, onAuthStateChanged } from '../services/authService';
+import { getProfile, logout, onAuthStateChanged } from '../services/authService';
 
 /**
  * @typedef {object} AuthContextValue
@@ -28,28 +28,40 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(async (firebaseUser) => {
-      if (!firebaseUser) {
-        setUser(null);
-        setRole(null);
-        setLoading(false);
-        return;
-      }
+    let unsubscribe;
+    let active = true;
 
-      try {
-        const profile = await getProfile();
-        setUser(firebaseUser);
-        setRole(profile?.role ?? null);
-      } catch (error) {
-        console.error('No se pudo cargar el perfil del usuario:', error);
-        setUser(firebaseUser);
-        setRole(null);
-      } finally {
-        setLoading(false);
-      }
-    });
+    const initialize = async () => {
+      await logout();
+      if (!active) return;
 
-    return unsubscribe;
+      unsubscribe = onAuthStateChanged(async (firebaseUser) => {
+        if (!firebaseUser) {
+          setUser(null);
+          setRole(null);
+          setLoading(false);
+          return;
+        }
+
+        try {
+          const profile = await getProfile();
+          setUser(firebaseUser);
+          setRole(profile?.role ?? null);
+        } catch (error) {
+          console.error('No se pudo cargar el perfil del usuario:', error);
+          setUser(firebaseUser);
+          setRole(null);
+        } finally {
+          setLoading(false);
+        }
+      });
+    };
+
+    initialize();
+    return () => {
+      active = false;
+      unsubscribe?.();
+    };
   }, []);
 
   return (

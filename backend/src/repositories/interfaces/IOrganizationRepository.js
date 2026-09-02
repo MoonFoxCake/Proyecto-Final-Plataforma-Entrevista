@@ -5,6 +5,9 @@ class IOrganizationRepository {
   /** @param {string} id @returns {Promise<object|null>} */
   async findById(id) { throw new Error('Not implemented'); }
 
+  /** @param {string} companyName @returns {Promise<object|null>} */
+  async findByCompanyName(companyName) { throw new Error('Not implemented'); }
+
   /** @returns {Promise<object[]>} */
   async findAll() { throw new Error('Not implemented'); }
 

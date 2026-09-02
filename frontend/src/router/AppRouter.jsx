@@ -46,7 +46,7 @@ export function AppRouter() {
             <Route path="/candidate-dashboard" element={<CandidateDashboardPage />} />
           </Route>
 
-          <Route element={<RequireRole allowedRoles={[ROLES.CLIENT]} />}>
+          <Route element={<RequireRole allowedRoles={[ROLES.COMPANY]} />}>
             <Route path="/company-dashboard" element={<CompanyDashboardPage />} />
           </Route>
         </Route>

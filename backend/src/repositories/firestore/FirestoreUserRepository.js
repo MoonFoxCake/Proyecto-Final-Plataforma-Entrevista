@@ -33,6 +33,11 @@ class FirestoreUserRepository extends IUserRepository {
     return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
   }
 
+  async findAll() {
+    const snapshot = await this.collection.get();
+    return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+  }
+
   /**
    * @param {object} data must include `uid` — used as the document id.
    */

@@ -1,7 +1,8 @@
 const { Router } = require('express');
 const { checkRole } = require('../middleware/checkRole');
+const { checkPersistedRole } = require('../middleware/checkPersistedRole');
 const { validateInput } = require('../middleware/validateInput');
-const { registerSchema, setRoleSchema } = require('../validators/auth.schema');
+const { registerSchema, companyUserSchema, candidateUserSchema, setRoleSchema } = require('../validators/auth.schema');
 
 /**
  * Routes reachable with no Authorization header — the caller has no
@@ -9,6 +10,7 @@ const { registerSchema, setRoleSchema } = require('../validators/auth.schema');
  * Mounted before the `verifyToken`/`checkTenant` middleware in app.js.
  *
  * @param {import('../controllers/auth.controller')} authController
+ * @param {import('../services/AuthService')} authService
  * @returns {import('express').Router}
  */
 function createPublicAuthRoutes(authController) {
@@ -26,10 +28,28 @@ function createPublicAuthRoutes(authController) {
  * @param {import('../controllers/auth.controller')} authController
  * @returns {import('express').Router}
  */
-function createAuthRoutes(authController) {
+function createAuthRoutes(authController, authService) {
   const router = Router();
 
   router.get('/me', authController.getProfile);
+
+  router.get('/companies', checkPersistedRole(authService, 'admin'), authController.listCompanies);
+
+  router.get('/candidates', checkPersistedRole(authService, 'company'), authController.listCandidates);
+
+  router.post(
+    '/candidates',
+    checkPersistedRole(authService, 'company'),
+    validateInput(candidateUserSchema),
+    authController.createCandidateUser
+  );
+
+  router.post(
+    '/company-users',
+    checkPersistedRole(authService, 'admin'),
+    validateInput(companyUserSchema),
+    authController.createCompanyUser
+  );
 
   router.post(
     '/set-role',

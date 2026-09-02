@@ -44,6 +44,39 @@ export async function register(data) {
 }
 
 /**
+ * Creates a client account from the admin dashboard.
+ *
+ * @param {{ companyName: string, displayName: string, email: string, password: string, phone?: string }} data
+ * @returns {Promise<object>}
+ */
+export async function createCompanyUser(data) {
+  const { data: result } = await api.post('/auth/company-users', data);
+  return result?.data ?? result;
+}
+
+/**
+ * Fetches all companies and their company users for the admin dashboard.
+ *
+ * @returns {Promise<object[]>}
+ */
+export async function getCompanies() {
+  const { data } = await api.get('/auth/companies');
+  return data?.data ?? [];
+}
+
+  /** @returns {Promise<object[]>} */
+  export async function getCandidates() {
+    const { data } = await api.get('/auth/candidates');
+    return data?.data ?? [];
+  }
+
+  /** @param {object} data @returns {Promise<object>} */
+  export async function createCandidateUser(data) {
+    const { data: result } = await api.post('/auth/candidates', data);
+    return result?.data ?? result;
+  }
+
+/**
  * @param {string} email
  * @param {string} password
  * @returns {Promise<import('firebase/auth').User>}
@@ -70,6 +103,16 @@ export async function getProfile() {
  */
 export async function logout() {
   await signOut(auth);
+
+  document.cookie.split(';').forEach((cookie) => {
+    const name = cookie.split('=')[0].trim();
+    if (name) document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/`;
+  });
+
+  Object.keys(localStorage).forEach((key) => {
+    if (key.startsWith('firebase:')) localStorage.removeItem(key);
+  });
+  sessionStorage.clear();
 }
 
 /**

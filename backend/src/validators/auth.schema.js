@@ -20,6 +20,25 @@ const registerSchema = z.object({
   professionalArea: z.string().min(1).optional(),
 });
 
+const companyUserSchema = z.object({
+  companyName: z.string().min(1),
+  email: z.string().email(),
+  password: z.string().min(8),
+  displayName: z.string().min(1),
+  phone: z.string().min(1).optional(),
+});
+
+const candidateUserSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(8),
+  displayName: z.string().min(1),
+  phone: z.string().min(1).optional(),
+  city: z.string().min(1).optional(),
+  country: z.string().min(1).optional(),
+  academicLevel: z.string().min(1).optional(),
+  professionalArea: z.string().min(1).optional(),
+});
+
 /**
  * Payload for POST /auth/set-role
  */
@@ -29,4 +48,4 @@ const setRoleSchema = z.object({
   orgId: z.string().min(1).optional(),
 });
 
-module.exports = { registerSchema, setRoleSchema };
+module.exports = { registerSchema, companyUserSchema, candidateUserSchema, setRoleSchema };

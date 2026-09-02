@@ -5,6 +5,7 @@ import { BrandPanel } from '../../components/auth/BrandPanel.jsx';
 import { ArrowRightIcon, EyeIcon, EyeOffIcon, LockIcon, MailIcon, SpinnerIcon } from '../../components/auth/icons.jsx';
 import * as authService from '../../services/authService';
 import { getAuthErrorMessage } from '../../utils/firebaseErrors.js';
+import { ROLES } from '../../utils/constants.js';
 
 /**
  * Login form (email + password), backed by Firebase Auth.
@@ -25,7 +26,13 @@ export function LoginPage() {
     setLoading(true);
     try {
       await authService.login(email, password);
-      const redirectTo = location.state?.from?.pathname || '/dashboard';
+      const profile = await authService.getProfile();
+      const dashboardByRole = {
+        [ROLES.ADMIN]: '/admin-dashboard',
+        [ROLES.COMPANY]: '/company-dashboard',
+        [ROLES.CANDIDATE]: '/candidate-dashboard',
+      };
+      const redirectTo = location.state?.from?.pathname || dashboardByRole[profile?.role] || '/dashboard';
       navigate(redirectTo, { replace: true });
     } catch (err) {
       setError(getAuthErrorMessage(err));
