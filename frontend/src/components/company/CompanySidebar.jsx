@@ -5,12 +5,12 @@ import { useAuth } from '../../hooks/useAuth.js';
 import * as authService from '../../services/authService.js';
 
 export const COMPANY_SECTIONS = [
-  ['dashboard', 'Dashboard', 'Resumen de actividad', '▦'], ['processes', 'Mis procesos', 'Procesos de selección', '▣'],
-  ['candidates', 'Candidatos', 'Candidatos de tu organización', '♙'], ['reports', 'Reportes', 'Informes de la empresa', '▤'],
+  ['dashboard', 'Dashboard', 'Resumen de actividad', '▦'], ['events', 'Eventos', 'Procesos de selección', '▣'],
+  ['candidates', 'Candidatos', 'Candidatos por evento', '♙'], ['reports', 'Resultados', 'Resultados de la empresa', '▤'],
 ].map(([id, label, description, icon]) => ({ id, label, description, icon }));
 const initials = (name = '') => name.split(' ').filter(Boolean).map((part) => part[0]).join('').toUpperCase().slice(0, 2) || 'EM';
 
-export function CompanySidebar({ activeSection, onSelect }) {
+export function CompanySidebar({ activeSection, onSelect = () => {} }) {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [loggingOut, setLoggingOut] = useState(false);

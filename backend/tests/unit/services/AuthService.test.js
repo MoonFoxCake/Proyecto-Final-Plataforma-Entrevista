@@ -1,3 +1,5 @@
+jest.mock('../../../src/config/firebase', () => ({ auth: {} }));
+
 const AuthService = require('../../../src/services/AuthService');
 const { NotFoundError } = require('../../../src/utils/errors');
 

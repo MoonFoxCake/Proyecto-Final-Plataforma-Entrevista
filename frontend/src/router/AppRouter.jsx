@@ -8,6 +8,10 @@ import { DashboardPage } from '../pages/DashboardPage.jsx';
 import { AdminDashboardPage } from '../pages/AdminDashboardPage.jsx';
 import { CandidateDashboardPage } from '../pages/CandidateDashboardPage.jsx';
 import { CompanyDashboardPage } from '../pages/CompanyDashboardPage.jsx';
+import { EventDetailPage } from '../pages/EventDetailPage.jsx';
+import { NewEventPage } from '../pages/NewEventPage.jsx';
+import { EvaluationAccessPage } from '../pages/EvaluationAccessPage.jsx';
+import { CandidateResultPage } from '../pages/CandidateResultPage.jsx';
 import { RequireAuth } from './RequireAuth.jsx';
 import { RequireRole } from './RequireRole.jsx';
 import { useAuth } from '../hooks/useAuth';
@@ -37,6 +41,8 @@ export function AppRouter() {
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
 
+        <Route path='/evaluation/access' element={<EvaluationAccessPage />} />
+
         <Route element={<RequireAuth />}>
           <Route path="/dashboard" element={<DashboardPage />} />
 
@@ -49,6 +55,9 @@ export function AppRouter() {
           </Route>
 
           <Route element={<RequireRole allowedRoles={[ROLES.COMPANY]} />}>
+            <Route path='/company/events/new' element={<NewEventPage />} />
+            <Route path='/company/events/:eventId' element={<EventDetailPage />} />
+            <Route path='/company/events/:eventId/candidates/:candidateId/result' element={<CandidateResultPage />} />
             <Route path="/company-dashboard" element={<CompanyDashboardPage />} />
           </Route>
         </Route>

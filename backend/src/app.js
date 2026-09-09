@@ -4,7 +4,9 @@ const cors = require('cors');
 const { createContainer } = require('./container');
 const createApiRouter = require('./routes');
 const AuthController = require('./controllers/auth.controller');
+const InvitationController = require('./controllers/invitation.controller');
 const { createPublicAuthRoutes } = require('./routes/auth.routes');
+const { createPublicInvitationRoutes } = require('./routes/invitation.routes');
 const { verifyToken } = require('./middleware/verifyToken');
 const { checkTenant } = require('./middleware/checkTenant');
 const { errorHandler } = require('./middleware/errorHandler');
@@ -32,7 +34,9 @@ function createApp(container = createContainer('firestore')) {
   // Public: account creation happens before the caller has a token to
   // verify, so this can't sit behind verifyToken like everything else.
   const authController = new AuthController(container.authService);
+  const invitationController = new InvitationController(container.invitationService);
   app.use('/api/v1/auth', createPublicAuthRoutes(authController));
+  app.use('/api/v1/invitations', createPublicInvitationRoutes(invitationController));
 
   app.use('/api/v1', verifyToken, checkTenant, createApiRouter(container));
 
