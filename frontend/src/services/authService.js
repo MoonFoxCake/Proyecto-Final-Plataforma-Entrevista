@@ -1,8 +1,11 @@
 import {
+  confirmPasswordReset as firebaseConfirmPasswordReset,
   onAuthStateChanged as firebaseOnAuthStateChanged,
+  sendPasswordResetEmail,
   sendEmailVerification,
   signInWithEmailAndPassword,
   signOut,
+  verifyPasswordResetCode as firebaseVerifyPasswordResetCode,
 } from 'firebase/auth';
 import { auth } from '../config/firebase.js';
 import api from './api';
@@ -84,6 +87,33 @@ export async function getCompanies() {
 export async function login(email, password) {
   const credential = await signInWithEmailAndPassword(auth, email, password);
   return credential.user;
+}
+
+/**
+ * Sends Firebase's password recovery email. The current origin keeps this
+ * valid in development and production without hardcoding an environment.
+ *
+ * @param {string} email
+ * @returns {Promise<void>}
+ */
+export async function requestPasswordReset(email) {
+  await sendPasswordResetEmail(auth, email, {
+    url: window.location.origin + '/reset-password',
+  });
+}
+
+/** @param {string} oobCode @returns {Promise<string>} */
+export function verifyPasswordResetCode(oobCode) {
+  return firebaseVerifyPasswordResetCode(auth, oobCode);
+}
+
+/**
+ * @param {string} oobCode
+ * @param {string} newPassword
+ * @returns {Promise<void>}
+ */
+export function confirmPasswordReset(oobCode, newPassword) {
+  return firebaseConfirmPasswordReset(auth, oobCode, newPassword);
 }
 
 /**
