@@ -2,9 +2,11 @@ const { Router } = require('express');
 
 const AuthController = require('../controllers/auth.controller');
 const EventController = require('../controllers/event.controller');
+const AdminReviewController = require('../controllers/admin-review.controller');
 
 const { createAuthRoutes } = require('./auth.routes');
 const { createEventRoutes } = require('./event.routes');
+const { createAdminReviewRoutes } = require('./admin-review.routes');
 
 /**
  * Builds the `/api/v1` router tree, wiring each sub-router's controller
@@ -22,9 +24,11 @@ function createApiRouter(container) {
     container.candidateService,
     container.invitationService
   );
+  const adminReviewController = new AdminReviewController(container.reviewService);
 
   router.use('/auth', createAuthRoutes(authController, container.authService));
   router.use('/events', createEventRoutes(eventController, container.authService));
+  router.use('/admin', createAdminReviewRoutes(adminReviewController, container.authService));
 
   return router;
 }

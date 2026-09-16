@@ -10,6 +10,8 @@ function serializeCandidate(doc) {
     fechaHoraCita: data.fechaHoraCita?.toDate?.() ?? data.fechaHoraCita,
     createdAt: data.createdAt?.toDate?.() ?? data.createdAt,
     submittedAt: data.submittedAt?.toDate?.() ?? data.submittedAt,
+    reviewedAt: data.reviewedAt?.toDate?.() ?? data.reviewedAt,
+    profilePublishedAt: data.profilePublishedAt?.toDate?.() ?? data.profilePublishedAt,
   };
 }
 
@@ -30,6 +32,11 @@ class FirestoreCandidateRepository extends ICandidateRepository {
       .map(serializeCandidate)
       .filter((candidate) => candidate.orgId === orgId)
       .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+  }
+
+  async findByEventId(eventId) {
+    const snapshot = await this.collection.where('eventId', '==', eventId).get();
+    return snapshot.docs.map(serializeCandidate).sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
   }
 
   async findByCedulaAndEvent(eventId, cedula) {

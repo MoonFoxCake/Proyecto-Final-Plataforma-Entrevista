@@ -60,6 +60,10 @@ class InMemoryInvitationRepository extends IInvitationRepository {
     invitation.submittedAt = submittedAt;
     return { state: 'COMPLETED', submittedAt, alreadySubmitted: false };
   }
+
+  async findSubmissionByCandidate(candidateId, eventId) {
+    return this.submissions.find((item) => item.candidateId === candidateId && item.eventId === eventId) || null;
+  }
 }
 
 module.exports = InMemoryInvitationRepository;

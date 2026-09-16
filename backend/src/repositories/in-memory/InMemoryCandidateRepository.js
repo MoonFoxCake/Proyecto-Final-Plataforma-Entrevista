@@ -14,6 +14,9 @@ class InMemoryCandidateRepository extends ICandidateRepository {
   async findByEvent(eventId, orgId) {
     return this.data.filter((item) => item.eventId === eventId && item.orgId === orgId);
   }
+  async findByEventId(eventId) {
+    return this.data.filter((item) => item.eventId === eventId);
+  }
   async findByCedulaAndEvent(eventId, cedula) {
     return this.data.find((item) => item.eventId === eventId && item.cedula === cedula) || null;
   }

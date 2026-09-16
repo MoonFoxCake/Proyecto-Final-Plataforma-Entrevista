@@ -93,6 +93,18 @@ class FirestoreInvitationRepository extends IInvitationRepository {
       return { state: 'COMPLETED', submittedAt: now, alreadySubmitted: false };
     });
   }
+
+  async findSubmissionByCandidate(candidateId, eventId) {
+    const snapshot = await db.collection('evaluationSubmissions').where('candidateId', '==', candidateId).get();
+    const doc = snapshot.docs.find((item) => item.data().eventId === eventId);
+    if (!doc) return null;
+    const data = doc.data();
+    return {
+      id: doc.id,
+      ...data,
+      submittedAt: data.submittedAt?.toDate?.() ?? data.submittedAt,
+    };
+  }
 }
 
 module.exports = FirestoreInvitationRepository;

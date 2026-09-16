@@ -37,6 +37,7 @@ describe('CandidateService', () => {
       status: 'INVITED_PENDING',
     });
     expect(candidate).not.toHaveProperty('password');
+    expect(candidate).not.toHaveProperty('anonymousCode');
     expect(candidate.fechaHoraCita).toEqual(new Date('2026-09-10T15:00:00.000Z'));
   });
 
@@ -70,5 +71,12 @@ describe('CandidateService', () => {
       cedula: '123456',
       correo: 'maria@example.com',
     })).rejects.toThrow('El evento no tiene una fecha de habilitación configurada.');
+  });
+
+  test('rejects registration after evaluations are published', async () => {
+    eventService.getEvent.mockResolvedValue({ id: 'event-1', orgId: 'org-1', status: 'PUBLISHED', evaluationsPublishedAt: new Date() });
+    await expect(service.createForEvent('event-1', 'org-1', {
+      nombreCompleto: 'María Demo', cedula: '123456', correo: 'maria@example.com',
+    })).rejects.toThrow('No se pueden agregar candidatos a un proceso publicado.');
   });
 });

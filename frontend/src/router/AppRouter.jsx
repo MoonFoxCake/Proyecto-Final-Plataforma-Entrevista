@@ -6,6 +6,8 @@ import { ForgotPasswordPage } from '../pages/auth/ForgotPasswordPage.jsx';
 import { ResetPasswordPage } from '../pages/auth/ResetPasswordPage.jsx';
 import { DashboardPage } from '../pages/DashboardPage.jsx';
 import { AdminDashboardPage } from '../pages/AdminDashboardPage.jsx';
+import { AdminProcessDetailPage } from '../pages/AdminProcessDetailPage.jsx';
+import { AdminParticipantReviewPage } from '../pages/AdminParticipantReviewPage.jsx';
 import { CandidateDashboardPage } from '../pages/CandidateDashboardPage.jsx';
 import { CompanyDashboardPage } from '../pages/CompanyDashboardPage.jsx';
 import { EventDetailPage } from '../pages/EventDetailPage.jsx';
@@ -48,6 +50,8 @@ export function AppRouter() {
 
           <Route element={<RequireRole allowedRoles={[ROLES.ADMIN]} />}>
             <Route path="/admin-dashboard" element={<AdminDashboardPage />} />
+            <Route path="/admin/processes/:eventId" element={<AdminProcessDetailPage />} />
+            <Route path="/admin/processes/:eventId/participants/:anonymousId" element={<AdminParticipantReviewPage />} />
           </Route>
 
           <Route element={<RequireRole allowedRoles={[ROLES.CANDIDATE]} />}>

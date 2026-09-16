@@ -85,10 +85,10 @@ export function CandidateResultPage() {
               <h1 className='font-display text-xl font-bold text-[#10233A]'>Resultado no disponible</h1>
               <p className='mt-3 text-sm text-red-600'>{error}</p>
             </section>
-          ) : candidate.status !== 'EVALUATION_COMPLETED' ? (
+          ) : !candidate.profileAvailable ? (
             <section className='mt-6 rounded-2xl border border-[#DDE5EC] bg-white p-7 shadow-sm'>
               <h1 className='font-display text-xl font-bold text-[#10233A]'>Resultado no disponible</h1>
-              <p className='mt-3 text-sm text-[#64748B]'>La evaluación de este candidato aún no ha sido completada.</p>
+              <p className='mt-3 text-sm text-[#64748B]'>El perfil estará disponible cuando el administrador complete la revisión y publique las evaluaciones del proceso.</p>
             </section>
           ) : (
             <>

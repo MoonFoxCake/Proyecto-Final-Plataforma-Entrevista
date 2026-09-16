@@ -18,6 +18,7 @@ const TenantService = require('../services/TenantService');
 const EventService = require('../services/EventService');
 const CandidateService = require('../services/CandidateService');
 const InvitationService = require('../services/InvitationService');
+const ReviewService = require('../services/ReviewService');
 const ResendEmailService = require('../services/ResendEmailService');
 
 /**
@@ -77,6 +78,12 @@ function createContainer(type = 'firestore') {
     emailService,
     frontendUrl: process.env.FRONTEND_URL || process.env.CORS_ORIGIN,
   });
+  const reviewService = new ReviewService({
+    eventRepo: repos.eventRepo,
+    candidateRepo: repos.candidateRepo,
+    invitationRepo: repos.invitationRepo,
+    organizationRepo: repos.organizationRepo,
+  });
 
   return {
     repos,
@@ -85,6 +92,7 @@ function createContainer(type = 'firestore') {
     eventService,
     candidateService,
     invitationService,
+    reviewService,
   };
 }
 

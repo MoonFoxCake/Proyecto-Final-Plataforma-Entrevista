@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { AdminSidebar, ADMIN_SECTIONS, AdminPlaceholderView } from '../components/admin/AdminSidebar.jsx';
 import { Button, FormField, Input } from '../components/ui';
 import {
@@ -12,6 +13,7 @@ import {
   UserIcon,
 } from '../components/auth/icons.jsx';
 import * as authService from '../services/authService';
+import { AdminProcessesView } from './AdminProcessesPage.jsx';
 
 const INITIAL_FORM = {
   companyName: '',
@@ -134,13 +136,15 @@ function CompaniesView() {
   );
 }
 export function AdminDashboardPage() {
-  const [activeSection, setActiveSection] = useState('companies');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [activeSection, setActiveSection] = useState(searchParams.get('section') === 'processes' ? 'processes' : 'companies');
   const section = ADMIN_SECTIONS.find((item) => item.id === activeSection);
+  const selectSection = (id) => { setActiveSection(id); setSearchParams(id === 'processes' ? { section: 'processes' } : {}); };
   return (
     <div className="min-h-screen bg-[#F7F9FC] lg:flex">
-      <AdminSidebar activeSection={activeSection} onSelect={setActiveSection} />
+      <AdminSidebar activeSection={activeSection} onSelect={selectSection} />
       <main className="min-w-0 flex-1">
-        {activeSection === 'companies' ? <CompaniesView /> : <AdminPlaceholderView section={section} />}
+        {activeSection === 'companies' ? <CompaniesView /> : activeSection === 'processes' ? <AdminProcessesView /> : <AdminPlaceholderView section={section} />}
       </main>
     </div>
   );

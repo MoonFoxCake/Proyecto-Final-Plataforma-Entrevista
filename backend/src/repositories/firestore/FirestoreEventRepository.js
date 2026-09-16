@@ -12,6 +12,7 @@ function serializeEvent(doc, sourceCollection) {
     eventDate: data.eventDate?.toDate?.() ?? data.eventDate,
     availableFrom: data.availableFrom?.toDate?.() ?? data.availableFrom,
     createdAt: data.createdAt?.toDate?.() ?? data.createdAt,
+    evaluationsPublishedAt: data.evaluationsPublishedAt?.toDate?.() ?? data.evaluationsPublishedAt,
   };
 }
 
@@ -31,6 +32,15 @@ class FirestoreEventRepository extends IEventRepository {
       if (doc.exists) return serializeEvent(doc, collectionName);
     }
     return null;
+  }
+
+  async findAll() {
+    const matches = [];
+    for (const collectionName of ['events', 'processes']) {
+      const snapshot = await db.collection(collectionName).get();
+      snapshot.docs.forEach((doc) => matches.push(serializeEvent(doc, collectionName)));
+    }
+    return matches;
   }
 
   async findByOrganization(orgId) {
@@ -60,6 +70,15 @@ class FirestoreEventRepository extends IEventRepository {
     const payload = stripUndefined({ ...data, createdAt: new Date() });
     const ref = await this.collection.add(payload);
     return { id: ref.id, ...payload, sourceCollection: 'events' };
+  }
+
+  async update(id, data) {
+    const existing = await this.findById(id);
+    if (!existing) return null;
+    const collectionName = existing.sourceCollection || 'events';
+    const payload = stripUndefined(data);
+    await db.collection(collectionName).doc(id).update(payload);
+    return { ...existing, ...payload };
   }
 }
 

@@ -74,7 +74,7 @@ function EventsView() {
                   <p className='mt-1 text-sm text-[#64748B]'>{eventMeta(event)} · {formatAvailability(event)}</p>
                   {event.description && <p className='mt-3 line-clamp-2 text-sm text-[#7C8AA0]'>{event.description}</p>}
                 </div>
-                <div className='flex shrink-0 items-center gap-4 self-end sm:self-auto'><span className='rounded-full bg-[#ECFDF5] px-3 py-1 text-xs font-medium text-[#087D79]'>Activo</span><span className='rounded-lg border border-[#DCE3EA] px-3 py-2 text-xs font-semibold text-[#334155]'>Ver detalle</span></div>
+                <div className='flex shrink-0 items-center gap-4 self-end sm:self-auto'><span className='rounded-full bg-[#ECFDF5] px-3 py-1 text-xs font-medium text-[#087D79]'>{event.status === 'PUBLISHED' ? 'Publicado' : 'Activo'}</span><span className='rounded-lg border border-[#DCE3EA] px-3 py-2 text-xs font-semibold text-[#334155]'>Ver detalle</span></div>
               </button>
             ))}
           </div>

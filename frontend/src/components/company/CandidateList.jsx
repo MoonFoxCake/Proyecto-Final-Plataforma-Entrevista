@@ -10,9 +10,12 @@ function formatAppointment(value) {
   return new Intl.DateTimeFormat('es-GT', { dateStyle: 'medium', timeStyle: 'short' }).format(date);
 }
 
-function CandidateStatus({ status }) {
+function CandidateStatus({ status, profileAvailable }) {
+  if (profileAvailable) {
+    return <span className='inline-flex items-center gap-1.5 rounded-md bg-[#E8F8F5] px-2.5 py-1 text-xs font-medium text-[#087D79]'><span className='h-1.5 w-1.5 rounded-full bg-[#0AADA8]' /> Perfil disponible</span>;
+  }
   if (status === 'EVALUATION_COMPLETED') {
-    return <span className='inline-flex items-center gap-1.5 rounded-md bg-[#E8F8F5] px-2.5 py-1 text-xs font-medium text-[#087D79]'><span className='h-1.5 w-1.5 rounded-full bg-[#0AADA8]' /> Evaluación completada</span>;
+    return <span className='inline-flex items-center gap-1.5 rounded-md bg-[#FFF7E8] px-2.5 py-1 text-xs font-medium text-[#9A651E]'><span className='h-1.5 w-1.5 rounded-full bg-[#D99A2B]' /> En revisión</span>;
   }
   if (status === 'INVITATION_SENT') {
     return <span className='inline-flex items-center gap-1.5 rounded-md bg-[#EEF6FF] px-2.5 py-1 text-xs font-medium text-[#315B88]'><span className='h-1.5 w-1.5 rounded-full bg-[#4F8CC9]' /> Invitación enviada</span>;
@@ -45,11 +48,11 @@ export function CandidateList({ candidates, loading }) {
                 <div className='min-w-0'><p className='truncate text-sm font-semibold text-[#101828]'>{candidate.nombreCompleto}</p><p className='truncate text-xs text-[#64748B]'>{candidate.correo}</p></div>
               </div></td>
               <td className='px-5 py-4 text-sm text-[#475569]'>{candidate.cedula}</td>
-              <td className='px-5 py-4'><CandidateStatus status={candidate.status} /></td>
+              <td className='px-5 py-4'><CandidateStatus status={candidate.status} profileAvailable={candidate.profileAvailable} /></td>
               <td className='px-5 py-4 text-sm text-[#475569]'>{formatAppointment(candidate.fechaHoraCita)}</td>
               <td className='px-5 py-4 text-right'>
-                {candidate.status === 'EVALUATION_COMPLETED' ? (
-                  <Link to={`/company/events/${candidate.eventId}/candidates/${candidate.id}/result`} className='inline-flex rounded-lg border border-[#D9E2EA] px-3.5 py-2 text-xs font-semibold text-[#334E68] transition hover:border-[#13A9A4] hover:text-[#087D79]'>Ver resultado</Link>
+                {candidate.profileAvailable ? (
+                  <Link to={`/company/events/${candidate.eventId}/candidates/${candidate.id}/result`} className='inline-flex rounded-lg border border-[#D9E2EA] px-3.5 py-2 text-xs font-semibold text-[#334E68] transition hover:border-[#13A9A4] hover:text-[#087D79]'>Ver perfil</Link>
                 ) : <span className='text-xs text-[#A0AEC0]'>No disponible</span>}
               </td>
             </tr>

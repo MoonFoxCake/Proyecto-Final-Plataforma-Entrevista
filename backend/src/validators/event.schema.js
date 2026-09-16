@@ -13,6 +13,11 @@ const eventSchema = z.object({
   fechaHoraHabilitacion: z.string().datetime(),
 }).strict();
 
+const reviewSchema = z.object({
+  observations: z.string().trim().max(2000).optional().default(''),
+  reviewed: z.boolean().optional().default(false),
+}).strict();
+
 const DEMO_QUESTION_IDS = ['demo-a-1', 'demo-a-2', 'demo-a-3', 'demo-a-4'];
 const submissionSchema = z.object({
   token: z.string().regex(/^[A-Za-z0-9_-]{43}$/),
@@ -27,4 +32,4 @@ const submissionSchema = z.object({
   }
 });
 
-module.exports = { candidateSchema, eventSchema, submissionSchema };
+module.exports = { candidateSchema, eventSchema, reviewSchema, submissionSchema };

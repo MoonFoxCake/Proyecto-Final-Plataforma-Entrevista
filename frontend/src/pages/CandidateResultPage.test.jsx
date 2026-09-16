@@ -22,6 +22,7 @@ test('loads the completed candidate from the protected event candidate source', 
     nombreCompleto: 'María Demo',
     correo: 'maria@example.com',
     status: 'EVALUATION_COMPLETED',
+    profileAvailable: true,
     submittedAt: '2026-09-10T16:00:00.000Z',
   }]);
 

@@ -73,6 +73,7 @@ export function EventDetailPage() {
     () => candidates.filter((candidate) => candidate.status === 'EVALUATION_COMPLETED').length,
     [candidates]
   );
+  const published = event?.status === 'PUBLISHED' || Boolean(event?.evaluationsPublishedAt);
 
   const handleCreated = (candidate) => {
     setCandidates((current) => [...current, candidate]);
@@ -117,17 +118,17 @@ export function EventDetailPage() {
                 <div>
                   <div className='flex flex-wrap items-center gap-3'>
                     <h1 className='font-display text-2xl font-bold text-[#101828]'>{eventName(event)}</h1>
-                    <span className='rounded-md bg-[#E8F8F5] px-2 py-1 text-xs font-medium text-[#087D79]'>Activo</span>
+                    <span className='rounded-md bg-[#E8F8F5] px-2 py-1 text-xs font-medium text-[#087D79]'>{published ? 'Publicado' : 'Activo'}</span>
                   </div>
                   <p className='mt-2 text-sm text-[#64748B]'>{eventDescription(event)} · Plan A</p>
                   <p className='mt-2 inline-flex rounded-lg bg-[#EEF6FF] px-3 py-2 text-xs font-medium text-[#315B88]'>Evaluación habilitada para todos desde: {formatAvailability(event)}</p>
                 </div>
-                <div className='flex flex-wrap gap-3'>
+                {!published && <div className='flex flex-wrap gap-3'>
                   <Button type='button' variant='outline' className='h-11 px-5' onClick={publishInvitations} disabled={publishing || pendingCount === 0}>
                     {publishing ? 'Publicando...' : `Publicar invitaciones (${pendingCount})`}
                   </Button>
                   <Button type='button' variant='accent' className='h-11 px-5' onClick={() => { setShowForm(true); setSuccess(''); }}>+ Agregar candidato</Button>
-                </div>
+                </div>}
               </header>
 
               <div className='flex gap-7 border-b border-[#DCE3EA] py-4 text-sm text-[#64748B]'>
