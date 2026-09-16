@@ -57,6 +57,14 @@ class FirestoreOrganizationRepository extends IOrganizationRepository {
     await ref.update(payload);
     return { id, ...doc.data(), ...payload };
   }
+
+  async delete(id) {
+    const ref = this.collection.doc(id);
+    const doc = await ref.get();
+    if (!doc.exists) return false;
+    await ref.delete();
+    return true;
+  }
 }
 
 module.exports = FirestoreOrganizationRepository;

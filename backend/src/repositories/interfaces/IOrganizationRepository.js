@@ -16,6 +16,9 @@ class IOrganizationRepository {
 
   /** @param {string} id @param {object} data @returns {Promise<object|null>} */
   async update(id, data) { throw new Error('Not implemented'); }
+
+  /** @param {string} id @returns {Promise<boolean>} */
+  async delete(id) { throw new Error('Not implemented'); }
 }
 
 module.exports = IOrganizationRepository;

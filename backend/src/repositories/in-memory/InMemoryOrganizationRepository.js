@@ -37,6 +37,13 @@ class InMemoryOrganizationRepository extends IOrganizationRepository {
     this.data[index] = { ...this.data[index], ...data };
     return this.data[index];
   }
+
+  async delete(id) {
+    const index = this.data.findIndex((item) => item.id === id);
+    if (index === -1) return false;
+    this.data.splice(index, 1);
+    return true;
+  }
 }
 
 module.exports = InMemoryOrganizationRepository;

@@ -16,23 +16,27 @@ class AuthService {
   }
 
   /**
-   * Registers a new candidate: creates the Firebase Auth account, tags it
-   * with the `candidate` role via custom claims, and creates the matching
-   * Firestore user document.
+   * Registers a new company and its first responsible user. Candidates do
+   * not self-register; their evaluation access is invitation-only.
    *
    * This endpoint is public (called before the caller has any token), so
    * it's the one place that creates the Auth account itself — everywhere
    * else, `req.user` already comes from a verified token.
    *
-   * @param {{ email: string, password: string, displayName: string, phone?: string, city?: string, country?: string, academicLevel?: string, professionalArea?: string }} data
+   * @param {object} data
    * @returns {Promise<object>}
    */
-  async registerUser(data) {
-    const { email, password, displayName, ...profile } = data;
+  async registerCompany(data) {
+    const email = data.email.trim().toLowerCase();
+    const companyName = data.companyName.trim();
+
+    if (await this.organizationRepo.findByCompanyName(companyName)) {
+      throw new ValidationError('Ya existe una empresa registrada con ese nombre.');
+    }
 
     let userRecord;
     try {
-      userRecord = await auth.createUser({ email, password, displayName });
+      userRecord = await auth.createUser({ email, password: data.password, displayName: data.displayName.trim() });
     } catch (error) {
       if (error.code === 'auth/email-already-exists') {
         throw new ValidationError('Ese correo ya está registrado.');
@@ -43,21 +47,44 @@ class AuthService {
       throw error;
     }
 
+    let organization;
     try {
-      await auth.setCustomUserClaims(userRecord.uid, { role: ROLES.CANDIDATE });
+      const acceptedTermsAt = new Date();
+      organization = await this.organizationRepo.create({
+        companyName,
+        name: companyName,
+        industry: data.industry.trim(),
+        companySize: data.companySize,
+        website: data.website?.trim() || '',
+        phone: data.companyPhone.trim(),
+        city: data.city.trim(),
+        country: data.country.trim(),
+        email,
+        primaryContact: {
+          name: data.displayName.trim(),
+          role: data.contactRole.trim(),
+          phone: data.contactPhone.trim(),
+          email,
+        },
+        acceptedTermsAt,
+      });
+      await auth.setCustomUserClaims(userRecord.uid, { role: ROLES.COMPANY, orgId: organization.id });
 
-      return await this.userRepo.create({
+      const user = await this.userRepo.create({
         uid: userRecord.uid,
         email,
-        displayName,
-        role: ROLES.CANDIDATE,
-        orgId: null,
-        ...profile,
+        displayName: data.displayName.trim(),
+        phone: data.contactPhone.trim(),
+        contactRole: data.contactRole.trim(),
+        companyName,
+        role: ROLES.COMPANY,
+        orgId: organization.id,
+        acceptedTermsAt,
       });
+      return { user, organization };
     } catch (error) {
-      // Don't leave an orphaned Auth account behind if the claims/Firestore
-      // step fails after the account was already created.
       await auth.deleteUser(userRecord.uid).catch(() => {});
+      if (organization) await this.organizationRepo.delete(organization.id).catch(() => {});
       throw error;
     }
   }
@@ -121,49 +148,6 @@ class AuthService {
   }
 
   /**
-   * Creates a candidate under the authenticated company's organization.
-   *
-   * @param {{ email: string, password: string, displayName: string, phone?: string, city?: string, country?: string, academicLevel?: string, professionalArea?: string }} data
-   * @param {string} orgId
-   * @returns {Promise<object>}
-   */
-  async createCandidateUser(data, orgId) {
-    const { email, password, displayName, ...profile } = data;
-    const organization = await this.organizationRepo.findById(orgId);
-    if (!organization) throw new NotFoundError('Organization not found');
-
-    let userRecord;
-    try {
-      userRecord = await auth.createUser({ email, password, displayName });
-    } catch (error) {
-      if (error.code === 'auth/email-already-exists') {
-        throw new ValidationError('Ese correo ya está registrado.');
-      }
-      if (error.code === 'auth/invalid-password') {
-        throw new ValidationError('La contraseña no cumple los requisitos mínimos.');
-      }
-      throw error;
-    }
-
-    try {
-      await auth.setCustomUserClaims(userRecord.uid, { role: ROLES.CANDIDATE, orgId });
-
-      return await this.userRepo.create({
-        uid: userRecord.uid,
-        email,
-        displayName,
-        role: ROLES.CANDIDATE,
-        orgId,
-        companyName: organization.companyName ?? organization.name,
-        ...profile,
-      });
-    } catch (error) {
-      await auth.deleteUser(userRecord.uid).catch(() => {});
-      throw error;
-    }
-  }
-
-  /**
    * Reads the persisted user profile for a uid. This is the source of truth
    * for UI role routing, because the Firebase token claim can be stale until
    * a fresh ID token is issued.
@@ -194,12 +178,6 @@ class AuthService {
       ...organization,
       users: users.filter((user) => user.orgId === organization.id && user.role === ROLES.COMPANY),
     }));
-  }
-
-  /** @param {string} orgId @returns {Promise<object[]>} */
-  async listCandidates(orgId) {
-    const users = await this.userRepo.findByOrganization(orgId);
-    return users.filter((user) => user.role === ROLES.CANDIDATE);
   }
 
   /**

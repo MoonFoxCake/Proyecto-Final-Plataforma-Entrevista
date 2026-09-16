@@ -4,21 +4,24 @@ const { ROLES } = require('../utils/constants');
 /**
  * Payload for POST /auth/register.
  *
- * This is candidate self-registration (see RegisterPage's wizard on the
- * frontend): the account always comes out with role `candidate` and no
- * organization. The profile fields beyond email/password/displayName are
- * optional so the endpoint stays usable from simpler callers/tests too.
+ * Public company registration. Candidates never create accounts here;
+ * they access evaluations only through invitation links.
  */
 const registerSchema = z.object({
-  email: z.string().email(),
+  companyName: z.string().trim().min(2).max(160),
+  industry: z.string().trim().min(2).max(120),
+  companySize: z.enum(['1-10', '11-50', '51-200', '201-500', '501+']),
+  website: z.string().trim().url().optional(),
+  companyPhone: z.string().trim().min(5).max(30),
+  city: z.string().trim().min(2).max(100),
+  country: z.string().trim().min(2).max(100),
+  email: z.string().trim().email(),
   password: z.string().min(8),
-  displayName: z.string().min(1),
-  phone: z.string().min(1).optional(),
-  city: z.string().min(1).optional(),
-  country: z.string().min(1).optional(),
-  academicLevel: z.string().min(1).optional(),
-  professionalArea: z.string().min(1).optional(),
-});
+  displayName: z.string().trim().min(2).max(120),
+  contactRole: z.string().trim().min(2).max(120),
+  contactPhone: z.string().trim().min(5).max(30),
+  acceptTerms: z.literal(true),
+}).strict();
 
 const companyUserSchema = z.object({
   companyName: z.string().min(1),
@@ -26,17 +29,6 @@ const companyUserSchema = z.object({
   password: z.string().min(8),
   displayName: z.string().min(1),
   phone: z.string().min(1).optional(),
-});
-
-const candidateUserSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(8),
-  displayName: z.string().min(1),
-  phone: z.string().min(1).optional(),
-  city: z.string().min(1).optional(),
-  country: z.string().min(1).optional(),
-  academicLevel: z.string().min(1).optional(),
-  professionalArea: z.string().min(1).optional(),
 });
 
 /**
@@ -48,4 +40,4 @@ const setRoleSchema = z.object({
   orgId: z.string().min(1).optional(),
 });
 
-module.exports = { registerSchema, companyUserSchema, candidateUserSchema, setRoleSchema };
+module.exports = { registerSchema, companyUserSchema, setRoleSchema };

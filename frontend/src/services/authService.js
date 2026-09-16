@@ -15,23 +15,23 @@ import api from './api';
  */
 
 /**
- * Registers a new candidate.
+ * Registers a new company and its first responsible user.
  *
  * Account creation happens on the backend (`POST /auth/register`, via the
  * Admin SDK) rather than client-side, so it can atomically create the
- * Firebase Auth user, tag it with the `candidate` role (custom claims),
- * and create the Firestore user document in one place.
+ * Firebase Auth user, organization, `company` role claim and Firestore
+ * records in one place. Candidates only access evaluations by invitation.
  *
  * Once that succeeds, this briefly signs in to trigger Firebase's
  * verification email, then signs back out — registration lands the user
  * on the login screen, not straight into the app, matching the "revisa tu
  * correo" copy on the success screen.
  *
- * @param {{ email: string, password: string, displayName: string, phone?: string, city?: string, country?: string, academicLevel?: string, professionalArea?: string }} data
- * @returns {Promise<object>} the created user record
+ * @param {object} data
+ * @returns {Promise<object>} created user and organization
  */
 export async function register(data) {
-  const { data: user } = await api.post('/auth/register', data);
+  const { data: response } = await api.post('/auth/register', data);
 
   try {
     const credential = await signInWithEmailAndPassword(auth, data.email, data.password);
@@ -43,7 +43,7 @@ export async function register(data) {
     console.error('No se pudo enviar el correo de verificación:', error);
   }
 
-  return user;
+  return response?.data ?? response;
 }
 
 /**
@@ -66,18 +66,6 @@ export async function getCompanies() {
   const { data } = await api.get('/auth/companies');
   return data?.data ?? [];
 }
-
-  /** @returns {Promise<object[]>} */
-  export async function getCandidates() {
-    const { data } = await api.get('/auth/candidates');
-    return data?.data ?? [];
-  }
-
-  /** @param {object} data @returns {Promise<object>} */
-  export async function createCandidateUser(data) {
-    const { data: result } = await api.post('/auth/candidates', data);
-    return result?.data ?? result;
-  }
 
 /**
  * @param {string} email
