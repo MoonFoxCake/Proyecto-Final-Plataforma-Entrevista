@@ -15,6 +15,12 @@ class InMemoryOrganizationRepository extends IOrganizationRepository {
     return this.data.find((item) => item.id === id) || null;
   }
 
+  async findByCompanyName(companyName) {
+    return this.data.find((item) => [item.companyName, item.name].some(
+      (name) => typeof name === 'string' && name.trim().toLowerCase() === companyName
+    )) || null;
+  }
+
   async findAll() {
     return [...this.data];
   }
@@ -30,6 +36,13 @@ class InMemoryOrganizationRepository extends IOrganizationRepository {
     if (index === -1) return null;
     this.data[index] = { ...this.data[index], ...data };
     return this.data[index];
+  }
+
+  async delete(id) {
+    const index = this.data.findIndex((item) => item.id === id);
+    if (index === -1) return false;
+    this.data.splice(index, 1);
+    return true;
   }
 }
 

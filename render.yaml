@@ -22,6 +22,14 @@ services:
         sync: false
       - key: FIREBASE_CLIENT_EMAIL
         sync: false
+      # Public URL used to build the candidate access link.
+      - key: FRONTEND_URL
+        sync: false
+      # Resend credentials and sender identity. Keep the API key secret.
+      - key: RESEND_API_KEY
+        sync: false
+      - key: RESEND_FROM
+        sync: false
       # Optional: restrict CORS to the Firebase Hosting domain once known,
       # e.g. https://nexo-prueba.web.app. Leaving it unset allows any
       # origin, which is fine (auth is a Bearer token, not cookies).

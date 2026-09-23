@@ -6,7 +6,12 @@ import { useAuth } from '../hooks/useAuth';
  * Authentication itself is handled by RequireAuth.
  */
 export function RequireRole({ allowedRoles }) {
-  const { role } = useAuth();
+  const { role, loading } = useAuth();
+
+  // Wait until the authentication/profile state has finished loading.
+  if (loading) {
+    return null;
+  }
 
   if (!allowedRoles.includes(role)) {
     return <Navigate to="/dashboard" replace />;

@@ -6,9 +6,9 @@ import { Logo } from './Logo.jsx';
  * Confirmation screen shown once the registration wizard has submitted
  * successfully.
  *
- * @param {{ email: string, onContinue: () => void }} props
+ * @param {{ email: string, companyName?: string, onContinue: () => void }} props
  */
-export function RegisterSuccess({ email, onContinue }) {
+export function RegisterSuccess({ email, companyName, onContinue }) {
   return (
     <div className="flex min-h-screen items-center justify-center bg-white px-4">
       <div className="w-full max-w-sm text-center">
@@ -20,7 +20,7 @@ export function RegisterSuccess({ email, onContinue }) {
         </div>
         <h2 className="font-display text-3xl font-bold text-[#101828]">¡Cuenta creada!</h2>
         <p className="mt-3 text-sm leading-relaxed text-[#6A7282]">
-          Tu perfil como candidato ha sido registrado exitosamente. Revisa tu correo{' '}
+          La cuenta empresarial de {companyName ? <strong className="text-[#364153]">{companyName}</strong> : 'tu organización'} fue creada. Revisa el correo{' '}
           <strong className="text-[#364153]">{email}</strong> para confirmar tu cuenta.
         </p>
         <Button variant="accent" className="mt-8 h-12 w-full" onClick={onContinue}>

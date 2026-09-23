@@ -11,8 +11,18 @@ class AuthController {
   /** @type {import('express').RequestHandler} */
   register = async (req, res, next) => {
     try {
-      const user = await this.service.registerUser(req.body);
-      res.status(201).json({ data: user });
+      const result = await this.service.registerCompany(req.body);
+      res.status(201).json({ data: result });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /** @type {import('express').RequestHandler} */
+  createCompanyUser = async (req, res, next) => {
+    try {
+      const result = await this.service.createCompanyUser(req.body);
+      res.status(201).json({ data: result });
     } catch (error) {
       next(error);
     }
@@ -23,6 +33,16 @@ class AuthController {
     try {
       const user = await this.service.getProfile(req.user.uid);
       res.json({ data: user });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /** @type {import('express').RequestHandler} */
+  listCompanies = async (req, res, next) => {
+    try {
+      const companies = await this.service.listCompaniesWithUsers();
+      res.json({ data: companies });
     } catch (error) {
       next(error);
     }

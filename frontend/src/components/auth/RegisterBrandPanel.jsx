@@ -1,14 +1,14 @@
 import { AuthBackdrop } from './AuthBackdrop.jsx';
 import { Logo } from './Logo.jsx';
 import { StepIndicator } from './StepIndicator.jsx';
-import { UserIcon } from './icons.jsx';
+import { BriefcaseIcon } from './icons.jsx';
 
-export const REGISTER_STEPS = ['Datos personales', 'Formación', 'Acceso'];
+export const REGISTER_STEPS = ['Empresa', 'Responsable', 'Acceso'];
 
 const STATS = [
-  { value: '2,400+', label: 'Candidatos registrados' },
-  { value: '98%', label: 'Tasa de perfiles activos' },
   { value: '45+', label: 'Empresas aliadas' },
+  { value: '100%', label: 'Acceso administrado' },
+  { value: '24/7', label: 'Portal disponible' },
 ];
 
 /**
@@ -25,18 +25,18 @@ export function RegisterBrandPanel({ currentStep }) {
 
       <div className="my-auto">
         <div className="mb-6 inline-flex w-fit items-center gap-2 rounded-full border border-[#0AADA8]/25 bg-[#0AADA8]/15 px-3 py-1.5">
-          <UserIcon className="h-3 w-3 text-[#0AADA8]" />
-          <span className="text-xs font-medium text-[#0AADA8]">Registro de candidato</span>
+          <BriefcaseIcon className="h-3 w-3 text-[#0AADA8]" />
+          <span className="text-xs font-medium text-[#0AADA8]">Registro empresarial</span>
         </div>
 
         <h1 className="font-display text-4xl font-bold leading-tight text-white">
-          Tu perfil,
+          Tu empresa,
           <br />
-          tu <span className="text-[#0AADA8]">oportunidad.</span>
+          mejores <span className="text-[#0AADA8]">decisiones.</span>
         </h1>
 
         <p className="mt-5 max-w-xs text-base leading-relaxed text-[#8EC5FF]">
-          Crea tu perfil en minutos y conecta con las mejores empresas que buscan tu talento.
+          Registra tu organización y gestiona procesos de evaluación desde un entorno seguro.
         </p>
 
         <StepIndicator steps={REGISTER_STEPS} currentStep={currentStep} />

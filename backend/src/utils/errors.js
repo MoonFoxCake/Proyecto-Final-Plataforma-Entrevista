@@ -46,10 +46,18 @@ class ValidationError extends AppError {
   }
 }
 
+class ExternalServiceError extends AppError {
+  constructor(message = 'External service error', details) {
+    super(message, 502);
+    this.details = details;
+  }
+}
+
 module.exports = {
   AppError,
   NotFoundError,
   UnauthorizedError,
   ForbiddenError,
   ValidationError,
+  ExternalServiceError,
 };
