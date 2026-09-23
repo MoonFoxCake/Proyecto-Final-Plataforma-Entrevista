@@ -4,6 +4,7 @@ const FirestoreOrganizationRepository = require('../repositories/firestore/Fires
 const FirestoreEventRepository = require('../repositories/firestore/FirestoreEventRepository');
 const FirestoreCandidateRepository = require('../repositories/firestore/FirestoreCandidateRepository');
 const FirestoreInvitationRepository = require('../repositories/firestore/FirestoreInvitationRepository');
+const FirestoreMacrocaseRepository = require('../repositories/firestore/FirestoreMacrocaseRepository');
 
 // In-memory repositories (tests)
 const InMemoryUserRepository = require('../repositories/in-memory/InMemoryUserRepository');
@@ -20,6 +21,7 @@ const CandidateService = require('../services/CandidateService');
 const InvitationService = require('../services/InvitationService');
 const ReviewService = require('../services/ReviewService');
 const ResendEmailService = require('../services/ResendEmailService');
+const MacrocaseService = require('../services/MacrocaseService');
 
 /**
  * Builds the repository set for the given backing store.
@@ -35,6 +37,7 @@ function buildRepositories(type) {
       eventRepo: new InMemoryEventRepository(),
       candidateRepo: new InMemoryCandidateRepository(),
       invitationRepo: new InMemoryInvitationRepository(),
+      macrocaseRepo: new FirestoreMacrocaseRepository(),
     };
   }
 
@@ -44,6 +47,7 @@ function buildRepositories(type) {
     eventRepo: new FirestoreEventRepository(),
     candidateRepo: new FirestoreCandidateRepository(),
     invitationRepo: new FirestoreInvitationRepository(),
+    macrocaseRepo: new FirestoreMacrocaseRepository(),
   };
 }
 
@@ -84,6 +88,7 @@ function createContainer(type = 'firestore') {
     invitationRepo: repos.invitationRepo,
     organizationRepo: repos.organizationRepo,
   });
+  const macrocaseService = new MacrocaseService(repos.macrocaseRepo);
 
   return {
     repos,
@@ -93,6 +98,7 @@ function createContainer(type = 'firestore') {
     candidateService,
     invitationService,
     reviewService,
+    macrocaseService,
   };
 }
 
