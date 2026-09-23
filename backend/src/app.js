@@ -21,6 +21,11 @@ const { errorHandler } = require('./middleware/errorHandler');
  */
 function createApp(container = createContainer('firestore')) {
   const app = express();
+  app.use('/api', (req, res, next) => {
+  res.set('Cache-Control', 'no-store');
+  next();
+});
+
 
   // Frontend (Firebase Hosting) and backend (Render) are different origins.
   // CORS_ORIGIN restricts requests to that domain in production; unset, it
