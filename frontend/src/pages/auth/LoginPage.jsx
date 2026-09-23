@@ -27,6 +27,10 @@ export function LoginPage() {
     try {
       await authService.login(email, password);
       const profile = await authService.getProfile();
+      console.log('=== LOGIN DEBUG ===');
+      console.log('PROFILE:', profile);
+      console.log('ROLE:', profile?.role);
+      console.log('LOCATION STATE:', location.state);
       const dashboardByRole = {
         [ROLES.ADMIN]: '/admin-dashboard',
         [ROLES.COMPANY]: '/company-dashboard',
