@@ -3,10 +3,12 @@ const { Router } = require('express');
 const AuthController = require('../controllers/auth.controller');
 const EventController = require('../controllers/event.controller');
 const AdminReviewController = require('../controllers/admin-review.controller');
+const MacrocaseController = require('../controllers/macrocase.controller');
 
 const { createAuthRoutes } = require('./auth.routes');
 const { createEventRoutes } = require('./event.routes');
 const { createAdminReviewRoutes } = require('./admin-review.routes');
+const { createMacrocaseRoutes } = require('./macrocase.routes');
 
 /**
  * Builds the `/api/v1` router tree, wiring each sub-router's controller
@@ -26,9 +28,17 @@ function createApiRouter(container) {
   );
   const adminReviewController = new AdminReviewController(container.reviewService);
 
+  const macrocaseController = new MacrocaseController(
+  container.macrocaseService
+);
+
   router.use('/auth', createAuthRoutes(authController, container.authService));
   router.use('/events', createEventRoutes(eventController, container.authService));
   router.use('/admin', createAdminReviewRoutes(adminReviewController, container.authService));
+  router.use(
+  '/macrocasos',
+  createMacrocaseRoutes(macrocaseController, container.authService)
+);
 
   return router;
 }

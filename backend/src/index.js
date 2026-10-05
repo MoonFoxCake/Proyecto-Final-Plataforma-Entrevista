@@ -14,6 +14,6 @@ const env = loadEnv();
 const app = createApp();
 const port = Number(env.PORT) || 3000;
 
-app.listen(port, () => {
-  console.log(`Nexo Perfil API listening on http://localhost:${port}`);
+app.listen(port, '0.0.0.0', () => {
+  console.log(`Nexo Perfil API listening on port ${port}`);
 });
