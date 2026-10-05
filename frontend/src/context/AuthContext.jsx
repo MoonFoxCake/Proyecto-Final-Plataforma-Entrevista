@@ -1,5 +1,5 @@
 import { createContext, useEffect, useState } from 'react';
-import { getProfile, logout, onAuthStateChanged } from '../services/authService';
+import { getProfile, onAuthStateChanged } from '../services/authService';
 
 /**
  * @typedef {object} AuthContextValue
@@ -32,7 +32,6 @@ export function AuthProvider({ children }) {
     let active = true;
 
     const initialize = async () => {
-      await logout();
       if (!active) return;
 
       unsubscribe = onAuthStateChanged(async (firebaseUser) => {
