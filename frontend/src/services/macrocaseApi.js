@@ -1,7 +1,8 @@
 import { auth } from '../config/firebase';
 
+// Same backend as services/api.js; VITE_API_URL is kept for older .env files.
 const API_URL =
-  import.meta.env.VITE_API_URL || 'http://localhost:3000/api/v1';
+  import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api/v1';
 
 async function getHeaders() {
   const user = auth.currentUser;
