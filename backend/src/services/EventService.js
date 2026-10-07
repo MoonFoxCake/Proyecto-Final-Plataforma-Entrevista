@@ -21,6 +21,14 @@ class EventService {
     });
   }
 
+  /** Stores the macrocase copy this event's Module B uses. */
+  async assignModuleB(eventId, orgId, macrocase) {
+    await this.getEvent(eventId, orgId);
+    return this.eventRepo.update(eventId, {
+      moduleB: { macrocase, assignedAt: new Date() },
+    });
+  }
+
   async getEvent(eventId, orgId) {
     const event = await this.eventRepo.findById(eventId);
     const ownerOrgId = event?.orgId ?? event?.recruiterOrgId;

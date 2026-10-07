@@ -14,7 +14,7 @@ class InvitationController {
 
   submit = async (req, res, next) => {
     try {
-      const result = await this.invitationService.submitEvaluation(req.body.token, req.body.answers);
+      const result = await this.invitationService.submitEvaluation(req.body.token, req.body);
       res.json({ data: result });
     } catch (error) {
       next(error);

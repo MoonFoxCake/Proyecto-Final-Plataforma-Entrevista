@@ -52,6 +52,15 @@ class EventController {
     }
   };
 
+  sendModuleB = async (req, res, next) => {
+    try {
+      const result = await this.invitationService.sendModuleB(req.params.eventId, req.user.orgId, req.body.candidateIds);
+      res.json({ data: result });
+    } catch (error) {
+      next(error);
+    }
+  };
+
   publishInvitations = async (req, res, next) => {
     try {
       const result = await this.invitationService.publishForEvent(req.params.eventId, req.user.orgId);

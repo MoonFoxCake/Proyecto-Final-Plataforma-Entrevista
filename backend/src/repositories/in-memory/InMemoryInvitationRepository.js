@@ -25,15 +25,19 @@ class InMemoryInvitationRepository extends IInvitationRepository {
     return this.data[index];
   }
 
-  async findActiveByCandidate(candidateId, eventId) {
+  async findActiveByCandidate(candidateId, eventId, module = 'A') {
     return this.data.find((item) => (
       item.candidateId === candidateId &&
       item.eventId === eventId &&
+      (item.module || 'A') === module &&
       item.status === 'ACTIVE'
     )) || null;
   }
 
-  async completeWithSubmission(tokenHash, answers) {
+  /**
+   * @param {{ module?: 'A'|'B', instrumentVersion?: string, answers: object[] }} submission
+   */
+  async completeWithSubmission(tokenHash, { module = 'A', instrumentVersion = 'DEMO_A_V1', answers }) {
     const invitation = this.data.find((item) => item.tokenHash === tokenHash);
     if (!invitation) return { state: 'INVALID' };
     if (invitation.status === 'COMPLETED') {
@@ -51,8 +55,8 @@ class InMemoryInvitationRepository extends IInvitationRepository {
       candidateId: invitation.candidateId,
       eventId: invitation.eventId,
       orgId: invitation.orgId,
-      module: 'A',
-      instrumentVersion: 'DEMO_A_V1',
+      module,
+      instrumentVersion,
       answers,
       submittedAt,
     });
@@ -61,8 +65,10 @@ class InMemoryInvitationRepository extends IInvitationRepository {
     return { state: 'COMPLETED', submittedAt, alreadySubmitted: false };
   }
 
-  async findSubmissionByCandidate(candidateId, eventId) {
-    return this.submissions.find((item) => item.candidateId === candidateId && item.eventId === eventId) || null;
+  async findSubmissionByCandidate(candidateId, eventId, module = 'A') {
+    return this.submissions.find((item) => (
+      item.candidateId === candidateId && item.eventId === eventId && (item.module || 'A') === module
+    )) || null;
   }
 }
 

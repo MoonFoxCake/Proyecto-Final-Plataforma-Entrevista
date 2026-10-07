@@ -12,6 +12,7 @@ const InMemoryOrganizationRepository = require('../repositories/in-memory/InMemo
 const InMemoryEventRepository = require('../repositories/in-memory/InMemoryEventRepository');
 const InMemoryCandidateRepository = require('../repositories/in-memory/InMemoryCandidateRepository');
 const InMemoryInvitationRepository = require('../repositories/in-memory/InMemoryInvitationRepository');
+const InMemoryMacrocaseRepository = require('../repositories/in-memory/InMemoryMacrocaseRepository');
 
 // Services
 const AuthService = require('../services/AuthService');
@@ -22,6 +23,14 @@ const InvitationService = require('../services/InvitationService');
 const ReviewService = require('../services/ReviewService');
 const ResendEmailService = require('../services/ResendEmailService');
 const MacrocaseService = require('../services/MacrocaseService');
+const AzureSpeechService = require('../services/AzureSpeechService');
+
+// Supabase Storage for macrocase audio. Required lazily: the Supabase client
+// fails at import time without SUPABASE_URL / SUPABASE_SECRET_KEY.
+const supabaseAudioStorage = {
+  upload: (file) => require('../services/storageService').uploadMacrocaseAudio(file),
+  remove: (path) => require('../services/storageService').deleteMacrocaseAudio(path),
+};
 
 /**
  * Builds the repository set for the given backing store.
@@ -37,7 +46,7 @@ function buildRepositories(type) {
       eventRepo: new InMemoryEventRepository(),
       candidateRepo: new InMemoryCandidateRepository(),
       invitationRepo: new InMemoryInvitationRepository(),
-      macrocaseRepo: new FirestoreMacrocaseRepository(),
+      macrocaseRepo: new InMemoryMacrocaseRepository(),
     };
   }
 
@@ -73,6 +82,15 @@ function createContainer(type = 'firestore') {
     apiKey: process.env.RESEND_API_KEY,
     from: process.env.RESEND_FROM,
   });
+  const macrocaseService = new MacrocaseService(repos.macrocaseRepo, {
+    speechService: new AzureSpeechService({
+      key: process.env.AZURE_SPEECH_KEY,
+      region: process.env.AZURE_SPEECH_REGION,
+      voice: process.env.AZURE_SPEECH_VOICE,
+    }),
+    audioStorage: type === 'memory' ? undefined : supabaseAudioStorage,
+    eventRepo: repos.eventRepo,
+  });
   const invitationService = new InvitationService({
     invitationRepo: repos.invitationRepo,
     candidateService,
@@ -81,6 +99,7 @@ function createContainer(type = 'firestore') {
     organizationRepo: repos.organizationRepo,
     emailService,
     frontendUrl: process.env.FRONTEND_URL || process.env.CORS_ORIGIN,
+    macrocaseService,
   });
   const reviewService = new ReviewService({
     eventRepo: repos.eventRepo,
@@ -88,7 +107,6 @@ function createContainer(type = 'firestore') {
     invitationRepo: repos.invitationRepo,
     organizationRepo: repos.organizationRepo,
   });
-  const macrocaseService = new MacrocaseService(repos.macrocaseRepo);
 
   return {
     repos,

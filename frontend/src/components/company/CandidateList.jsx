@@ -1,3 +1,5 @@
+import { Link } from 'react-router-dom';
+
 function initials(name = '') {
   return name.split(' ').filter(Boolean).map((part) => part[0]).join('').toUpperCase().slice(0, 2) || 'CA';
 }
@@ -8,6 +10,11 @@ function formatAppointment(value) {
   const date = new Date(raw);
   if (Number.isNaN(date.getTime())) return 'Fecha no disponible';
   return new Intl.DateTimeFormat('es-GT', { dateStyle: 'medium', timeStyle: 'short' }).format(date);
+}
+
+/** Module B can go to candidates with a published Module A profile who have not answered it yet. */
+export function canReceiveModuleB(candidate) {
+  return Boolean(candidate.profileAvailable) && candidate.moduleB?.status !== 'COMPLETED';
 }
 
 function CandidateStatus({ status, profileAvailable }) {
@@ -23,7 +30,22 @@ function CandidateStatus({ status, profileAvailable }) {
   return <span className='inline-flex items-center gap-1.5 rounded-md bg-[#F1F5F9] px-2.5 py-1 text-xs font-medium text-[#475569]'><span className='h-1.5 w-1.5 rounded-full bg-[#94A3B8]' /> Pendiente de envío</span>;
 }
 
-export function CandidateList({ candidates, loading }) {
+function ModuleBStatus({ moduleB }) {
+  if (moduleB?.status === 'COMPLETED') {
+    return <span className='inline-flex items-center gap-1.5 rounded-md bg-[#E8F8F5] px-2.5 py-1 text-xs font-medium text-[#087D79]'><span className='h-1.5 w-1.5 rounded-full bg-[#0AADA8]' /> Respondido</span>;
+  }
+  if (moduleB?.status === 'INVITATION_SENT') {
+    return <span className='inline-flex items-center gap-1.5 rounded-md bg-[#EEF6FF] px-2.5 py-1 text-xs font-medium text-[#315B88]'><span className='h-1.5 w-1.5 rounded-full bg-[#4F8CC9]' /> Enviado</span>;
+  }
+  return <span className='text-xs text-[#A0AEC0]'>No enviado</span>;
+}
+
+/**
+ * Candidates of an event. With `showModuleB` it adds the Module B column;
+ * with `selection` ({ selectedIds: Set, onToggle(id) }) the candidates who
+ * can receive Module B get a checkbox.
+ */
+export function CandidateList({ candidates, loading, showModuleB = false, selection = null }) {
   if (loading) {
     return <div className='flex min-h-52 items-center justify-center text-sm text-[#64748B]'>Cargando candidatos...</div>;
   }
@@ -38,17 +60,36 @@ export function CandidateList({ candidates, loading }) {
     <div className='overflow-x-auto'>
       <table className='w-full min-w-[860px] text-left'>
         <thead className='border-y border-[#E8EDF2] bg-[#FAFBFC] text-[11px] font-semibold uppercase tracking-wide text-[#718096]'>
-          <tr><th className='px-5 py-3'>Candidato</th><th className='px-5 py-3'>Cédula</th><th className='px-5 py-3'>Estado</th><th className='px-5 py-3'>Cita</th><th className='px-5 py-3 text-right'>Acciones</th></tr>
+          <tr>
+            {selection && <th className='w-12 px-5 py-3'><span className='sr-only'>Seleccionar</span></th>}
+            <th className='px-5 py-3'>Candidato</th><th className='px-5 py-3'>Cédula</th><th className='px-5 py-3'>{showModuleB ? 'Módulo A' : 'Estado'}</th>
+            {showModuleB && <th className='px-5 py-3'>Módulo B</th>}
+            <th className='px-5 py-3'>Cita</th><th className='px-5 py-3 text-right'>Acciones</th>
+          </tr>
         </thead>
         <tbody className='divide-y divide-[#E8EDF2]'>
           {candidates.map((candidate) => (
-            <tr key={candidate.id} className='bg-white'>
+            <tr key={candidate.id} className={selection?.selectedIds.has(candidate.id) ? 'bg-[#F4FBFB]' : 'bg-white'}>
+              {selection && (
+                <td className='px-5 py-4'>
+                  {canReceiveModuleB(candidate) && (
+                    <input
+                      type='checkbox'
+                      checked={selection.selectedIds.has(candidate.id)}
+                      onChange={() => selection.onToggle(candidate.id)}
+                      aria-label={`Seleccionar a ${candidate.nombreCompleto} para el Módulo B`}
+                      className='h-4 w-4 cursor-pointer accent-[#0AADA8]'
+                    />
+                  )}
+                </td>
+              )}
               <td className='px-5 py-4'><div className='flex items-center gap-3'>
                 <span className='flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#E7F7F6] text-xs font-bold text-[#087D79]'>{initials(candidate.nombreCompleto)}</span>
                 <div className='min-w-0'><p className='truncate text-sm font-semibold text-[#101828]'>{candidate.nombreCompleto}</p><p className='truncate text-xs text-[#64748B]'>{candidate.correo}</p></div>
               </div></td>
               <td className='px-5 py-4 text-sm text-[#475569]'>{candidate.cedula}</td>
               <td className='px-5 py-4'><CandidateStatus status={candidate.status} profileAvailable={candidate.profileAvailable} /></td>
+              {showModuleB && <td className='px-5 py-4'><ModuleBStatus moduleB={candidate.moduleB} /></td>}
               <td className='px-5 py-4 text-sm text-[#475569]'>{formatAppointment(candidate.fechaHoraCita)}</td>
               <td className='px-5 py-4 text-right'>
                 {candidate.profileAvailable ? (
@@ -62,4 +103,3 @@ export function CandidateList({ candidates, loading }) {
     </div>
   );
 }
-import { Link } from 'react-router-dom';

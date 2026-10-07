@@ -25,6 +25,12 @@ export async function createEventCandidate(eventId, candidate) {
   return data?.data ?? null;
 }
 
+/** Module B (second stage): sends the macrocase to the selected candidates. */
+export async function sendModuleBInvitations(eventId, candidateIds) {
+  const { data } = await api.post(`/events/${eventId}/module-b/invitations`, { candidateIds });
+  return data?.data ?? null;
+}
+
 export async function publishEventInvitations(eventId) {
   const { data } = await api.post(`/events/${eventId}/invitations/publish`);
   return data?.data ?? null;

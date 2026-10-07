@@ -14,6 +14,10 @@ const envSchema = z.object({
   RESEND_API_KEY: z.string().min(1).optional(),
   RESEND_FROM: z.string().min(3).optional(),
   FRONTEND_URL: z.string().url().optional(),
+  // Azure Speech: generated voice for macrocase questions (optional).
+  AZURE_SPEECH_KEY: z.string().min(1).optional(),
+  AZURE_SPEECH_REGION: z.string().min(1).optional(),
+  AZURE_SPEECH_VOICE: z.string().min(1).optional(),
 });
 
 /**

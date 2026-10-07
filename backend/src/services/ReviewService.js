@@ -58,6 +58,9 @@ class ReviewService {
     const { candidate, resolvedId } = await this.resolveParticipant(eventId, anonymousId);
     const submission = await this.invitationRepo.findSubmissionByCandidate(candidate.id, eventId);
     if (!submission) throw new NotFoundError('Este participante aún no ha enviado respuestas.');
+    const moduleBSubmission = candidate.moduleB?.status === 'COMPLETED'
+      ? await this.invitationRepo.findSubmissionByCandidate(candidate.id, eventId, 'B')
+      : null;
 
     return {
       process: this.safeEvent(event),
@@ -73,6 +76,25 @@ class ReviewService {
         ...(QUESTIONS[answer.questionId] || { number: 0, dimension: 'Sin dimensión', text: 'Pregunta del instrumento' }),
         value: answer.value,
         label: ANSWER_LABELS[answer.value] || String(answer.value),
+      })),
+      moduleB: this.moduleBDetail(event, candidate, moduleBSubmission),
+    };
+  }
+
+  /** Second stage: null if the candidate was not sent Module B. */
+  moduleBDetail(event, candidate, submission) {
+    if (!candidate.moduleB) return null;
+    return {
+      status: candidate.moduleB.status,
+      invitedAt: candidate.moduleB.invitedAt || null,
+      submittedAt: submission?.submittedAt || candidate.moduleB.submittedAt || null,
+      macrocaseName: event.moduleB?.macrocase?.name || 'Macrocaso',
+      answers: (submission?.answers || []).map((answer, index) => ({
+        questionId: answer.questionId,
+        number: index + 1,
+        question: answer.question,
+        text: answer.text,
+        timedOut: Boolean(answer.timedOut),
       })),
     };
   }
@@ -131,6 +153,7 @@ class ReviewService {
         anonymousId,
         submittedAt: candidate.submittedAt || null,
         status: !hasResponse(candidate) ? 'NO_RESPONSE' : candidate.reviewStatus === 'REVIEWED' ? 'REVIEWED' : 'PENDING_REVIEW',
+        moduleBStatus: candidate.moduleB?.status || null,
       }));
     }
     return result;

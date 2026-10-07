@@ -1,7 +1,7 @@
 const { Router } = require('express');
 const { checkPersistedRole } = require('../middleware/checkPersistedRole');
 const { validateInput } = require('../middleware/validateInput');
-const { candidateSchema, eventSchema } = require('../validators/event.schema');
+const { candidateSchema, eventSchema, moduleBInvitationSchema } = require('../validators/event.schema');
 
 function createEventRoutes(eventController, authService) {
   const router = Router();
@@ -12,6 +12,12 @@ function createEventRoutes(eventController, authService) {
   router.get('/:eventId', companyOnly, eventController.get);
   router.get('/:eventId/candidates', companyOnly, eventController.listCandidates);
   router.post('/:eventId/invitations/publish', companyOnly, eventController.publishInvitations);
+  router.post(
+    '/:eventId/module-b/invitations',
+    companyOnly,
+    validateInput(moduleBInvitationSchema),
+    eventController.sendModuleB
+  );
   router.post(
     '/:eventId/candidates',
     companyOnly,

@@ -48,6 +48,10 @@ export async function getMacroCases() {
   return request('/macrocasos');
 }
 
+export async function getMacroCase(id) {
+  return request(`/macrocasos/${id}`);
+}
+
 export async function createMacroCase(data) {
   return request('/macrocasos', {
     method: 'POST',

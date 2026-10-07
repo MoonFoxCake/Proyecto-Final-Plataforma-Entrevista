@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { validateInvitationAccess } from '../services/invitationService.js';
 import { LikertQuestionnaire } from '../components/evaluation/LikertQuestionnaire.jsx';
+import { EvaluationHeader } from '../components/evaluation/EvaluationHeader.jsx';
+import { MacrocaseEvaluation } from '../components/evaluation/macrocase/MacrocaseEvaluation.jsx';
 
 function formatDate(value) {
   if (!value) return '';
@@ -21,17 +23,6 @@ const STATE_COPY = {
   CANCELLED: ['Este acceso ya no está disponible.', 'La invitación fue cancelada. Contacta a la empresa si necesitas ayuda.'],
   ERROR: ['No pudimos validar el acceso.', 'Comprueba tu conexión e intenta abrir nuevamente el enlace.'],
 };
-
-function BrandHeader() {
-  return (
-    <header className='border-b border-[#DDE5EC] bg-white'>
-      <div className='mx-auto flex h-[70px] max-w-6xl items-center justify-between px-5'>
-        <div className='flex items-center gap-3'><span className='flex h-9 w-9 items-center justify-center rounded-xl bg-[#20AAA5] font-bold text-white'>N</span><span className='font-display font-bold text-[#10233A]'>Nexo<span className='text-[#18A9A4]'>Perfil</span></span></div>
-        <span className='text-sm text-[#64748B]'>Evaluación</span>
-      </div>
-    </header>
-  );
-}
 
 function ClosedState({ state, submittedAt }) {
   const [title, description] = STATE_COPY[state] || STATE_COPY.INVALID;
@@ -62,38 +53,46 @@ export function EvaluationAccessPage() {
   }, [token]);
 
   if (!access) {
-    return <div className='min-h-screen bg-[#F6F9FC]'><BrandHeader /><div className='flex min-h-[60vh] items-center justify-center text-sm text-[#64748B]'>Validando acceso...</div></div>;
+    return <div className='min-h-screen bg-[#F6F9FC]'><EvaluationHeader /><div className='flex min-h-[60vh] items-center justify-center text-sm text-[#64748B]'>Validando acceso...</div></div>;
   }
   if (STATE_COPY[access.state]) {
-    return <div className='min-h-screen bg-[#F6F9FC]'><BrandHeader /><ClosedState state={access.state} submittedAt={access.submittedAt} /></div>;
+    return <div className='min-h-screen bg-[#F6F9FC]'><EvaluationHeader /><ClosedState state={access.state} submittedAt={access.submittedAt} /></div>;
   }
+  // The same e-mail link opens Module A (questionnaire) or, in the second
+  // stage, Module B (macrocase); the invitation says which.
+  const isModuleB = access.module === 'B';
   if (started) {
     return (
-      <div className='min-h-screen bg-[#F6F9FC]'><BrandHeader /><LikertQuestionnaire token={token} /></div>
+      <div className='min-h-screen bg-[#F6F9FC]'>
+        <EvaluationHeader />
+        {isModuleB ? <MacrocaseEvaluation token={token} macrocase={access.macrocase} /> : <LikertQuestionnaire token={token} />}
+      </div>
     );
   }
 
   const waiting = access.state === 'NOT_YET_AVAILABLE';
   return (
     <div className='min-h-screen bg-[#F6F9FC]'>
-      <BrandHeader />
+      <EvaluationHeader />
       <main className='mx-auto max-w-xl px-5 py-12'>
         <section className='rounded-2xl border border-[#D9E2EA] bg-white p-7 shadow-sm sm:p-8'>
-          <span className='inline-flex rounded-md bg-[#E8F7F6] px-2.5 py-1 text-xs font-semibold text-[#087D79]'>{waiting ? 'Evaluación programada' : 'Evaluación disponible'}</span>
+          <span className='inline-flex rounded-md bg-[#E8F7F6] px-2.5 py-1 text-xs font-semibold text-[#087D79]'>{isModuleB ? 'Segunda etapa · Módulo B' : waiting ? 'Evaluación programada' : 'Evaluación disponible'}</span>
           <h1 className='mt-4 font-display text-2xl font-bold text-[#10233A]'>Hola, {access.candidate.nombreCompleto}.</h1>
-          <p className='mt-2 text-sm text-[#56677B]'>{access.organization.nombre} te ha invitado a completar una evaluación.</p>
+          <p className='mt-2 text-sm text-[#56677B]'>{isModuleB ? `${access.organization.nombre} te invita a continuar con la segunda etapa del proceso: el análisis de un caso.` : `${access.organization.nombre} te ha invitado a completar una evaluación.`}</p>
 
           <div className='mt-6 rounded-xl bg-[#F6F9FC] p-5'>
             <p className='text-xs text-[#64748B]'>Evento</p><p className='mt-1 font-semibold text-[#10233A]'>{access.event.nombre}</p>
             {access.event.puesto && <p className='mt-1 text-sm text-[#64748B]'>{access.event.puesto}</p>}
-            <div className='mt-5 grid gap-4 sm:grid-cols-2'><div><p className='text-xs text-[#64748B]'>Fecha y hora</p><p className='mt-1 text-sm font-medium text-[#10233A]'>{formatDate(access.event.availableFrom)} · UTC−6</p></div><div><p className='text-xs text-[#64748B]'>Duración aproximada</p><p className='mt-1 text-sm font-medium text-[#10233A]'>3–5 minutos · Demo</p></div></div>
+            {isModuleB
+              ? <div className='mt-5'><p className='text-xs text-[#64748B]'>Disponible hasta</p><p className='mt-1 text-sm font-medium text-[#10233A]'>{formatDate(access.expiresAt)} · UTC−6</p></div>
+              : <div className='mt-5 grid gap-4 sm:grid-cols-2'><div><p className='text-xs text-[#64748B]'>Fecha y hora</p><p className='mt-1 text-sm font-medium text-[#10233A]'>{formatDate(access.event.availableFrom)} · UTC−6</p></div><div><p className='text-xs text-[#64748B]'>Duración aproximada</p><p className='mt-1 text-sm font-medium text-[#10233A]'>3–5 minutos · Demo</p></div></div>}
           </div>
 
           <h2 className='mt-6 font-semibold text-[#10233A]'>Antes de comenzar</h2>
-          <ul className='mt-4 space-y-3 text-sm text-[#56677B]'><li>◷ &nbsp;Realiza la evaluación en una sola sesión.</li><li>→ &nbsp;Solo podrás avanzar; no podrás regresar a preguntas anteriores.</li><li>▣ &nbsp;Al finalizar, confirma el envío de tu evaluación.</li><li>♙ &nbsp;El enlace es personal. No lo compartas.</li></ul>
+          <ul className='mt-4 space-y-3 text-sm text-[#56677B]'>{isModuleB && <li>✎ &nbsp;Leerás un caso y responderás por escrito las preguntas del asistente virtual.</li>}<li>◷ &nbsp;Realiza la evaluación en una sola sesión.</li><li>→ &nbsp;Solo podrás avanzar; no podrás regresar a preguntas anteriores.</li><li>▣ &nbsp;Al finalizar, confirma el envío de tu evaluación.</li><li>♙ &nbsp;El enlace es personal. No lo compartas.</li></ul>
 
           {waiting && <p className='mt-6 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800'>Podrás comenzar a partir del {formatDate(access.event.availableFrom)}.</p>}
-          <button type='button' disabled={waiting} onClick={() => setStarted(true)} className='mt-6 w-full rounded-xl bg-[#168D89] px-5 py-3.5 text-sm font-semibold text-white hover:bg-[#117A76] disabled:cursor-not-allowed disabled:bg-[#AAB7C4]'>{waiting ? 'Aún no disponible' : 'Comenzar evaluación →'}</button>
+          <button type='button' disabled={waiting} onClick={() => setStarted(true)} className='mt-6 w-full rounded-xl bg-[#168D89] px-5 py-3.5 text-sm font-semibold text-white hover:bg-[#117A76] disabled:cursor-not-allowed disabled:bg-[#AAB7C4]'>{waiting ? 'Aún no disponible' : isModuleB ? 'Continuar →' : 'Comenzar evaluación →'}</button>
         </section>
         <p className='mt-6 text-center text-xs text-[#7C8AA0]'>Contenido demostrativo · NexoPerfil</p>
       </main>

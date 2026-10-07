@@ -13,6 +13,7 @@ import { CompanyDashboardPage } from '../pages/CompanyDashboardPage.jsx';
 import { EventDetailPage } from '../pages/EventDetailPage.jsx';
 import { NewEventPage } from '../pages/NewEventPage.jsx';
 import { EvaluationAccessPage } from '../pages/EvaluationAccessPage.jsx';
+import { AdminMacrocasePreviewPage } from '../pages/AdminMacrocasePreviewPage.jsx';
 import { CandidateResultPage } from '../pages/CandidateResultPage.jsx';
 import { RequireAuth } from './RequireAuth.jsx';
 import { RequireRole } from './RequireRole.jsx';
@@ -52,6 +53,7 @@ export function AppRouter() {
             <Route path="/admin-dashboard" element={<AdminDashboardPage />} />
             <Route path="/admin/processes/:eventId" element={<AdminProcessDetailPage />} />
             <Route path="/admin/processes/:eventId/participants/:anonymousId" element={<AdminParticipantReviewPage />} />
+            <Route path="/admin/macrocases/:macrocaseId/preview" element={<AdminMacrocasePreviewPage />} />
           </Route>
 
           <Route element={<RequireRole allowedRoles={[ROLES.CANDIDATE]} />}>

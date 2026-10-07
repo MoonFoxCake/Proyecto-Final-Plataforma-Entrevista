@@ -36,3 +36,15 @@ services:
       # origin, which is fine (auth is a Bearer token, not cookies).
       - key: CORS_ORIGIN
         sync: false
+      # Supabase Storage (macrocase question audio).
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SECRET_KEY
+        sync: false
+      # Azure Speech: generated voice for macrocase questions.
+      - key: AZURE_SPEECH_KEY
+        sync: false
+      - key: AZURE_SPEECH_REGION
+        sync: false
+      - key: AZURE_SPEECH_VOICE
+        value: es-GT-MartaNeural

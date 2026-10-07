@@ -139,8 +139,8 @@ describe('InvitationService', () => {
     });
     const answers = [1, 2, 3, 4].map((number) => ({ questionId: `demo-a-${number}`, value: number }));
 
-    const first = await service.submitEvaluation(token, answers);
-    const second = await service.submitEvaluation(token, answers);
+    const first = await service.submitEvaluation(token, { answers });
+    const second = await service.submitEvaluation(token, { answers });
 
     expect(first).toMatchObject({ state: 'COMPLETED', alreadySubmitted: false });
     expect(second).toMatchObject({ state: 'COMPLETED' });

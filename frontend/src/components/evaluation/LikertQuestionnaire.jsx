@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { submitEvaluation } from '../../services/invitationService.js';
+import { CompletedPanel, ConfirmPanel, QuestionProgress } from './EvaluationPanels.jsx';
 
 const QUESTIONS = [
   { id: 'demo-a-1', text: 'Cuando trabajo con otras personas, comunico mis ideas de forma clara y respetuosa.' },
@@ -16,38 +17,6 @@ const OPTIONS = [
   'Totalmente de acuerdo',
 ];
 
-function CompletedPanel({ submittedAt }) {
-  const formatted = submittedAt ? new Intl.DateTimeFormat('es-GT', {
-    dateStyle: 'medium', timeStyle: 'short', timeZone: 'America/Guatemala',
-  }).format(new Date(submittedAt)) : '';
-  return (
-    <main className='mx-auto max-w-xl px-5 py-16'>
-      <section className='rounded-2xl border border-[#D9E2EA] bg-white p-9 text-center shadow-sm'>
-        <span className='mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-[#E8F7F6] text-xl text-[#0A8F8A]'>✓</span>
-        <h1 className='mt-6 font-display text-2xl font-bold text-[#10233A]'>Evaluación completada</h1>
-        <p className='mt-3 text-sm leading-6 text-[#56677B]'>Tus respuestas fueron registradas correctamente.</p>
-        {formatted && <p className='mt-4 text-sm font-medium text-[#334E68]'>Enviada el {formatted}</p>}
-        <div className='mt-7 border-t border-[#DDE5EC] pt-6 text-sm text-[#7C8AA0]'>No tienes evaluaciones pendientes. Puedes cerrar esta ventana.</div>
-      </section>
-      <p className='mt-6 text-center text-xs text-[#7C8AA0]'>Contenido demostrativo · Sin calificación</p>
-    </main>
-  );
-}
-
-function ConfirmPanel({ submitting, error, onSubmit }) {
-  return (
-    <main className='mx-auto max-w-xl px-5 py-16'>
-      <section className='rounded-2xl border border-[#D9E2EA] bg-white p-8 text-center shadow-sm'>
-        <span className='mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-amber-50 text-xl text-amber-700'>!</span>
-        <h1 className='mt-6 font-display text-2xl font-bold text-[#10233A]'>Finalizar evaluación</h1>
-        <p className='mt-3 text-sm leading-6 text-[#56677B]'>Confirma que deseas enviar tu evaluación.</p>
-        {error && <p className='mt-5 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700'>{error}</p>}
-        <button type='button' onClick={onSubmit} disabled={submitting} className='mt-7 rounded-xl bg-[#13A9A4] px-6 py-3 text-sm font-semibold text-white hover:bg-[#0F8F8B] disabled:opacity-60'>{submitting ? 'Enviando...' : 'Enviar evaluación'}</button>
-      </section>
-    </main>
-  );
-}
-
 export function LikertQuestionnaire({ token }) {
   const [questionIndex, setQuestionIndex] = useState(0);
   const [answers, setAnswers] = useState([]);
@@ -57,7 +26,6 @@ export function LikertQuestionnaire({ token }) {
   const [submitError, setSubmitError] = useState('');
   const [submittedAt, setSubmittedAt] = useState(null);
   const question = QUESTIONS[questionIndex];
-  const progress = ((questionIndex + 1) / QUESTIONS.length) * 100;
 
   const continueForward = () => {
     if (selected === null) return;
@@ -96,13 +64,7 @@ export function LikertQuestionnaire({ token }) {
 
   return (
     <main className='mx-auto max-w-3xl px-5 py-10 sm:py-16'>
-      <div className='mb-5 flex items-center justify-between text-xs font-medium text-[#64748B]'>
-        <span>Módulo A · Cuestionario</span>
-        <span>Pregunta <strong className='text-[#0A8F8A]'>{questionIndex + 1}</strong> de {QUESTIONS.length}</span>
-      </div>
-      <div className='mb-8 h-1.5 overflow-hidden rounded-full bg-[#E5EBF0]'>
-        <div className='h-full rounded-full bg-[#17AAA5] transition-all' style={{ width: `${progress}%` }} />
-      </div>
+      <QuestionProgress moduleLabel='Módulo A · Cuestionario' current={questionIndex + 1} total={QUESTIONS.length} />
 
       <section className='rounded-2xl border border-[#D9E2EA] bg-white p-6 shadow-sm sm:p-8'>
         <span className='inline-flex rounded-full bg-[#E8F7F6] px-3 py-1 text-[11px] font-bold uppercase tracking-wide text-[#0A8F8A]'>Contenido demostrativo</span>

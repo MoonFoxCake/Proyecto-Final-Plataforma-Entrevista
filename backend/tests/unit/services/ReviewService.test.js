@@ -46,6 +46,27 @@ describe('ReviewService', () => {
     expect(participant).not.toHaveProperty('nombreCompleto');
   });
 
+  test('adds the written Module B answers next to the Module A ones', async () => {
+    expect((await service.getParticipant(event.id, 'P-001')).moduleB).toBeNull();
+
+    await eventRepo.update(event.id, { moduleB: { macrocase: { id: 'macro-1', name: 'Caperucita roja' } } });
+    await candidateRepo.update(candidate.id, { moduleB: { status: 'COMPLETED', invitedAt: new Date() } });
+    invitationRepo.submissions.push({
+      id: 'submission-2', candidateId: candidate.id, eventId: event.id, module: 'B', submittedAt: new Date(),
+      answers: [{ questionId: 'q1', question: '¿Qué haría usted?', text: 'Avisaría a mi madre.' }],
+    });
+
+    const participant = await service.getParticipant(event.id, 'P-001');
+    expect(participant.module).toBe('A');
+    expect(participant.answers).toHaveLength(1);
+    expect(participant.moduleB).toMatchObject({
+      status: 'COMPLETED',
+      macrocaseName: 'Caperucita roja',
+      answers: [{ questionId: 'q1', number: 1, question: '¿Qué haría usted?', text: 'Avisaría a mi madre.' }],
+    });
+    expect((await service.getProcess(event.id)).participants[0].moduleBStatus).toBe('COMPLETED');
+  });
+
   test('blocks publication until every response is reviewed', async () => {
     await expect(service.publish(event.id, 'admin-1')).rejects.toThrow('Debes revisar a todos los participantes antes de publicar.');
   });
