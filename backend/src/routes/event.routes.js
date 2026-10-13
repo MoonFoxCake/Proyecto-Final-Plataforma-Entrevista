@@ -11,7 +11,9 @@ function createEventRoutes(eventController, authService) {
   router.post('/', companyOnly, validateInput(eventSchema), eventController.create);
   router.get('/:eventId', companyOnly, eventController.get);
   router.get('/:eventId/candidates', companyOnly, eventController.listCandidates);
+  // Online events: access links. Onsite events: citations without access.
   router.post('/:eventId/invitations/publish', companyOnly, eventController.publishInvitations);
+  router.post('/:eventId/citations/status', companyOnly, eventController.refreshCitations);
   router.post(
     '/:eventId/module-b/invitations',
     companyOnly,

@@ -1,15 +1,22 @@
 /**
  * Sample macrocase (Caperucita Roja) used by the Module B tests. Same shape
- * as a `macroCases` document: `introduction` is the case text (paragraphs
- * separated by a blank line) and each question has its `text`.
+ * as a `macroCases` document (v2): ordered sections, each with its
+ * narrative (paragraphs separated by a blank line) and its questions.
  */
 export const DEMO_MACROCASE = {
   id: 'demo-caperucita-roja',
+  schemaVersion: 2,
   name: 'Caperucita Roja',
   description: 'Charles Perrault',
+  instructions: 'Lee cada parte del cuento con atención.',
   maxCharacters: 600,
   defaultTimeLimit: 30,
-  introduction: `Había una vez una niñita en un pueblo, la más bonita que jamás se hubiera visto; su madre estaba enloquecida con ella y su abuela mucho más todavía. Esta buena mujer le había mandado hacer una caperucita roja y le sentaba tanto que todos la llamaban Caperucita Roja.
+  sections: [
+    {
+      id: 'demo-s1',
+      order: 1,
+      title: 'El encuentro en el bosque',
+      narrative: `Había una vez una niñita en un pueblo, la más bonita que jamás se hubiera visto; su madre estaba enloquecida con ella y su abuela mucho más todavía. Esta buena mujer le había mandado hacer una caperucita roja y le sentaba tanto que todos la llamaban Caperucita Roja.
 
 Un día su madre, habiendo cocinado unas tortas, le dijo:
 
@@ -23,9 +30,17 @@ Caperucita Roja partió en seguida a ver a su abuela que vivía en otro pueblo. 
 
 —¡Oh, sí!, dijo Caperucita Roja, más allá del molino que se ve allá lejos, en la primera casita del pueblo.
 
-—Pues bien, dijo el lobo, yo también quiero ir a verla; yo iré por este camino, y tú por aquél, y veremos quién llega primero.
-
-El lobo partió corriendo a toda velocidad por el camino que era más corto y la niña se fue por el más largo entreteniéndose en coger avellanas, en correr tras las mariposas y en hacer ramos con las florecillas que encontraba. Poco tardó el lobo en llegar a casa de la abuela; golpea: Toc, toc.
+—Pues bien, dijo el lobo, yo también quiero ir a verla; yo iré por este camino, y tú por aquél, y veremos quién llega primero.`,
+      questions: [
+        { id: 'demo-b-1', order: 1, text: '¿Qué haría usted en el lugar de Caperucita Roja?', audioUrl: '' },
+        { id: 'demo-b-2', order: 2, text: '¿Qué haría usted en el lugar del lobo?', audioUrl: '' },
+      ],
+    },
+    {
+      id: 'demo-s2',
+      order: 2,
+      title: 'En casa de la abuela',
+      narrative: `El lobo partió corriendo a toda velocidad por el camino que era más corto y la niña se fue por el más largo entreteniéndose en coger avellanas, en correr tras las mariposas y en hacer ramos con las florecillas que encontraba. Poco tardó el lobo en llegar a casa de la abuela; golpea: Toc, toc.
 
 —¿Quién es?
 
@@ -74,10 +89,10 @@ Caperucita Roja se desviste y se mete a la cama y quedó muy asombrada al ver la
 —¡Para comerte mejor!
 
 Y diciendo estas palabras, este lobo malo se abalanzó sobre Caperucita Roja y se la comió.`,
-  questions: [
-    { id: 'demo-b-1', order: 1, text: '¿Qué haría usted en el lugar de Caperucita Roja?', audioUrl: '' },
-    { id: 'demo-b-2', order: 2, text: '¿Qué haría usted en el lugar del lobo?', audioUrl: '' },
-    { id: 'demo-b-3', order: 3, text: '¿Qué haría usted en el lugar del leñador?', audioUrl: '' },
-    { id: 'demo-b-4', order: 4, text: '¿Qué haría usted en el lugar de la abuela de Caperucita Roja?', audioUrl: '' },
+      questions: [
+        { id: 'demo-b-3', order: 1, text: '¿Qué haría usted en el lugar del leñador?', audioUrl: '' },
+        { id: 'demo-b-4', order: 2, text: '¿Qué haría usted en el lugar de la abuela de Caperucita Roja?', audioUrl: '' },
+      ],
+    },
   ],
 };

@@ -1,4 +1,24 @@
 import { Link } from 'react-router-dom';
+import { citationState, formatSession } from '../../utils/eventModality.js';
+
+const TONES = {
+  muted: ['bg-[#F1F5F9] text-[#475569]', 'bg-[#94A3B8]'],
+  info: ['bg-[#EEF6FF] text-[#315B88]', 'bg-[#4F8CC9]'],
+  ok: ['bg-[#E8F8F5] text-[#087D79]', 'bg-[#0AADA8]'],
+  warning: ['bg-[#FFF7E8] text-[#9A651E]', 'bg-[#D99A2B]'],
+  error: ['bg-red-50 text-red-700', 'bg-red-500'],
+};
+
+function Badge({ tone, title, children }) {
+  const [box, dot] = TONES[tone];
+  return <span title={title} className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium ${box}`}><span className={`h-1.5 w-1.5 rounded-full ${dot}`} /> {children}</span>;
+}
+
+/** Onsite: whether the citation e-mail went out and its last known delivery status. */
+function CitationStatus({ citation }) {
+  const { label, tone, detail } = citationState(citation);
+  return <Badge tone={tone} title={detail}>{label}</Badge>;
+}
 
 function initials(name = '') {
   return name.split(' ').filter(Boolean).map((part) => part[0]).join('').toUpperCase().slice(0, 2) || 'CA';
@@ -17,7 +37,11 @@ export function canReceiveModuleB(candidate) {
   return Boolean(candidate.profileAvailable) && candidate.moduleB?.status !== 'COMPLETED';
 }
 
-function CandidateStatus({ status, profileAvailable }) {
+function CandidateStatus({ status, profileAvailable, onsite }) {
+  // Onsite: this column is only about the evaluation; the citation has its own.
+  if (onsite && !profileAvailable && status !== 'EVALUATION_COMPLETED') {
+    return <Badge tone='muted'>Por evaluar</Badge>;
+  }
   if (profileAvailable) {
     return <span className='inline-flex items-center gap-1.5 rounded-md bg-[#E8F8F5] px-2.5 py-1 text-xs font-medium text-[#087D79]'><span className='h-1.5 w-1.5 rounded-full bg-[#0AADA8]' /> Perfil disponible</span>;
   }
@@ -34,6 +58,16 @@ function ModuleBStatus({ moduleB }) {
   if (moduleB?.status === 'COMPLETED') {
     return <span className='inline-flex items-center gap-1.5 rounded-md bg-[#E8F8F5] px-2.5 py-1 text-xs font-medium text-[#087D79]'><span className='h-1.5 w-1.5 rounded-full bg-[#0AADA8]' /> Respondido</span>;
   }
+  if (moduleB?.status === 'CITED') {
+    const { label, tone, detail } = citationState(moduleB.citation);
+    const session = moduleB.citation?.appointment;
+    return (
+      <span className='flex flex-col items-start gap-1'>
+        <Badge tone={tone === 'error' ? 'error' : 'info'} title={detail}>Citado · {label.toLowerCase()}</Badge>
+        {session && <span className='text-[11px] text-[#64748B]'>{formatSession(session)}</span>}
+      </span>
+    );
+  }
   if (moduleB?.status === 'INVITATION_SENT') {
     return <span className='inline-flex items-center gap-1.5 rounded-md bg-[#EEF6FF] px-2.5 py-1 text-xs font-medium text-[#315B88]'><span className='h-1.5 w-1.5 rounded-full bg-[#4F8CC9]' /> Enviado</span>;
   }
@@ -43,9 +77,10 @@ function ModuleBStatus({ moduleB }) {
 /**
  * Candidates of an event. With `showModuleB` it adds the Module B column;
  * with `selection` ({ selectedIds: Set, onToggle(id) }) the candidates who
- * can receive Module B get a checkbox.
+ * can receive Module B get a checkbox. With `onsite` it adds the citation
+ * column, kept apart from the evaluation status.
  */
-export function CandidateList({ candidates, loading, showModuleB = false, selection = null }) {
+export function CandidateList({ candidates, loading, showModuleB = false, selection = null, onsite = false }) {
   if (loading) {
     return <div className='flex min-h-52 items-center justify-center text-sm text-[#64748B]'>Cargando candidatos...</div>;
   }
@@ -62,7 +97,9 @@ export function CandidateList({ candidates, loading, showModuleB = false, select
         <thead className='border-y border-[#E8EDF2] bg-[#FAFBFC] text-[11px] font-semibold uppercase tracking-wide text-[#718096]'>
           <tr>
             {selection && <th className='w-12 px-5 py-3'><span className='sr-only'>Seleccionar</span></th>}
-            <th className='px-5 py-3'>Candidato</th><th className='px-5 py-3'>Cédula</th><th className='px-5 py-3'>{showModuleB ? 'Módulo A' : 'Estado'}</th>
+            <th className='px-5 py-3'>Candidato</th><th className='px-5 py-3'>Cédula</th>
+            {onsite && <th className='px-5 py-3'>Citación</th>}
+            <th className='px-5 py-3'>{showModuleB ? 'Módulo A' : onsite ? 'Evaluación' : 'Estado'}</th>
             {showModuleB && <th className='px-5 py-3'>Módulo B</th>}
             <th className='px-5 py-3'>Cita</th><th className='px-5 py-3 text-right'>Acciones</th>
           </tr>
@@ -88,7 +125,8 @@ export function CandidateList({ candidates, loading, showModuleB = false, select
                 <div className='min-w-0'><p className='truncate text-sm font-semibold text-[#101828]'>{candidate.nombreCompleto}</p><p className='truncate text-xs text-[#64748B]'>{candidate.correo}</p></div>
               </div></td>
               <td className='px-5 py-4 text-sm text-[#475569]'>{candidate.cedula}</td>
-              <td className='px-5 py-4'><CandidateStatus status={candidate.status} profileAvailable={candidate.profileAvailable} /></td>
+              {onsite && <td className='px-5 py-4'><CitationStatus citation={candidate.citation} /></td>}
+              <td className='px-5 py-4'><CandidateStatus status={candidate.status} profileAvailable={candidate.profileAvailable} onsite={onsite} /></td>
               {showModuleB && <td className='px-5 py-4'><ModuleBStatus moduleB={candidate.moduleB} /></td>}
               <td className='px-5 py-4 text-sm text-[#475569]'>{formatAppointment(candidate.fechaHoraCita)}</td>
               <td className='px-5 py-4 text-right'>

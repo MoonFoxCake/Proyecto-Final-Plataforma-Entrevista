@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { validateInvitationAccess } from '../services/invitationService.js';
 import { LikertQuestionnaire } from '../components/evaluation/LikertQuestionnaire.jsx';
 import { EvaluationHeader } from '../components/evaluation/EvaluationHeader.jsx';
 import { MacrocaseEvaluation } from '../components/evaluation/macrocase/MacrocaseEvaluation.jsx';
+import { createRemoteMacrocaseSource } from '../components/evaluation/macrocase/macrocaseSources.js';
 
 function formatDate(value) {
   if (!value) return '';
@@ -43,6 +44,7 @@ export function EvaluationAccessPage() {
   const token = searchParams.get('token');
   const [access, setAccess] = useState(null);
   const [started, setStarted] = useState(false);
+  const macrocaseSource = useMemo(() => createRemoteMacrocaseSource(token), [token]);
 
   useEffect(() => {
     let active = true;
@@ -65,7 +67,7 @@ export function EvaluationAccessPage() {
     return (
       <div className='min-h-screen bg-[#F6F9FC]'>
         <EvaluationHeader />
-        {isModuleB ? <MacrocaseEvaluation token={token} macrocase={access.macrocase} /> : <LikertQuestionnaire token={token} />}
+        {isModuleB ? <MacrocaseEvaluation source={macrocaseSource} /> : <LikertQuestionnaire token={token} />}
       </div>
     );
   }
@@ -89,7 +91,7 @@ export function EvaluationAccessPage() {
           </div>
 
           <h2 className='mt-6 font-semibold text-[#10233A]'>Antes de comenzar</h2>
-          <ul className='mt-4 space-y-3 text-sm text-[#56677B]'>{isModuleB && <li>✎ &nbsp;Leerás un caso y responderás por escrito las preguntas del asistente virtual.</li>}<li>◷ &nbsp;Realiza la evaluación en una sola sesión.</li><li>→ &nbsp;Solo podrás avanzar; no podrás regresar a preguntas anteriores.</li><li>▣ &nbsp;Al finalizar, confirma el envío de tu evaluación.</li><li>♙ &nbsp;El enlace es personal. No lo compartas.</li></ul>
+          <ul className='mt-4 space-y-3 text-sm text-[#56677B]'>{isModuleB && <li>✎ &nbsp;Leerás un caso por secciones y responderás por escrito las preguntas del asistente virtual.</li>}{isModuleB && <li>↻ &nbsp;Tus respuestas se guardan a medida que avanzas: si se interrumpe la conexión, continuarás donde te quedaste.</li>}<li>◷ &nbsp;Realiza la evaluación en una sola sesión.</li><li>→ &nbsp;Solo podrás avanzar; no podrás regresar a preguntas anteriores.</li><li>▣ &nbsp;Al finalizar, confirma el envío de tu evaluación.</li><li>♙ &nbsp;El enlace es personal. No lo compartas.</li></ul>
 
           {waiting && <p className='mt-6 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800'>Podrás comenzar a partir del {formatDate(access.event.availableFrom)}.</p>}
           <button type='button' disabled={waiting} onClick={() => setStarted(true)} className='mt-6 w-full rounded-xl bg-[#168D89] px-5 py-3.5 text-sm font-semibold text-white hover:bg-[#117A76] disabled:cursor-not-allowed disabled:bg-[#AAB7C4]'>{waiting ? 'Aún no disponible' : isModuleB ? 'Continuar →' : 'Comenzar evaluación →'}</button>

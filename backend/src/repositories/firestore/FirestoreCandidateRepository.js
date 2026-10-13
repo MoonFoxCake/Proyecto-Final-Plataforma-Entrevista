@@ -2,11 +2,38 @@ const ICandidateRepository = require('../interfaces/ICandidateRepository');
 const { db } = require('../../config/firebase');
 const { stripUndefined } = require('../../utils/helpers');
 
+/**
+ * Converts the Timestamp fields of a nested object to Dates. Only keys that
+ * exist are touched: these objects are written back as they are, and
+ * Firestore rejects nested `undefined` values.
+ */
+function withDates(object, keys) {
+  if (!object) return object;
+  const result = { ...object };
+  for (const key of keys) {
+    if (result[key]?.toDate) result[key] = result[key].toDate();
+  }
+  return result;
+}
+
+/** Onsite citation (Module A or B). */
+function serializeCitation(citation) {
+  if (!citation) return citation;
+  const result = withDates(citation, ['sentAt', 'failedAt']);
+  if (citation.appointment) result.appointment = withDates(citation.appointment, ['startsAt', 'endsAt']);
+  if (citation.delivery) result.delivery = withDates(citation.delivery, ['checkedAt']);
+  return result;
+}
+
 function serializeCandidate(doc) {
   const data = doc.data();
+  const moduleB = data.moduleB && withDates(data.moduleB, ['invitedAt', 'submittedAt']);
+  if (moduleB?.citation) moduleB.citation = serializeCitation(moduleB.citation);
   return {
     id: doc.id,
     ...data,
+    ...(data.citation ? { citation: serializeCitation(data.citation) } : {}),
+    ...(moduleB ? { moduleB } : {}),
     fechaHoraCita: data.fechaHoraCita?.toDate?.() ?? data.fechaHoraCita,
     createdAt: data.createdAt?.toDate?.() ?? data.createdAt,
     submittedAt: data.submittedAt?.toDate?.() ?? data.submittedAt,

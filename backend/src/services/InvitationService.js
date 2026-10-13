@@ -1,15 +1,22 @@
 const crypto = require('crypto');
 const {
-  CANDIDATE_STATUSES, INVITATION_STATUSES, MODULES, MODULE_B_STATUSES,
+  CANDIDATE_STATUSES, INVITATION_STATUSES, MODULES, MODULE_B_STATUSES, CITATION_STATUSES,
 } = require('../utils/constants');
 const { ValidationError } = require('../utils/errors');
+const {
+  MACROCASE_SCHEMA_VERSION, toSectionedMacrocase, publicOverview, stageView, applyAction, finalAnswers,
+} = require('../utils/macrocase');
+const { isOnsite, modulesOf, toAppointment } = require('../utils/eventModality');
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 // Module B is sent once Module A results are out, so it is available right
 // away and stays open for a few days.
 const MODULE_B_VALIDITY_MS = 3 * DAY_MS;
+// Resend allows about 2 requests per second.
+const STATUS_CHECK_DELAY_MS = 600;
 
 const hashToken = (token) => crypto.createHash('sha256').update(token).digest('hex');
+const wait = (ms) => new Promise((resolve) => { setTimeout(resolve, ms); });
 
 function completedModuleA(candidate) {
   return Boolean(candidate.submittedAt || candidate.status === CANDIDATE_STATUSES.EVALUATION_COMPLETED);
@@ -22,24 +29,13 @@ function eligibleForModuleB(candidate) {
     && candidate.moduleB?.status !== MODULE_B_STATUSES.COMPLETED;
 }
 
-/** What the candidate's browser needs to run Module B (no admin-only fields). */
-function publicMacrocase(macrocase) {
-  return {
-    name: macrocase.name,
-    description: macrocase.description || '',
-    introduction: macrocase.introduction,
-    maxCharacters: macrocase.maxCharacters,
-    defaultTimeLimit: Number(macrocase.defaultTimeLimit) > 0 ? Number(macrocase.defaultTimeLimit) : 0,
-    questions: macrocase.questions.map(({ id, order, text, audioUrl, visemes }) => ({
-      id, order, text, audioUrl: audioUrl || '', visemes: visemes || [],
-    })),
-  };
-}
+/** Module B progress belongs to the evaluation, not to one link: a resent link resumes it. */
+const progressIdOf = (invitation) => `${invitation.eventId}_${invitation.candidateId}_${invitation.module || MODULES.A}`;
 
 class InvitationService {
   constructor({
     invitationRepo, candidateService, candidateRepo, eventService, organizationRepo, emailService, frontendUrl,
-    macrocaseService,
+    macrocaseService, sleep = wait,
   }) {
     this.invitationRepo = invitationRepo;
     this.candidateService = candidateService;
@@ -49,19 +45,27 @@ class InvitationService {
     this.emailService = emailService;
     this.frontendUrl = frontendUrl;
     this.macrocaseService = macrocaseService;
+    this.sleep = sleep;
   }
 
-  /** Module A: sends the invitation to every candidate still pending. */
+  /**
+   * Module A: contacts every candidate still pending. Online events send
+   * the access link; onsite events send a citation to the venue instead,
+   * without any link or code (access is handed out there).
+   */
   async publishForEvent(eventId, orgId) {
-    this.requireFrontendUrl();
     const event = await this.eventService.getEvent(eventId, orgId);
+    const onsite = isOnsite(event);
+    if (!onsite) this.requireFrontendUrl();
     const candidates = await this.candidateService.listByEvent(eventId, orgId);
     const pending = candidates.filter((item) => item.status === CANDIDATE_STATUSES.INVITED_PENDING);
     const organization = await this.organizationRepo.findById(orgId);
     const results = [];
 
     for (const candidate of pending) {
-      results.push(await this.publishOne({ candidate, event, organization, orgId, module: MODULES.A }));
+      results.push(onsite
+        ? await this.citeOne({ candidate, event, organization, module: MODULES.A, appointment: event.onsite })
+        : await this.publishOne({ candidate, event, organization, orgId, module: MODULES.A }));
     }
 
     return this.summarize(results);
@@ -74,10 +78,24 @@ class InvitationService {
    * every candidate of the process gets the same case and later edits in the
    * bank do not change it. Sending again to a candidate
    * who has not answered yet replaces their previous link.
+   *
+   * Onsite events cite the candidates to a Module B session instead
+   * (`citation`: venue and time); Module B needs Module A reviewed and
+   * published first, so it cannot share Module A's appointment.
    */
-  async sendModuleB(eventId, orgId, candidateIds) {
-    this.requireFrontendUrl();
+  async sendModuleB(eventId, orgId, candidateIds, citation) {
     let event = await this.eventService.getEvent(eventId, orgId);
+    const onsite = isOnsite(event);
+    if (!modulesOf(event).includes(MODULES.B)) {
+      throw new ValidationError('Este evento no incluye el Módulo B.');
+    }
+    if (onsite && !citation) {
+      throw new ValidationError('Indica la sede, la ubicación y el horario de la citación al Módulo B.');
+    }
+    if (!onsite && citation) {
+      throw new ValidationError('Las citaciones solo aplican a eventos presenciales.');
+    }
+    if (!onsite) this.requireFrontendUrl();
     if (!event.evaluationsPublishedAt && event.status !== 'PUBLISHED') {
       throw new ValidationError('El Módulo B se habilita cuando se publiquen los resultados del Módulo A.');
     }
@@ -100,26 +118,105 @@ class InvitationService {
     }
 
     const organization = await this.organizationRepo.findById(orgId);
+    const appointment = onsite ? toAppointment(citation) : null;
     const results = [];
     for (const candidate of selected) {
-      results.push(await this.publishOne({ candidate, event, organization, orgId, module: MODULES.B }));
+      results.push(onsite
+        ? await this.citeOne({ candidate, event, organization, module: MODULES.B, appointment })
+        : await this.publishOne({ candidate, event, organization, orgId, module: MODULES.B }));
     }
     return this.summarize(results);
   }
 
+  /**
+   * Sends one onsite citation and records it apart from the evaluation
+   * status: Module A in `candidate.citation` (status CITED), Module B in
+   * `candidate.moduleB.citation`. No invitation or token is created, so
+   * nothing in the e-mail can open the evaluation.
+   */
+  async citeOne({ candidate, event, organization, module, appointment }) {
+    const now = new Date();
+    try {
+      const delivery = await this.emailService.sendCitation({ candidate, event, organization, module, appointment });
+      const citation = { status: CITATION_STATUSES.SENT, sentAt: now, providerId: delivery.id, appointment };
+      await this.candidateRepo.update(candidate.id, module === MODULES.B
+        ? { moduleB: { status: MODULE_B_STATUSES.CITED, invitedAt: now, citation } }
+        : { status: CANDIDATE_STATUSES.CITED, citation });
+      return { candidateId: candidate.id, sent: true };
+    } catch (error) {
+      // Module A keeps the failure visible (the candidate stays pending, so
+      // the next send retries it); Module B keeps whatever it had.
+      if (module === MODULES.A) {
+        await this.candidateRepo.update(candidate.id, {
+          citation: { status: CITATION_STATUSES.FAILED, failedAt: now, error: error.message },
+        }).catch(() => {});
+      }
+      return { candidateId: candidate.id, sent: false, message: error.message };
+    }
+  }
+
+  /**
+   * Asks the e-mail provider for the latest delivery event of every
+   * citation sent for this event (Module A and B) and stores it in
+   * `citation.delivery`. One request at a time, within the provider's rate
+   * limit.
+   */
+  async refreshCitationStatus(eventId, orgId) {
+    const event = await this.eventService.getEvent(eventId, orgId);
+    if (!isOnsite(event)) throw new ValidationError('Este evento no es presencial: no tiene citaciones.');
+    const candidates = await this.candidateRepo.findByEvent(eventId, orgId);
+    let checked = 0;
+    let failed = 0;
+    let first = true;
+
+    const check = async (citation) => {
+      if (!citation?.providerId) return citation;
+      if (!first) await this.sleep(STATUS_CHECK_DELAY_MS);
+      first = false;
+      try {
+        const { lastEvent } = await this.emailService.getEmailStatus(citation.providerId);
+        checked += 1;
+        return { ...citation, delivery: { status: lastEvent || 'unknown', checkedAt: new Date() } };
+      } catch {
+        failed += 1;
+        return citation;
+      }
+    };
+
+    for (const candidate of candidates) {
+      const changes = {};
+      if (candidate.citation?.providerId) changes.citation = await check(candidate.citation);
+      if (candidate.moduleB?.citation?.providerId) {
+        changes.moduleB = { ...candidate.moduleB, citation: await check(candidate.moduleB.citation) };
+      }
+      if (Object.keys(changes).length) await this.candidateRepo.update(candidate.id, changes);
+    }
+    return { checked, failed };
+  }
+
   async validateAccess(token) {
+    return (await this.resolveAccess(token)).result;
+  }
+
+  /**
+   * Validates an access token. `result` is what the candidate's browser
+   * gets; `invitation`, `event` and `candidate` are only set when the
+   * access is VALID, for the operations that act on it.
+   */
+  async resolveAccess(token) {
+    const closed = (result) => ({ result });
     if (typeof token !== 'string' || !/^[A-Za-z0-9_-]{43}$/.test(token)) {
-      return { state: 'INVALID' };
+      return closed({ state: 'INVALID' });
     }
 
     const tokenHash = hashToken(token);
     const invitation = await this.invitationRepo.findByTokenHash(tokenHash);
-    if (!invitation) return { state: 'INVALID' };
+    if (!invitation) return closed({ state: 'INVALID' });
     if (invitation.status === INVITATION_STATUSES.COMPLETED) {
-      return { state: 'COMPLETED', submittedAt: invitation.submittedAt };
+      return closed({ state: 'COMPLETED', submittedAt: invitation.submittedAt });
     }
-    if (invitation.status === INVITATION_STATUSES.CANCELLED) return { state: 'CANCELLED' };
-    if (invitation.status === INVITATION_STATUSES.EXPIRED) return { state: 'EXPIRED' };
+    if (invitation.status === INVITATION_STATUSES.CANCELLED) return closed({ state: 'CANCELLED' });
+    if (invitation.status === INVITATION_STATUSES.EXPIRED) return closed({ state: 'EXPIRED' });
 
     const expiresAt = new Date(invitation.expiresAt);
     if (Number.isNaN(expiresAt.getTime()) || expiresAt <= new Date()) {
@@ -127,7 +224,7 @@ class InvitationService {
         status: INVITATION_STATUSES.EXPIRED,
         expiredAt: new Date(),
       });
-      return { state: 'EXPIRED' };
+      return closed({ state: 'EXPIRED' });
     }
 
     const candidate = await this.candidateRepo.findById(invitation.candidateId);
@@ -135,19 +232,21 @@ class InvitationService {
     try {
       event = await this.eventService.getEvent(invitation.eventId, invitation.orgId);
     } catch {
-      return { state: 'INVALID' };
+      return closed({ state: 'INVALID' });
     }
     if (!candidate || candidate.eventId !== event.id || candidate.orgId !== invitation.orgId) {
-      return { state: 'INVALID' };
+      return closed({ state: 'INVALID' });
     }
+    // Onsite evaluations are never opened through an e-mailed link.
+    if (isOnsite(event)) return closed({ state: 'INVALID' });
 
     const module = invitation.module || MODULES.A;
-    if (module === MODULES.B && !event.moduleB?.macrocase) return { state: 'INVALID' };
+    if (module === MODULES.B && !event.moduleB?.macrocase) return closed({ state: 'INVALID' });
 
     const availableFrom = new Date(module === MODULES.B
       ? invitation.availableAt || invitation.createdAt
       : candidate.fechaHoraCita || event.availableFrom);
-    if (Number.isNaN(availableFrom.getTime())) return { state: 'INVALID' };
+    if (Number.isNaN(availableFrom.getTime())) return closed({ state: 'INVALID' });
     const organization = await this.organizationRepo.findById(invitation.orgId);
     const context = {
       module,
@@ -164,38 +263,85 @@ class InvitationService {
     };
 
     if (availableFrom > new Date()) {
-      return { state: 'NOT_YET_AVAILABLE', ...context };
+      return closed({ state: 'NOT_YET_AVAILABLE', ...context });
     }
-    if (module === MODULES.B) {
-      return { state: 'VALID', ...context, macrocase: publicMacrocase(event.moduleB.macrocase) };
+    // Module B: only the overview here; the content arrives one stage at a
+    // time through `getMacrocaseStage` / `advanceMacrocase`.
+    const result = module === MODULES.B
+      ? { state: 'VALID', ...context, macrocase: publicOverview(toSectionedMacrocase(event.moduleB.macrocase)) }
+      : { state: 'VALID', ...context };
+    return { result, invitation: { ...invitation, module }, event, candidate };
+  }
+
+  /** Resolves a VALID Module B access, or returns the closed state to show instead. */
+  async resolveMacrocaseAccess(token) {
+    const access = await this.resolveAccess(token);
+    if (access.result.state !== 'VALID') return { closed: access.result };
+    if (access.invitation.module !== MODULES.B) {
+      throw new ValidationError('Esta invitación no corresponde al Módulo B.');
     }
-    return { state: 'VALID', ...context };
+    return { ...access, macrocase: toSectionedMacrocase(access.event.moduleB.macrocase) };
+  }
+
+  /** Module B: the stage the candidate is on (resumes after a reload). */
+  async getMacrocaseStage(token) {
+    const access = await this.resolveMacrocaseAccess(token);
+    if (access.closed) return access.closed;
+    const progress = await this.invitationRepo.findProgress(progressIdOf(access.invitation));
+    return { state: 'VALID', ...stageView(access.macrocase, progress) };
   }
 
   /**
-   * Module A: `answers` = Likert values. Module B: `macrocaseAnswers` =
-   * written answers. Which one is required depends on the invitation.
+   * Module B: applies one candidate action (start, finish reading a
+   * section, start a question's timer, save a draft, answer) and returns
+   * the resulting stage. The forward-only rules live in `applyAction`.
    */
-  async submitEvaluation(token, { answers, macrocaseAnswers } = {}) {
-    const access = await this.validateAccess(token);
-    if (access.state !== 'VALID') return access;
+  async advanceMacrocase(token, action) {
+    const access = await this.resolveMacrocaseAccess(token);
+    if (access.closed) return access.closed;
+    const { invitation, macrocase } = access;
+    const now = new Date();
+    const progress = await this.invitationRepo.updateProgress(progressIdOf(invitation), (current) => ({
+      ...applyAction(macrocase, current, action, now),
+      invitationId: invitation.id,
+      candidateId: invitation.candidateId,
+      eventId: invitation.eventId,
+      orgId: invitation.orgId,
+      module: MODULES.B,
+      instrumentVersion: `MACROCASE:${macrocase.id}:v${MACROCASE_SCHEMA_VERSION}`,
+      startedAt: current?.startedAt ?? now,
+      updatedAt: now,
+    }));
+    return { state: 'VALID', ...stageView(macrocase, progress, now) };
+  }
+
+  /**
+   * Module A: `answers` = Likert values. Module B: `finalize` = confirm the
+   * answers already saved stage by stage. Which one is required depends on
+   * the invitation.
+   */
+  async submitEvaluation(token, { answers, finalize } = {}) {
+    const access = await this.resolveAccess(token);
+    if (access.result.state !== 'VALID') return access.result;
 
     const tokenHash = hashToken(token);
-    const invitation = await this.invitationRepo.findByTokenHash(tokenHash);
+    const { invitation, candidate } = access;
 
-    if (access.module === MODULES.B) {
-      if (!macrocaseAnswers) throw new ValidationError('Esta invitación corresponde al Módulo B: envía las respuestas del macrocaso.');
-      const event = await this.eventService.getEvent(invitation.eventId, invitation.orgId);
-      const macrocase = event.moduleB.macrocase;
+    if (invitation.module === MODULES.B) {
+      if (finalize !== true) throw new ValidationError('Esta invitación corresponde al Módulo B: confirma el envío del macrocaso.');
+      if (candidate.moduleB?.status === MODULE_B_STATUSES.COMPLETED) {
+        return { state: 'COMPLETED', submittedAt: candidate.moduleB.submittedAt, alreadySubmitted: true };
+      }
+      const macrocase = toSectionedMacrocase(access.event.moduleB.macrocase);
+      const progress = await this.invitationRepo.findProgress(progressIdOf(invitation));
       const result = await this.invitationRepo.completeWithSubmission(tokenHash, {
         module: MODULES.B,
-        instrumentVersion: `MACROCASE:${macrocase.id}`,
-        answers: this.checkMacrocaseAnswers(macrocase, macrocaseAnswers),
+        instrumentVersion: `MACROCASE:${macrocase.id}:v${MACROCASE_SCHEMA_VERSION}`,
+        answers: finalAnswers(macrocase, progress),
       });
       if (result.state === 'COMPLETED' && !result.alreadySubmitted) {
-        const candidate = await this.candidateRepo.findById(invitation.candidateId);
         await this.candidateRepo.update(invitation.candidateId, {
-          moduleB: { ...candidate?.moduleB, status: MODULE_B_STATUSES.COMPLETED, submittedAt: result.submittedAt },
+          moduleB: { ...candidate.moduleB, status: MODULE_B_STATUSES.COMPLETED, submittedAt: result.submittedAt },
         });
       }
       return result;
@@ -214,36 +360,6 @@ class InvitationService {
       });
     }
     return result;
-  }
-
-  /**
-   * One answer per macrocase question, within the character limit. An
-   * answer may only be empty if its time ran out (`timedOut`, and only when
-   * the macrocase has a time limit). Stores the question text too.
-   */
-  checkMacrocaseAnswers(macrocase, macrocaseAnswers) {
-    const timed = Number(macrocase.defaultTimeLimit) > 0;
-    const byId = new Map(macrocaseAnswers.map((answer) => [answer.questionId, {
-      text: answer.text.trim(),
-      timedOut: timed && answer.timedOut === true,
-    }]));
-    const complete = byId.size === macrocaseAnswers.length
-      && macrocaseAnswers.length === macrocase.questions.length
-      && macrocase.questions.every((question) => {
-        const answer = byId.get(question.id);
-        return answer && (answer.text || answer.timedOut);
-      });
-    if (!complete) {
-      throw new ValidationError('Debes responder cada pregunta del macrocaso una sola vez.');
-    }
-    const limit = Number(macrocase.maxCharacters) > 0 ? Number(macrocase.maxCharacters) : Infinity;
-    return macrocase.questions.map((question) => {
-      const { text, timedOut } = byId.get(question.id);
-      if (text.length > limit) {
-        throw new ValidationError(`La respuesta a la pregunta ${question.order} supera los ${limit} caracteres.`);
-      }
-      return { questionId: question.id, question: question.text, text, ...(timedOut ? { timedOut: true } : {}) };
-    });
   }
 
   async publishOne({ candidate, event, organization, orgId, module }) {

@@ -65,6 +65,32 @@ describe('ReviewService', () => {
       answers: [{ questionId: 'q1', number: 1, question: '¿Qué haría usted?', text: 'Avisaría a mi madre.' }],
     });
     expect((await service.getProcess(event.id)).participants[0].moduleBStatus).toBe('COMPLETED');
+    // Answers saved before sections existed come out as one untitled section.
+    expect(participant.moduleB.sections).toEqual([
+      { sectionId: 'section-1', number: 1, title: '', answers: [expect.objectContaining({ questionId: 'q1', number: 1 })] },
+    ]);
+  });
+
+  test('groups the Module B answers by macrocase section', async () => {
+    await eventRepo.update(event.id, { moduleB: { macrocase: { id: 'macro-1', name: 'Caperucita roja' } } });
+    await candidateRepo.update(candidate.id, { moduleB: { status: 'COMPLETED', invitedAt: new Date() } });
+    invitationRepo.submissions.push({
+      id: 'submission-2', candidateId: candidate.id, eventId: event.id, module: 'B', submittedAt: new Date(),
+      instrumentVersion: 'MACROCASE:macro-1:v2',
+      answers: [
+        { sectionId: 's1', sectionTitle: 'El encargo', questionId: 'q1', question: '¿Uno?', text: 'A' },
+        { sectionId: 's1', sectionTitle: 'El encargo', questionId: 'q2', question: '¿Dos?', text: 'B' },
+        { sectionId: 's2', sectionTitle: 'El bosque', questionId: 'q3', question: '¿Tres?', text: '', timedOut: true },
+      ],
+    });
+
+    const { moduleB } = await service.getParticipant(event.id, 'P-001');
+    expect(moduleB.instrumentVersion).toBe('MACROCASE:macro-1:v2');
+    expect(moduleB.sections.map((section) => [section.number, section.title, section.answers.map((answer) => answer.number)])).toEqual([
+      [1, 'El encargo', [1, 2]],
+      [2, 'El bosque', [3]],
+    ]);
+    expect(moduleB.sections[1].answers[0]).toMatchObject({ text: '', timedOut: true });
   });
 
   test('blocks publication until every response is reviewed', async () => {

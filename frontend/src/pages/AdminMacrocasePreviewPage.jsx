@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { EvaluationHeader } from '../components/evaluation/EvaluationHeader.jsx';
 import { MacrocasePreviewFlow } from '../components/evaluation/macrocase/MacrocasePreviewFlow.jsx';
+import { usableSections } from '../components/evaluation/macrocase/macrocaseSources.js';
 import { getMacroCase } from '../services/macrocaseApi.js';
 
 /**
@@ -16,15 +17,13 @@ export function AdminMacrocasePreviewPage() {
   useEffect(() => {
     let active = true;
     getMacroCase(macrocaseId)
-      .then((data) => active && setMacrocase({
-        ...data,
-        questions: [...(data.questions || [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),
-      }))
+      .then((data) => active && setMacrocase(data))
       .catch((requestError) => active && setError(requestError.message || 'No se pudo cargar el macrocaso.'));
     return () => { active = false; };
   }, [macrocaseId]);
 
-  const noQuestions = macrocase && !macrocase.questions.some((question) => question.text);
+  // The candidate only gets sections with a narrative and questions with text.
+  const noQuestions = macrocase && usableSections(macrocase).length === 0;
 
   return (
     <div className='min-h-screen bg-[#F6F9FC]'>
@@ -38,8 +37,8 @@ export function AdminMacrocasePreviewPage() {
 
       {!macrocase && !error && <div className='flex min-h-[60vh] items-center justify-center text-sm text-[#64748B]'>Cargando macrocaso...</div>}
       {error && <p className='mx-auto mt-16 max-w-xl rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700'>{error}</p>}
-      {noQuestions && <p className='mx-auto mt-16 max-w-xl rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800'>Este macrocaso no tiene preguntas con texto. Edítalo y agrega el texto de cada pregunta.</p>}
-      {macrocase && !noQuestions && <MacrocasePreviewFlow macrocase={{ ...macrocase, questions: macrocase.questions.filter((question) => question.text) }} />}
+      {noQuestions && <p className='mx-auto mt-16 max-w-xl rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800'>Este macrocaso no tiene secciones completas. Edítalo y agrega a cada sección su texto y al menos una pregunta.</p>}
+      {macrocase && !noQuestions && <MacrocasePreviewFlow macrocase={macrocase} />}
     </div>
   );
 }

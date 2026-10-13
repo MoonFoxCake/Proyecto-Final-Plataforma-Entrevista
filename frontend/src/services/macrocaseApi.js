@@ -85,9 +85,13 @@ export async function deleteMacroCase(id) {
   });
 }
 
+/**
+ * Uploads the audio of a question (`{ questionId }`) or of a section
+ * narrative (`{ sectionId }`); it replaces the generated voice.
+ */
 export async function uploadMacroCaseAudio(
   macrocaseId,
-  questionId,
+  { questionId, sectionId },
   file
 ) {
   const user = auth.currentUser;
@@ -100,7 +104,8 @@ export async function uploadMacroCaseAudio(
 
   const formData = new FormData();
 
-  formData.append('questionId', questionId);
+  if (questionId) formData.append('questionId', questionId);
+  else formData.append('sectionId', sectionId);
   formData.append('audio', file);
 
   const response = await fetch(

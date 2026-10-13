@@ -54,7 +54,21 @@ class EventController {
 
   sendModuleB = async (req, res, next) => {
     try {
-      const result = await this.invitationService.sendModuleB(req.params.eventId, req.user.orgId, req.body.candidateIds);
+      const result = await this.invitationService.sendModuleB(
+        req.params.eventId,
+        req.user.orgId,
+        req.body.candidateIds,
+        req.body.citacion
+      );
+      res.json({ data: result });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  refreshCitations = async (req, res, next) => {
+    try {
+      const result = await this.invitationService.refreshCitationStatus(req.params.eventId, req.user.orgId);
       res.json({ data: result });
     } catch (error) {
       next(error);

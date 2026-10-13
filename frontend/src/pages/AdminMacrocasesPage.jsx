@@ -11,15 +11,23 @@ import {
   deleteMacroCase,
   uploadMacroCaseAudio,
 } from '../services/macrocaseApi';
+import { usableSections } from '../components/evaluation/macrocase/macrocaseSources.js';
 
 const EMPTY_FORM = {
   name: '',
   description: '',
-  introduction: '',
+  instructions: '',
   maxCharacters: 500,
   defaultTimeLimit: 180,
-  questions: [],
+  sections: [],
 };
+
+const MAX_NARRATIVE_LENGTH = 8000;
+
+const newId = (prefix) => `${prefix}-${globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`}`;
+
+const emptyQuestion = () => ({ id: newId('question'), text: '', audioFile: null });
+const emptySection = () => ({ id: newId('section'), title: '', narrative: '', narrativeAudio: {}, narrativeAudioFile: null, questions: [emptyQuestion()] });
 
 const ALLOWED_AUDIO = ['audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/webm'];
 const MAX_AUDIO_BYTES = 10 * 1024 * 1024;
@@ -32,9 +40,17 @@ const FILTERS = [
 
 const inputClass = 'mt-1.5 w-full rounded-xl border border-[#D9E2EA] bg-white px-3.5 py-2.5 text-sm text-[#10233A] placeholder:text-[#9AA8B8] focus:border-[#0AADA8] focus:outline-none focus:ring-2 focus:ring-[#0AADA8]/20';
 
-function sortedQuestions(questions = []) {
-  return [...questions].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+const byOrder = (a, b) => (a.order ?? 0) - (b.order ?? 0);
+
+function sectionsOf(item) {
+  return [...(item.sections || [])].sort(byOrder).map((section) => ({
+    ...section,
+    questions: [...(section.questions || [])].sort(byOrder),
+  }));
 }
+
+/** A narrative as a voiced item: `{ text, ...audio }`, like a question. */
+const narrativeVoice = (section) => ({ ...(section.narrativeAudio || {}), text: section.narrative || '' });
 
 /**
  * Where a question's voice comes from. `inForm`: the text may have been
@@ -70,22 +86,31 @@ function VoiceBadge({ question, inForm = false }) {
   );
 }
 
-/** Usable for Module B: active and at least one question with text. */
-function usableQuestions(item) {
-  return (item.questions || []).filter((question) => question.text?.trim());
-}
-
+/**
+ * Counts for a macrocase card. `incomplete`: sections without narrative or
+ * questions, and questions without text — candidates never get those.
+ * Voices cover every narrative and question that has text.
+ */
 function voiceSummary(item) {
-  const questions = usableQuestions(item);
-  const states = questions.map((question) => voiceState(question));
+  const sections = sectionsOf(item);
+  const questions = sections.flatMap((section) => section.questions);
+  const voiced = sections.flatMap((section) => [
+    ...(section.narrative?.trim() ? [narrativeVoice(section)] : []),
+    ...section.questions.filter((question) => question.text?.trim()),
+  ]);
+  const states = voiced.map((voice) => voiceState(voice));
   return {
-    all: (item.questions || []).length,
-    total: questions.length,
-    missingText: (item.questions || []).length - questions.length,
+    sections: sections.length,
+    questions: questions.length,
+    incomplete: sections.filter((section) => !section.narrative?.trim() || section.questions.length === 0).length
+      + questions.filter((question) => !question.text?.trim()).length,
+    total: voiced.length,
     ready: states.filter((state) => state === 'generated' || state === 'uploaded').length,
     errors: states.filter((state) => state === 'error').length,
   };
 }
+
+const plural = (count, one, many) => `${count} ${count === 1 ? one : many}`;
 
 function formatTimeLimit(seconds) {
   const value = Number(seconds);
@@ -174,9 +199,9 @@ function StatCard({ label, value, hint }) {
 }
 
 function MacrocaseCard({ item, busy, expanded, onToggleExpanded, onToggleActive, onEdit, onDelete, audio }) {
-  const questions = sortedQuestions(item.questions);
+  const sections = sectionsOf(item);
   const summary = voiceSummary(item);
-  const unusable = item.active && summary.total === 0;
+  const unusable = item.active && usableSections(item).length === 0;
 
   return (
     <article className={`flex flex-col rounded-2xl border bg-white shadow-sm transition ${item.active ? 'border-[#BFE5E2]' : 'border-[#DDE5EC]'}`}>
@@ -189,19 +214,20 @@ function MacrocaseCard({ item, busy, expanded, onToggleExpanded, onToggleActive,
       </div>
 
       <div className="flex flex-wrap gap-2 px-5">
-        <span className="rounded-lg bg-[#F6F9FC] px-2.5 py-1 text-xs font-medium text-[#475569]">{summary.all} {summary.all === 1 ? 'pregunta' : 'preguntas'}</span>
+        <span className="rounded-lg bg-[#F6F9FC] px-2.5 py-1 text-xs font-medium text-[#475569]">{plural(summary.sections, 'sección', 'secciones')}</span>
+        <span className="rounded-lg bg-[#F6F9FC] px-2.5 py-1 text-xs font-medium text-[#475569]">{plural(summary.questions, 'pregunta', 'preguntas')}</span>
         <span className="rounded-lg bg-[#F6F9FC] px-2.5 py-1 text-xs font-medium text-[#475569]">{item.maxCharacters} caracteres</span>
         <span className="rounded-lg bg-[#F6F9FC] px-2.5 py-1 text-xs font-medium text-[#475569]">{formatTimeLimit(item.defaultTimeLimit)}</span>
       </div>
 
       {/* Same height whatever the status, so cards in a row line up. */}
       <div className="mt-3 flex h-10 items-center px-5">
-        {summary.missingText > 0 ? (
+        {summary.incomplete > 0 ? (
           <p
-            title={unusable ? 'Está activo, pero no se asignará a ningún evento hasta que sus preguntas tengan texto. Edítalo y escribe el texto de cada pregunta.' : 'Las preguntas sin texto no se muestran a los candidatos. Edítalo y escribe su texto.'}
+            title={unusable ? 'Está activo, pero no se asignará a ningún evento hasta que tenga al menos una sección con texto y preguntas.' : 'Las secciones sin texto o sin preguntas, y las preguntas sin texto, no se muestran a los candidatos.'}
             className="w-full truncate rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs text-amber-800"
           >
-            {summary.missingText} {summary.missingText === 1 ? 'pregunta sin texto' : 'preguntas sin texto'} · {unusable ? 'no se asignará a eventos' : 'no se usarán'}. Edita para escribirlo.
+            {plural(summary.incomplete, 'elemento incompleto', 'elementos incompletos')} · {unusable ? 'no se asignará a eventos' : 'no se usarán'}. Edita para completarlo.
           </p>
         ) : summary.errors > 0 ? (
           <p title="Edita y guarda el macrocaso para volver a generar la voz." className="w-full truncate rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs text-red-700">{summary.errors} {summary.errors === 1 ? 'voz' : 'voces'} con error · edita y guarda para reintentar</p>
@@ -222,24 +248,45 @@ function MacrocaseCard({ item, busy, expanded, onToggleExpanded, onToggleActive,
           aria-expanded={expanded}
           className="flex w-full items-center justify-between px-5 py-3 text-sm font-semibold text-[#334E68] hover:bg-[#FAFBFC]"
         >
-          {expanded ? 'Ocultar preguntas' : 'Ver preguntas'}
+          {expanded ? 'Ocultar secciones' : 'Ver secciones'}
           <svg viewBox="0 0 16 16" className={`h-4 w-4 text-[#7C8AA0] transition ${expanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="m4 6 4 4 4-4" strokeLinecap="round" strokeLinejoin="round" /></svg>
         </button>
         {expanded && (
           <ol className="divide-y divide-[#EEF2F6] border-t border-[#EEF2F6]">
-            {questions.length === 0 && <li className="px-5 py-4 text-sm text-[#94A3B8]">Este macrocaso no tiene preguntas.</li>}
-            {questions.map((question, index) => {
-              const key = `${item.id}:${question.id}`;
+            {sections.length === 0 && <li className="px-5 py-4 text-sm text-[#94A3B8]">Este macrocaso no tiene secciones.</li>}
+            {sections.map((section, sectionIndex) => {
+              const narrativeKey = `${item.id}:${section.id}:narrativa`;
+              const narrative = narrativeVoice(section);
               return (
-                <li key={question.id} className="flex items-start gap-3 px-5 py-3">
-                  <span className="mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#E8F7F6] text-[11px] font-bold text-[#0A8F8A]">{index + 1}</span>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm leading-6 text-[#10233A]">{question.text || <span className="italic text-[#94A3B8]">Sin texto</span>}</p>
-                    <div className="mt-1"><VoiceBadge question={question} /></div>
+                <li key={section.id} className="px-5 py-3">
+                  <div className="flex items-start gap-3">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-bold uppercase tracking-wide text-[#0A8F8A]">Sección {sectionIndex + 1}{section.title ? ` · ${section.title}` : ''}</p>
+                      <p className="mt-1 line-clamp-2 text-sm leading-6 text-[#475569]">{section.narrative || <span className="italic text-[#94A3B8]">Sin texto narrativo</span>}</p>
+                      <div className="mt-1"><VoiceBadge question={narrative} /></div>
+                    </div>
+                    {narrative.audioUrl && (
+                      <PlayButton playing={audio.playingKey === narrativeKey} onClick={() => audio.toggle(narrativeKey, narrative.audioUrl)} label={`la narración de la sección ${sectionIndex + 1}`} />
+                    )}
                   </div>
-                  {question.audioUrl && (
-                    <PlayButton playing={audio.playingKey === key} onClick={() => audio.toggle(key, question.audioUrl)} label={`la pregunta ${index + 1}`} />
-                  )}
+                  <ol className="mt-3 space-y-2 border-l-2 border-[#E8F7F6] pl-3">
+                    {section.questions.length === 0 && <li className="text-sm text-[#94A3B8]">Sin preguntas.</li>}
+                    {section.questions.map((question, index) => {
+                      const key = `${item.id}:${question.id}`;
+                      return (
+                        <li key={question.id} className="flex items-start gap-3">
+                          <span className="mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#E8F7F6] text-[11px] font-bold text-[#0A8F8A]">{index + 1}</span>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm leading-6 text-[#10233A]">{question.text || <span className="italic text-[#94A3B8]">Sin texto</span>}</p>
+                            <div className="mt-1"><VoiceBadge question={question} /></div>
+                          </div>
+                          {question.audioUrl && (
+                            <PlayButton playing={audio.playingKey === key} onClick={() => audio.toggle(key, question.audioUrl)} label={`la pregunta ${index + 1} de la sección ${sectionIndex + 1}`} />
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ol>
                 </li>
               );
             })}
@@ -255,6 +302,34 @@ function MacrocaseCard({ item, busy, expanded, onToggleExpanded, onToggleActive,
         </div>
       </div>
     </article>
+  );
+}
+
+/** Play / voice status / upload / restore row for a narrative or a question in the form. */
+function VoiceControls({ voice, file, playKey, label, audio, onUpload, onRestore }) {
+  const uploaded = voiceState(voice) === 'uploaded';
+  return (
+    <div className="mt-3 flex flex-wrap items-center gap-2">
+      {voice.audioUrl && !file && (
+        <PlayButton playing={audio.playingKey === playKey} onClick={() => audio.toggle(playKey, voice.audioUrl)} label={label} />
+      )}
+      {file
+        ? <span className="inline-flex rounded-full bg-[#EEF6FF] px-2.5 py-0.5 text-[11px] font-semibold text-[#315B88]">Se subirá: {file.name}</span>
+        : <VoiceBadge question={voice} inForm />}
+      <span className="flex-1" />
+      {uploaded && !file && (
+        <button type="button" onClick={onRestore} className="text-xs font-semibold text-[#0A8F8A] hover:underline">Usar voz generada</button>
+      )}
+      <label className="cursor-pointer rounded-lg border border-[#D9E2EA] bg-white px-2.5 py-1 text-xs font-semibold text-[#475569] hover:border-[#0AADA8] hover:text-[#087D79]">
+        {uploaded || file ? 'Cambiar audio' : 'Subir audio propio'}
+        <input
+          type="file"
+          accept=".mp3,.wav,.ogg,.webm,audio/mpeg,audio/wav,audio/ogg,audio/webm"
+          onChange={(e) => onUpload(e.target.files?.[0])}
+          className="sr-only"
+        />
+      </label>
+    </div>
   );
 }
 
@@ -306,11 +381,17 @@ export function AdminMacrocasesPage() {
     inactive: macrocasos.filter((item) => !item.active).length,
   }), [macrocasos]);
 
-  const usableActive = macrocasos.filter((item) => item.active && usableQuestions(item).length > 0).length;
+  const usableActive = macrocasos.filter((item) => item.active && usableSections(item).length > 0).length;
   const voices = macrocasos.reduce((total, item) => {
     const summary = voiceSummary(item);
-    return { ready: total.ready + summary.ready, total: total.total + summary.total, errors: total.errors + summary.errors };
-  }, { ready: 0, total: 0, errors: 0 });
+    return {
+      ready: total.ready + summary.ready,
+      total: total.total + summary.total,
+      errors: total.errors + summary.errors,
+      sections: total.sections + summary.sections,
+      questions: total.questions + summary.questions,
+    };
+  }, { ready: 0, total: 0, errors: 0, sections: 0, questions: 0 });
 
   const visible = macrocasos
     .filter((item) => (filter === 'all' ? true : filter === 'active' ? item.active : !item.active))
@@ -320,7 +401,7 @@ export function AdminMacrocasesPage() {
   const openCreate = () => {
     audio.stop();
     setEditing(null);
-    setForm({ ...EMPTY_FORM, questions: [] });
+    setForm({ ...EMPTY_FORM, sections: [emptySection()] });
     setFormError('');
     setShowForm(true);
   };
@@ -331,12 +412,16 @@ export function AdminMacrocasesPage() {
     setForm({
       name: item.name || '',
       description: item.description || '',
-      introduction: item.introduction || '',
+      instructions: item.instructions || '',
       maxCharacters: item.maxCharacters || 500,
       defaultTimeLimit: item.defaultTimeLimit ?? 180,
-      questions: sortedQuestions(item.questions).map((question) => ({
-        ...question,
-        audioFile: null,
+      sections: sectionsOf(item).map((section) => ({
+        id: section.id,
+        title: section.title || '',
+        narrative: section.narrative || '',
+        narrativeAudio: section.narrativeAudio || {},
+        narrativeAudioFile: null,
+        questions: section.questions.map((question) => ({ ...question, audioFile: null })),
       })),
     });
     setFormError('');
@@ -351,36 +436,6 @@ export function AdminMacrocasesPage() {
     setFormError('');
   };
 
-  const addQuestion = () => {
-    setForm((current) => ({
-      ...current,
-      questions: [
-        ...current.questions,
-        {
-          id: `question-${Date.now()}-${current.questions.length}`,
-          order: current.questions.length + 1,
-          text: '',
-          audioName: '',
-          audioUrl: '',
-          audioPath: '',
-          audioFile: null,
-        },
-      ],
-    }));
-  };
-
-  const removeQuestion = (id) => {
-    setForm((current) => ({
-      ...current,
-      questions: current.questions
-        .filter((question) => question.id !== id)
-        .map((question, index) => ({
-          ...question,
-          order: index + 1,
-        })),
-    }));
-  };
-
   const updateField = (field, value) => {
     setForm((current) => ({
       ...current,
@@ -388,14 +443,39 @@ export function AdminMacrocasesPage() {
     }));
   };
 
-  const updateQuestion = (id, changes) => {
-    setForm((current) => ({
-      ...current,
-      questions: current.questions.map((question) => (question.id === id ? { ...question, ...changes } : question)),
-    }));
-  };
+  const updateSections = (change) => setForm((current) => ({ ...current, sections: change(current.sections) }));
 
-  const handleAudioChange = (id, file) => {
+  const addSection = () => updateSections((sections) => [...sections, emptySection()]);
+
+  const removeSection = (sectionId) => updateSections((sections) => sections.filter((section) => section.id !== sectionId));
+
+  const moveSection = (sectionId, offset) => updateSections((sections) => {
+    const index = sections.findIndex((section) => section.id === sectionId);
+    const target = index + offset;
+    if (index < 0 || target < 0 || target >= sections.length) return sections;
+    const next = [...sections];
+    [next[index], next[target]] = [next[target], next[index]];
+    return next;
+  });
+
+  const updateSection = (sectionId, changes) => updateSections((sections) => sections.map((section) => (
+    section.id === sectionId ? { ...section, ...changes } : section
+  )));
+
+  const updateQuestions = (sectionId, change) => updateSections((sections) => sections.map((section) => (
+    section.id === sectionId ? { ...section, questions: change(section.questions) } : section
+  )));
+
+  const addQuestion = (sectionId) => updateQuestions(sectionId, (questions) => [...questions, emptyQuestion()]);
+
+  const removeQuestion = (sectionId, questionId) => updateQuestions(sectionId, (questions) => questions.filter((question) => question.id !== questionId));
+
+  const updateQuestion = (sectionId, questionId, changes) => updateQuestions(sectionId, (questions) => questions.map((question) => (
+    question.id === questionId ? { ...question, ...changes } : question
+  )));
+
+  /** `target`: `{ sectionId }` for the narrative, `{ sectionId, questionId }` for a question. */
+  const handleAudioChange = ({ sectionId, questionId }, file) => {
     if (!file) return;
     if (file.size > MAX_AUDIO_BYTES) {
       setFormError('El audio no puede superar los 10 MB.');
@@ -406,22 +486,30 @@ export function AdminMacrocasesPage() {
       return;
     }
     setFormError('');
-    updateQuestion(id, { audioName: file.name, audioFile: file });
+    if (questionId) updateQuestion(sectionId, questionId, { audioName: file.name, audioFile: file });
+    else updateSection(sectionId, { narrativeAudioFile: file });
   };
 
   // Drops the uploaded audio: on save the backend generates the voice again.
-  const restoreGeneratedVoice = (id) => {
-    updateQuestion(id, { resetAudio: true, audioSource: '', audioUrl: '', audioName: '', audioFile: null });
+  const restoreGeneratedVoice = ({ sectionId, questionId }) => {
+    if (questionId) {
+      updateQuestion(sectionId, questionId, { resetAudio: true, audioSource: '', audioUrl: '', audioName: '', audioFile: null });
+    } else {
+      updateSection(sectionId, { resetNarrativeAudio: true, narrativeAudio: {}, narrativeAudioFile: null });
+    }
   };
 
   const validate = () => {
     if (!form.name.trim()) return 'Indica el nombre del macrocaso.';
-    if (!form.introduction.trim()) return 'Agrega el texto del caso que leerá el candidato.';
     if (!(Number(form.maxCharacters) > 0)) return 'El máximo de caracteres debe ser mayor que 0.';
     if (!(Number(form.defaultTimeLimit) >= 0)) return 'El tiempo por pregunta no puede ser negativo.';
-    if (form.questions.length === 0) return 'Agrega al menos una pregunta.';
-    if (form.questions.some((question) => !question.text?.trim())) {
-      return 'Cada pregunta necesita su texto: es lo que lee el asistente y ve el candidato.';
+    if (form.sections.length === 0) return 'Agrega al menos una sección.';
+    for (const [index, section] of form.sections.entries()) {
+      if (!section.narrative.trim()) return `La sección ${index + 1} necesita su texto narrativo: es lo que lee y escucha el candidato.`;
+      if (section.questions.length === 0) return `La sección ${index + 1} necesita al menos una pregunta.`;
+      if (section.questions.some((question) => !question.text?.trim())) {
+        return `Cada pregunta de la sección ${index + 1} necesita su texto: es lo que lee el asistente y ve el candidato.`;
+      }
     }
     return '';
   };
@@ -440,30 +528,40 @@ export function AdminMacrocasesPage() {
       const payload = {
         name: form.name.trim(),
         description: form.description.trim(),
-        introduction: form.introduction.trim(),
+        instructions: form.instructions.trim(),
         maxCharacters: Number(form.maxCharacters),
         defaultTimeLimit: Number(form.defaultTimeLimit),
         // Audio fields are managed by the backend: it generates the voice
-        // of every question whose text changed.
-        questions: form.questions.map((question) => ({
-          id: question.id,
-          order: question.order,
-          text: question.text.trim(),
-          ...(question.resetAudio ? { resetAudio: true } : {}),
+        // of every narrative and question whose text changed.
+        sections: form.sections.map((section) => ({
+          id: section.id,
+          title: section.title.trim(),
+          narrative: section.narrative.trim(),
+          ...(section.resetNarrativeAudio ? { resetNarrativeAudio: true } : {}),
+          questions: section.questions.map((question) => ({
+            id: question.id,
+            text: question.text.trim(),
+            ...(question.resetAudio ? { resetAudio: true } : {}),
+          })),
         })),
       };
 
       let saved = editing ? await updateMacroCase(editing.id, payload) : await createMacroCase(payload);
 
-      for (const question of form.questions.filter((item) => item.audioFile)) {
-        saved = await uploadMacroCaseAudio(saved.id, question.id, question.audioFile);
+      for (const section of form.sections) {
+        if (section.narrativeAudioFile) {
+          saved = await uploadMacroCaseAudio(saved.id, { sectionId: section.id }, section.narrativeAudioFile);
+        }
+        for (const question of section.questions.filter((item) => item.audioFile)) {
+          saved = await uploadMacroCaseAudio(saved.id, { questionId: question.id }, question.audioFile);
+        }
       }
 
-      const failed = (saved.questions || []).filter((question) => question.ttsError).length;
+      const failed = voiceSummary(saved).errors;
       await loadMacroCases();
       closeForm();
       setNotice(failed
-        ? { tone: 'warning', text: `"${saved.name}" se guardó, pero ${failed} ${failed === 1 ? 'pregunta no pudo' : 'preguntas no pudieron'} generar su voz. Se leerán con la voz del navegador.` }
+        ? { tone: 'warning', text: `"${saved.name}" se guardó, pero ${failed === 1 ? 'una voz no pudo generarse' : `${failed} voces no pudieron generarse`}. Esos textos se leerán con la voz del navegador.` }
         : { tone: 'success', text: `"${saved.name}" se guardó correctamente.` });
     } catch (error) {
       setFormError(error.message);
@@ -528,14 +626,14 @@ export function AdminMacrocasesPage() {
 
         {!loading && (
           <div className="mt-6 grid gap-4 sm:grid-cols-3">
-            <StatCard label="En el banco (activos)" value={`${counts.active} de ${counts.all}`} hint={usableActive < counts.active ? `${counts.active - usableActive} sin preguntas con texto` : 'Disponibles para asignar'} />
-            <StatCard label="Preguntas" value={voices.total} hint="Con texto, entre todos los macrocasos" />
-            <StatCard label="Voces listas" value={`${voices.ready}/${voices.total}`} hint={voices.errors ? `${voices.errors} con error al generar` : 'Generadas o subidas'} />
+            <StatCard label="En el banco (activos)" value={`${counts.active} de ${counts.all}`} hint={usableActive < counts.active ? `${counts.active - usableActive} sin secciones completas` : 'Disponibles para asignar'} />
+            <StatCard label="Secciones y preguntas" value={`${voices.sections} · ${voices.questions}`} hint="Entre todos los macrocasos" />
+            <StatCard label="Voces listas" value={`${voices.ready}/${voices.total}`} hint={voices.errors ? `${voices.errors} con error al generar` : 'Narraciones y preguntas, generadas o subidas'} />
           </div>
         )}
 
         {!loading && counts.all > 0 && usableActive === 0 && (
-          <p className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">No hay macrocasos activos con preguntas: las empresas no podrán enviar el Módulo B. Activa al menos uno.</p>
+          <p className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">No hay macrocasos activos con secciones completas: las empresas no podrán enviar el Módulo B. Activa al menos uno.</p>
         )}
 
         {!loading && counts.all > 0 && (
@@ -570,7 +668,7 @@ export function AdminMacrocasesPage() {
         ) : counts.all === 0 ? (
           <div className="mt-8 rounded-2xl border border-dashed border-[#CBD5E1] bg-white p-12 text-center">
             <p className="font-semibold text-[#334155]">Aún no hay macrocasos</p>
-            <p className="mt-1 text-sm text-[#94A3B8]">Crea el primero: un caso para leer y las preguntas que hará el asistente virtual.</p>
+            <p className="mt-1 text-sm text-[#94A3B8]">Crea el primero: un caso dividido en secciones, cada una con su texto y las preguntas que hará el asistente virtual.</p>
             <button type="button" onClick={openCreate} className="mt-5 rounded-xl bg-[#0AADA8] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#089490]">+ Nuevo macrocaso</button>
           </div>
         ) : visible.length === 0 ? (
@@ -600,7 +698,7 @@ export function AdminMacrocasesPage() {
             <div className="flex items-start justify-between gap-4 border-b border-[#EEF2F6] px-6 py-5">
               <div>
                 <h2 id="macrocase-form-title" className="font-display text-xl font-bold text-[#101828]">{editing ? 'Editar macrocaso' : 'Nuevo macrocaso'}</h2>
-                <p className="mt-0.5 text-xs text-[#64748B]">Al guardar se genera la voz de las preguntas nuevas o modificadas.</p>
+                <p className="mt-0.5 text-xs text-[#64748B]">Al guardar se genera la voz de las narraciones y preguntas nuevas o modificadas.</p>
               </div>
               <button type="button" onClick={closeForm} aria-label="Cerrar" className="rounded-lg p-1 text-2xl leading-none text-[#94A3B8] hover:bg-[#F6F9FC] hover:text-[#475569]">×</button>
             </div>
@@ -615,11 +713,10 @@ export function AdminMacrocasesPage() {
                   Descripción breve <span className="font-normal text-[#94A3B8]">(solo para administradores)</span>
                   <input value={form.description} onChange={(e) => updateField('description', e.target.value)} placeholder="Ej.: Dilema ético con varios personajes" className={inputClass} />
                 </label>
-              </FormSection>
-
-              <FormSection title="Texto del caso" description="Lo lee el candidato antes de las preguntas; después ya no podrá volver a verlo. Separa los párrafos con una línea en blanco.">
-                <textarea value={form.introduction} onChange={(e) => updateField('introduction', e.target.value)} placeholder="Había una vez…" rows={9} aria-label="Texto del caso" className={`${inputClass} resize-y leading-6`} />
-                <p className="-mt-2 text-right text-xs text-[#94A3B8]">{form.introduction.length.toLocaleString('es-GT')} caracteres</p>
+                <label className="block text-xs font-medium text-[#475569]">
+                  Instrucciones para el candidato <span className="font-normal text-[#94A3B8]">(opcional · se muestran en la pantalla de introducción)</span>
+                  <textarea value={form.instructions} onChange={(e) => updateField('instructions', e.target.value)} maxLength={2000} rows={3} placeholder="Ej.: Imagina que trabajas en…" className={`${inputClass} resize-y leading-6`} />
+                </label>
               </FormSection>
 
               <FormSection title="Respuestas" description="Se aplica a todas las preguntas de este macrocaso.">
@@ -636,52 +733,87 @@ export function AdminMacrocasesPage() {
                 </div>
               </FormSection>
 
-              <FormSection title={`Preguntas (${form.questions.length})`} description="El asistente virtual las lee en voz alta, una a una, y el candidato responde por escrito.">
-                <ol className="space-y-3">
-                  {form.questions.map((question, index) => {
-                    const key = `form:${question.id}`;
+              <FormSection
+                title={`Secciones (${form.sections.length})`}
+                description="El candidato recorre las secciones en orden: el asistente narra el texto de cada una y luego le hace sus preguntas. Al pasar a las preguntas, el texto de la sección deja de estar visible."
+              >
+                <ol className="space-y-5">
+                  {form.sections.map((section, sectionIndex) => {
+                    const narrative = narrativeVoice(section);
                     return (
-                      <li key={question.id} className="rounded-xl border border-[#DDE5EC] bg-[#FAFBFC] p-4">
+                      <li key={section.id} className="rounded-2xl border border-[#BFE5E2] bg-white p-4 sm:p-5">
                         <div className="flex items-center justify-between gap-3">
-                          <span className="text-xs font-bold uppercase tracking-wide text-[#0A8F8A]">Pregunta {index + 1}</span>
-                          <button type="button" onClick={() => removeQuestion(question.id)} className="text-xs font-semibold text-[#B42318] hover:underline">Quitar</button>
+                          <span className="text-sm font-bold text-[#087D79]">Sección {sectionIndex + 1}</span>
+                          <div className="flex items-center gap-1">
+                            <button type="button" onClick={() => moveSection(section.id, -1)} disabled={sectionIndex === 0} aria-label={`Subir la sección ${sectionIndex + 1}`} className="rounded-lg px-2 py-1 text-xs font-semibold text-[#475569] hover:bg-[#F6F9FC] disabled:opacity-30">↑</button>
+                            <button type="button" onClick={() => moveSection(section.id, 1)} disabled={sectionIndex === form.sections.length - 1} aria-label={`Bajar la sección ${sectionIndex + 1}`} className="rounded-lg px-2 py-1 text-xs font-semibold text-[#475569] hover:bg-[#F6F9FC] disabled:opacity-30">↓</button>
+                            <button type="button" onClick={() => removeSection(section.id)} className="ml-1 text-xs font-semibold text-[#B42318] hover:underline">Quitar sección</button>
+                          </div>
                         </div>
-                        <textarea
-                          value={question.text || ''}
-                          onChange={(e) => updateQuestion(question.id, { text: e.target.value })}
-                          maxLength={500}
-                          rows={2}
-                          aria-label={`Texto de la pregunta ${index + 1}`}
-                          placeholder="¿Qué haría usted en el lugar de…?"
-                          className={`${inputClass} resize-y`}
+
+                        <label className="mt-3 block text-xs font-medium text-[#475569]">
+                          Título <span className="font-normal text-[#94A3B8]">(opcional)</span>
+                          <input value={section.title} onChange={(e) => updateSection(section.id, { title: e.target.value })} maxLength={120} placeholder="Ej.: El encargo" className={inputClass} />
+                        </label>
+
+                        <label className="mt-3 block text-xs font-medium text-[#475569]">
+                          Texto narrativo
+                          <textarea
+                            value={section.narrative}
+                            onChange={(e) => updateSection(section.id, { narrative: e.target.value })}
+                            maxLength={MAX_NARRATIVE_LENGTH}
+                            rows={7}
+                            placeholder="Había una vez…"
+                            className={`${inputClass} resize-y leading-6`}
+                          />
+                        </label>
+                        <p className="mt-1 text-right text-xs text-[#94A3B8]">{section.narrative.length.toLocaleString('es-GT')} / {MAX_NARRATIVE_LENGTH.toLocaleString('es-GT')} caracteres · separa los párrafos con una línea en blanco</p>
+                        <VoiceControls
+                          voice={narrative}
+                          file={section.narrativeAudioFile}
+                          playKey={`form:${section.id}:narrativa`}
+                          label={`la narración de la sección ${sectionIndex + 1}`}
+                          audio={audio}
+                          onUpload={(file) => handleAudioChange({ sectionId: section.id }, file)}
+                          onRestore={() => restoreGeneratedVoice({ sectionId: section.id })}
                         />
-                        <div className="mt-3 flex flex-wrap items-center gap-2">
-                          {question.audioUrl && !question.audioFile && (
-                            <PlayButton playing={audio.playingKey === key} onClick={() => audio.toggle(key, question.audioUrl)} label={`la pregunta ${index + 1}`} />
-                          )}
-                          {question.audioFile
-                            ? <span className="inline-flex rounded-full bg-[#EEF6FF] px-2.5 py-0.5 text-[11px] font-semibold text-[#315B88]">Se subirá: {question.audioFile.name}</span>
-                            : <VoiceBadge question={question} inForm />}
-                          <span className="flex-1" />
-                          {voiceState(question) === 'uploaded' && !question.audioFile && (
-                            <button type="button" onClick={() => restoreGeneratedVoice(question.id)} className="text-xs font-semibold text-[#0A8F8A] hover:underline">Usar voz generada</button>
-                          )}
-                          <label className="cursor-pointer rounded-lg border border-[#D9E2EA] bg-white px-2.5 py-1 text-xs font-semibold text-[#475569] hover:border-[#0AADA8] hover:text-[#087D79]">
-                            {voiceState(question) === 'uploaded' || question.audioFile ? 'Cambiar audio' : 'Subir audio propio'}
-                            <input
-                              type="file"
-                              accept=".mp3,.wav,.ogg,.webm,audio/mpeg,audio/wav,audio/ogg,audio/webm"
-                              onChange={(e) => handleAudioChange(question.id, e.target.files?.[0])}
-                              className="sr-only"
-                            />
-                          </label>
-                        </div>
+
+                        <p className="mt-5 text-xs font-semibold uppercase tracking-wide text-[#475569]">Preguntas de esta sección ({section.questions.length})</p>
+                        <ol className="mt-2 space-y-3">
+                          {section.questions.map((question, index) => (
+                            <li key={question.id} className="rounded-xl border border-[#DDE5EC] bg-[#FAFBFC] p-4">
+                              <div className="flex items-center justify-between gap-3">
+                                <span className="text-xs font-bold uppercase tracking-wide text-[#0A8F8A]">Pregunta {index + 1}</span>
+                                <button type="button" onClick={() => removeQuestion(section.id, question.id)} className="text-xs font-semibold text-[#B42318] hover:underline">Quitar</button>
+                              </div>
+                              <textarea
+                                value={question.text || ''}
+                                onChange={(e) => updateQuestion(section.id, question.id, { text: e.target.value })}
+                                maxLength={500}
+                                rows={2}
+                                aria-label={`Texto de la pregunta ${index + 1} de la sección ${sectionIndex + 1}`}
+                                placeholder="¿Qué haría usted en el lugar de…?"
+                                className={`${inputClass} resize-y`}
+                              />
+                              <VoiceControls
+                                voice={question}
+                                file={question.audioFile}
+                                playKey={`form:${question.id}`}
+                                label={`la pregunta ${index + 1}`}
+                                audio={audio}
+                                onUpload={(file) => handleAudioChange({ sectionId: section.id, questionId: question.id }, file)}
+                                onRestore={() => restoreGeneratedVoice({ sectionId: section.id, questionId: question.id })}
+                              />
+                            </li>
+                          ))}
+                        </ol>
+                        <button type="button" onClick={() => addQuestion(section.id)} className="mt-3 w-full rounded-xl border border-dashed border-[#9ED9D5] py-2.5 text-sm font-semibold text-[#087D79] hover:bg-[#F4FBFB]">+ Agregar pregunta</button>
                       </li>
                     );
                   })}
                 </ol>
-                <button type="button" onClick={addQuestion} className="w-full rounded-xl border border-dashed border-[#9ED9D5] py-3 text-sm font-semibold text-[#087D79] hover:bg-[#F4FBFB]">+ Agregar pregunta</button>
-                <p className="text-xs text-[#94A3B8]">Un audio propio reemplaza la voz generada de esa pregunta. MP3, WAV, OGG o WEBM, hasta 10 MB.</p>
+                <button type="button" onClick={addSection} className="w-full rounded-xl border-2 border-dashed border-[#9ED9D5] py-3 text-sm font-semibold text-[#087D79] hover:bg-[#F4FBFB]">+ Agregar sección</button>
+                <p className="text-xs text-[#94A3B8]">Un audio propio reemplaza la voz generada de esa narración o pregunta. MP3, WAV, OGG o WEBM, hasta 10 MB.</p>
               </FormSection>
             </div>
 
