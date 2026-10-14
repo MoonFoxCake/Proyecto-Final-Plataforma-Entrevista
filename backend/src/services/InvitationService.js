@@ -1,6 +1,6 @@
 const crypto = require('crypto');
 const {
-  CANDIDATE_STATUSES, INVITATION_STATUSES, MODULES, MODULE_B_STATUSES, CITATION_STATUSES,
+  CANDIDATE_STATUSES, INVITATION_STATUSES, MODULES, MODULE_B_STATUSES, CITATION_STATUSES, ACCESS_CHANNELS,
 } = require('../utils/constants');
 const { ValidationError } = require('../utils/errors');
 const {
@@ -35,8 +35,9 @@ const progressIdOf = (invitation) => `${invitation.eventId}_${invitation.candida
 class InvitationService {
   constructor({
     invitationRepo, candidateService, candidateRepo, eventService, organizationRepo, emailService, frontendUrl,
-    macrocaseService, sleep = wait,
+    macrocaseService, sleep = wait, now = () => new Date(),
   }) {
+    this.now = now;
     this.invitationRepo = invitationRepo;
     this.candidateService = candidateService;
     this.candidateRepo = candidateRepo;
@@ -219,10 +220,10 @@ class InvitationService {
     if (invitation.status === INVITATION_STATUSES.EXPIRED) return closed({ state: 'EXPIRED' });
 
     const expiresAt = new Date(invitation.expiresAt);
-    if (Number.isNaN(expiresAt.getTime()) || expiresAt <= new Date()) {
+    if (Number.isNaN(expiresAt.getTime()) || expiresAt <= this.now()) {
       await this.invitationRepo.update(invitation.id, {
         status: INVITATION_STATUSES.EXPIRED,
-        expiredAt: new Date(),
+        expiredAt: this.now(),
       });
       return closed({ state: 'EXPIRED' });
     }
@@ -237,13 +238,17 @@ class InvitationService {
     if (!candidate || candidate.eventId !== event.id || candidate.orgId !== invitation.orgId) {
       return closed({ state: 'INVALID' });
     }
-    // Onsite evaluations are never opened through an e-mailed link.
-    if (isOnsite(event)) return closed({ state: 'INVALID' });
+    // Onsite evaluations are never opened through an e-mailed link, only
+    // through a session opened at the venue with an enabled code.
+    const onsiteSession = invitation.channel === ACCESS_CHANNELS.ONSITE;
+    if (isOnsite(event) !== onsiteSession) return closed({ state: 'INVALID' });
 
     const module = invitation.module || MODULES.A;
     if (module === MODULES.B && !event.moduleB?.macrocase) return closed({ state: 'INVALID' });
 
-    const availableFrom = new Date(module === MODULES.B
+    // An onsite session is available as soon as it opens: the applicator
+    // already decided when by enabling the code.
+    const availableFrom = new Date(module === MODULES.B || onsiteSession
       ? invitation.availableAt || invitation.createdAt
       : candidate.fechaHoraCita || event.availableFrom);
     if (Number.isNaN(availableFrom.getTime())) return closed({ state: 'INVALID' });
@@ -262,7 +267,7 @@ class InvitationService {
       expiresAt,
     };
 
-    if (availableFrom > new Date()) {
+    if (availableFrom > this.now()) {
       return closed({ state: 'NOT_YET_AVAILABLE', ...context });
     }
     // Module B: only the overview here; the content arrives one stage at a
@@ -300,7 +305,7 @@ class InvitationService {
     const access = await this.resolveMacrocaseAccess(token);
     if (access.closed) return access.closed;
     const { invitation, macrocase } = access;
-    const now = new Date();
+    const now = this.now();
     const progress = await this.invitationRepo.updateProgress(progressIdOf(invitation), (current) => ({
       ...applyAction(macrocase, current, action, now),
       invitationId: invitation.id,

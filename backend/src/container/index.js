@@ -31,6 +31,17 @@ const AzureSpeechService = require('../services/AzureSpeechService');
 const AccessCredentialService = require('../services/AccessCredentialService');
 const { PrintableService } = require('../services/PrintableService');
 const OnsiteApplicationService = require('../services/OnsiteApplicationService');
+const OnsiteAccessService = require('../services/OnsiteAccessService');
+const AttemptLimiter = require('../utils/AttemptLimiter');
+
+const MINUTE_MS = 60 * 1000;
+// Failed onsite logins (unknown or malformed codes). Per browser: a candidate
+// who mistypes a few times. Per IP: generous, because a whole room usually
+// shares one public address; the 49-bit codes make guessing hopeless anyway.
+const ONSITE_LOGIN_LIMITS = {
+  client: { max: 5, windowMs: 5 * MINUTE_MS },
+  ip: { max: 40, windowMs: 10 * MINUTE_MS },
+};
 
 // Supabase Storage for macrocase audio. Required lazily: the Supabase client
 // fails at import time without SUPABASE_URL / SUPABASE_SECRET_KEY.
@@ -135,10 +146,22 @@ function createContainer(type = 'firestore') {
     auditRepo: repos.auditLogRepo,
   });
 
+  const onsiteAccessService = new OnsiteAccessService({
+    credentialRepo: repos.accessCredentialRepo,
+    invitationRepo: repos.invitationRepo,
+    candidateRepo: repos.candidateRepo,
+    eventService,
+    invitationService,
+    auditRepo: repos.auditLogRepo,
+    limiter: new AttemptLimiter({ rules: ONSITE_LOGIN_LIMITS }),
+    pepper: process.env.ACCESS_CODE_PEPPER,
+  });
+
   return {
     repos,
     accessCredentialService,
     onsiteApplicationService,
+    onsiteAccessService,
     authService: new AuthService(repos.userRepo, repos.organizationRepo),
     tenantService: new TenantService(repos.organizationRepo),
     eventService,

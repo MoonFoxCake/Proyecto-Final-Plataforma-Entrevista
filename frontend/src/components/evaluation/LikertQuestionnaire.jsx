@@ -17,7 +17,8 @@ const OPTIONS = [
   'Totalmente de acuerdo',
 ];
 
-export function LikertQuestionnaire({ token }) {
+/** `onCompleted`: called once the evaluation was submitted (e.g. to reset a shared computer). */
+export function LikertQuestionnaire({ token, onCompleted }) {
   const [questionIndex, setQuestionIndex] = useState(0);
   const [answers, setAnswers] = useState([]);
   const [selected, setSelected] = useState(null);
@@ -50,6 +51,7 @@ export function LikertQuestionnaire({ token }) {
       }
       setSubmittedAt(result.submittedAt || new Date().toISOString());
       setPhase('completed');
+      onCompleted?.();
     } catch (requestError) {
       setSubmitError(requestError.response?.data?.error?.message || 'No se pudo enviar la evaluación. Intenta nuevamente.');
     } finally {

@@ -71,6 +71,13 @@ const AUDIT_ACTIONS = Object.freeze({
   CREDENTIAL_ENABLED: 'CREDENTIAL_ENABLED',
   ATTENDANCE_MARKED: 'ATTENDANCE_MARKED',
   ATTENDANCE_UNMARKED: 'ATTENDANCE_UNMARKED',
+  ONSITE_SESSION_STARTED: 'ONSITE_SESSION_STARTED',
+});
+
+// invitations.channel: how an access session was opened. Missing = the
+// e-mailed link (online events); `onsite` = a code typed at the venue.
+const ACCESS_CHANNELS = Object.freeze({
+  ONSITE: 'onsite',
 });
 
 // candidate.attendance[module].status — set by the applicator after
@@ -90,4 +97,5 @@ module.exports = {
   CREDENTIAL_STATUSES,
   AUDIT_ACTIONS,
   ATTENDANCE_STATUSES,
+  ACCESS_CHANNELS,
 };

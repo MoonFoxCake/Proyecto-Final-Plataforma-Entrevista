@@ -5,8 +5,10 @@ const { createContainer } = require('./container');
 const createApiRouter = require('./routes');
 const AuthController = require('./controllers/auth.controller');
 const InvitationController = require('./controllers/invitation.controller');
+const OnsiteAccessController = require('./controllers/onsite-access.controller');
 const { createPublicAuthRoutes } = require('./routes/auth.routes');
 const { createPublicInvitationRoutes } = require('./routes/invitation.routes');
+const { createPublicOnsiteAccessRoutes } = require('./routes/onsite-access.routes');
 const { verifyToken } = require('./middleware/verifyToken');
 const { checkTenant } = require('./middleware/checkTenant');
 const { errorHandler } = require('./middleware/errorHandler');
@@ -21,6 +23,10 @@ const { errorHandler } = require('./middleware/errorHandler');
  */
 function createApp(container = createContainer('firestore')) {
   const app = express();
+
+  // Render puts one proxy in front of the app: trust it so `req.ip` is the
+  // caller's address (needed to limit failed onsite logins per IP).
+  app.set('trust proxy', 1);
 
   // Frontend (Firebase Hosting) and backend (Render) are different origins.
   // CORS_ORIGIN restricts requests to that domain in production; unset, it
@@ -37,6 +43,7 @@ function createApp(container = createContainer('firestore')) {
   const invitationController = new InvitationController(container.invitationService);
   app.use('/api/v1/auth', createPublicAuthRoutes(authController));
   app.use('/api/v1/invitations', createPublicInvitationRoutes(invitationController));
+  app.use('/api/v1/onsite', createPublicOnsiteAccessRoutes(new OnsiteAccessController(container.onsiteAccessService)));
 
   app.use('/api/v1', verifyToken, checkTenant, createApiRouter(container));
 

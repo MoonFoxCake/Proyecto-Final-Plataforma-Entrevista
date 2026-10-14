@@ -108,6 +108,11 @@ const enableSchema = z.object({
   candidateIds: z.array(z.string().min(1).max(120)).min(1, 'Selecciona al menos un candidato.').max(500),
 }).strict();
 
+// Candidate login at the venue: only the code (format checked by the service).
+const onsiteLoginSchema = z.object({
+  codigo: z.string().max(32),
+}).strict();
+
 const macrocaseStageSchema = z.object({ token: accessToken }).strict();
 
 const stageId = z.string().min(1).max(120);
@@ -141,4 +146,5 @@ module.exports = {
   onsiteRosterQuerySchema,
   attendanceSchema,
   enableSchema,
+  onsiteLoginSchema,
 };

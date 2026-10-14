@@ -13,6 +13,7 @@ import { CompanyDashboardPage } from '../pages/CompanyDashboardPage.jsx';
 import { EventDetailPage } from '../pages/EventDetailPage.jsx';
 import { NewEventPage } from '../pages/NewEventPage.jsx';
 import { OnsiteApplicationPage } from '../pages/OnsiteApplicationPage.jsx';
+import { OnsiteAccessPage } from '../pages/OnsiteAccessPage.jsx';
 import { EvaluationAccessPage } from '../pages/EvaluationAccessPage.jsx';
 import { AdminMacrocasePreviewPage } from '../pages/AdminMacrocasePreviewPage.jsx';
 import { CandidateResultPage } from '../pages/CandidateResultPage.jsx';
@@ -46,6 +47,7 @@ export function AppRouter() {
         <Route path="/reset-password" element={<ResetPasswordPage />} />
 
         <Route path='/evaluation/access' element={<EvaluationAccessPage />} />
+        <Route path='/presencial' element={<OnsiteAccessPage />} />
 
         <Route element={<RequireAuth />}>
           <Route path="/dashboard" element={<DashboardPage />} />

@@ -36,9 +36,10 @@ function ClosedPanel({ state }) {
  * `source` (see `macrocaseSources.js`) says which stage the candidate is on
  * and applies each action; for a real invitation that is the backend, which
  * stores the progress, so a reload resumes the same stage and answers can
- * never be changed after moving on.
+ * never be changed after moving on. `onCompleted` is called once the final
+ * submission went through.
  */
-export function MacrocaseEvaluation({ source, completedFootnote }) {
+export function MacrocaseEvaluation({ source, completedFootnote, onCompleted }) {
   const [stage, setStage] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -99,8 +100,12 @@ export function MacrocaseEvaluation({ source, completedFootnote }) {
     setError('');
     try {
       const result = await source.finalize();
-      if (result?.state === 'COMPLETED') setSubmittedAt(result.submittedAt || new Date().toISOString());
-      else setStage(result?.state ? result : { state: 'ERROR' });
+      if (result?.state === 'COMPLETED') {
+        setSubmittedAt(result.submittedAt || new Date().toISOString());
+        onCompleted?.();
+      } else {
+        setStage(result?.state ? result : { state: 'ERROR' });
+      }
     } catch (requestError) {
       setError(errorMessage(requestError, 'No se pudo enviar la evaluación. Intenta nuevamente.'));
     } finally {
