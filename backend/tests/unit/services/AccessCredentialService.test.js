@@ -140,13 +140,14 @@ describe('AccessCredentialService', () => {
     await expect(service.reissue('event-1', 'org-1', old.credentialId, 'supervisor-1')).rejects.toThrow('ya fue reemplazada');
   });
 
-  test('a used credential cannot be revoked or reissued', async () => {
+  test('a used credential is never replaced by the batch, and once the evaluation is submitted it is final', async () => {
     const { issued: [credential] } = await issueA([zoe.id]);
     await credentialRepo.update(credential.credentialId, () => ({ status: 'USED', usedAt: clock.now }));
-
-    await expect(service.revoke('event-1', 'org-1', credential.credentialId, 'u')).rejects.toBeInstanceOf(ValidationError);
-    await expect(service.reissue('event-1', 'org-1', credential.credentialId, 'u')).rejects.toThrow('ya se utilizó');
     expect((await issueA([zoe.id])).skipped).toEqual([expect.objectContaining({ status: 'USED' })]);
+
+    await candidateRepo.update(zoe.id, { status: 'EVALUATION_COMPLETED', submittedAt: clock.now });
+    await expect(service.revoke('event-1', 'org-1', credential.credentialId, 'u')).rejects.toThrow('ya completó');
+    await expect(service.reissue('event-1', 'org-1', credential.credentialId, 'u')).rejects.toThrow('ya completó');
   });
 
   test('an unused credential reads as expired after its day, and can then be replaced', async () => {

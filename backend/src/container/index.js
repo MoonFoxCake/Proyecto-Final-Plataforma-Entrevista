@@ -136,6 +136,7 @@ function createContainer(type = 'firestore') {
     candidateRepo: repos.candidateRepo,
     eventService,
     printableService: new PrintableService(),
+    invitationRepo: repos.invitationRepo,
     pepper: process.env.ACCESS_CODE_PEPPER,
   });
 

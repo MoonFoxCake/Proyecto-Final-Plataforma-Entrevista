@@ -3,6 +3,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { OnsiteApplicationPage } from './OnsiteApplicationPage.jsx';
 import * as onsiteService from '../services/onsiteService.js';
 import * as eventService from '../services/eventService.js';
+import * as credentialService from '../services/credentialService.js';
 
 vi.mock('../services/onsiteService.js', () => ({
   getRoster: vi.fn(),
@@ -11,7 +12,7 @@ vi.mock('../services/onsiteService.js', () => ({
 }));
 vi.mock('../services/eventService.js', () => ({ getEvent: vi.fn() }));
 vi.mock('../components/company/CompanySidebar.jsx', () => ({ CompanySidebar: () => <nav /> }));
-vi.mock('../services/credentialService.js', () => ({}));
+vi.mock('../services/credentialService.js', () => ({ reissueCredential: vi.fn() }));
 
 const SESSION = { venue: 'Campus Central', room: 'Aula 204', startsAt: '2026-11-05T14:00:00.000Z', endsAt: '2026-11-05T16:00:00.000Z' };
 const EXPIRES = '2026-11-06T05:59:59.999Z';
@@ -117,6 +118,29 @@ test('filters by attendance, access and evaluation, and searches by name or ID',
   fireEvent.change(screen.getByLabelText('Buscar candidato'), { target: { value: '200' } });
   expect(screen.getByText('Bruno Díaz')).toBeTruthy();
   expect(screen.queryByText('Ana López')).toBeNull();
+});
+
+test('recovers an interrupted session: a new code is shown once on screen', async () => {
+  const inProgress = row({
+    candidateId: 'c5', nombreCompleto: 'Elena Castillo', cedula: '500', attendance: { status: 'PRESENT', markedAt: '2026-11-05T14:07:00.000Z' },
+    credential: { id: 'cred-c5', status: 'USED', expiresAt: EXPIRES }, evaluation: 'IN_PROGRESS',
+  });
+  onsiteService.getRoster.mockResolvedValue(roster([...ROWS, inProgress]));
+  credentialService.reissueCredential.mockResolvedValue({
+    module: 'A', issued: [{ credentialId: 'new', candidateId: 'c5', nombreCompleto: 'Elena Castillo', module: 'A', code: 'PQ7RS-2TUV3', expiresAt: EXPIRES, appointment: SESSION }], skipped: [], rejected: [],
+  });
+  window.prompt = vi.fn(() => 'Se cerró el navegador');
+  renderPage();
+
+  const elena = (await screen.findByText('Elena Castillo')).closest('tr');
+  // Completed evaluations cannot be recovered.
+  expect(within(screen.getByText('Diego Ramírez').closest('tr')).queryByRole('button', { name: /Recuperar|Reemitir/ })).toBeNull();
+  fireEvent.click(within(elena).getByRole('button', { name: 'Recuperar acceso' }));
+
+  expect(window.prompt.mock.calls[0][0]).toMatch(/solo funcionará en la misma computadora/);
+  await waitFor(() => expect(credentialService.reissueCredential).toHaveBeenCalledWith('event-1', 'cred-c5', 'Se cerró el navegador'));
+  expect(within(await screen.findByRole('dialog')).getByText('PQ7RS-2TUV3')).toBeTruthy();
+  expect(screen.getByText(/Habilítalo para que pueda ingresar/)).toBeTruthy();
 });
 
 test('outside the appointment day the actions are disabled with an explanation', async () => {

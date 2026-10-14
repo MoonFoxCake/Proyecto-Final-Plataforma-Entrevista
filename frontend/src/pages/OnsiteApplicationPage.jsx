@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { CompanySidebar } from '../components/company/CompanySidebar.jsx';
 import { CredentialStatus } from '../components/company/CredentialsSection.jsx';
+import { IssuedCodesDialog } from '../components/company/IssuedCodesDialog.jsx';
+import * as credentialService from '../services/credentialService.js';
 import { Button } from '../components/ui';
 import * as eventService from '../services/eventService.js';
 import * as onsiteService from '../services/onsiteService.js';
@@ -29,6 +31,8 @@ const EVALUATION_FILTERS = [['all', 'Todas las evaluaciones'], ['PENDING', 'Pend
 
 const isPresent = (row) => row.attendance?.status === 'PRESENT';
 const canEnable = (row) => isPresent(row) && row.credential?.status === 'GENERATED';
+// Lost card (prepared/enabled code) or interrupted session (code in use) of an open evaluation.
+const canReissue = (row) => ['GENERATED', 'ENABLED', 'USED'].includes(row.credential?.status) && row.evaluation !== 'COMPLETED';
 
 function Stat({ label, value }) {
   return <div className='rounded-2xl border border-[#DDE5EC] bg-white p-4 shadow-sm'><p className='text-xs text-[#7C8AA0]'>{label}</p><p className='mt-1 font-display text-2xl font-bold text-[#10233A]'>{value}</p></div>;
@@ -61,6 +65,7 @@ export function OnsiteApplicationPage() {
   const [attendanceFilter, setAttendanceFilter] = useState('all');
   const [accessFilter, setAccessFilter] = useState('all');
   const [evaluationFilter, setEvaluationFilter] = useState('all');
+  const [reissued, setReissued] = useState(null);
 
   useEffect(() => {
     eventService.getEvent(eventId)
@@ -132,6 +137,25 @@ export function OnsiteApplicationPage() {
 
   const enableOne = (row) => run(async () => {
     reportEnable(await onsiteService.enableCredentials(eventId, moduleId, [row.candidateId]));
+  });
+
+  /**
+   * Incident recovery: a new code replaces the current one. For a session in
+   * progress, the old session closes and the candidate resumes, on the same
+   * computer, where they left off. The code is shown on screen once.
+   */
+  const reissue = (row) => run(async () => {
+    const inUse = row.credential.status === 'USED';
+    const reason = window.prompt(
+      inUse
+        ? `Recuperar la evaluación de ${row.nombreCompleto}: su sesión actual se cerrará y recibirá un código nuevo que solo funcionará en la misma computadora donde comenzó. Sus respuestas guardadas se conservan.\nMotivo:`
+        : `Reemitir el acceso de ${row.nombreCompleto}: el código actual dejará de funcionar.\nMotivo:`,
+      inUse ? 'Sesión interrumpida' : 'Tarjeta extraviada',
+    );
+    if (reason === null) return;
+    const result = await credentialService.reissueCredential(eventId, row.credential.id, reason.trim() || undefined);
+    setReissued(result);
+    setNotice(`Se reemitió el acceso de ${row.nombreCompleto}.${isPresent(row) ? ' Habilítalo para que pueda ingresar.' : ''}`);
   });
 
   const enablePresent = () => run(async () => {
@@ -234,7 +258,10 @@ export function OnsiteApplicationPage() {
                           <td className='px-5 py-3'><CredentialStatus credential={row.credential} /></td>
                           <td className='px-5 py-3'><span className={`inline-flex rounded-md px-2.5 py-1 text-xs font-medium ${evaluationTone}`}>{evaluationLabel}</span></td>
                           <td className='px-5 py-3 text-right'>
-                            {canEnable(row) && <button type='button' onClick={() => enableOne(row)} disabled={busy || blockedDay} className='rounded-lg bg-[#0AADA8] px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-[#089490] disabled:opacity-50'>Habilitar</button>}
+                            <div className='flex justify-end gap-2'>
+                              {canReissue(row) && <button type='button' onClick={() => reissue(row)} disabled={busy} className='rounded-lg border border-[#D9E2EA] px-3 py-1.5 text-xs font-semibold text-[#334E68] hover:border-[#13A9A4] hover:text-[#087D79] disabled:opacity-50'>{row.credential.status === 'USED' ? 'Recuperar acceso' : 'Reemitir'}</button>}
+                              {canEnable(row) && <button type='button' onClick={() => enableOne(row)} disabled={busy || blockedDay} className='rounded-lg bg-[#0AADA8] px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-[#089490] disabled:opacity-50'>Habilitar</button>}
+                            </div>
                             {isPresent(row) && !row.credential && <span className='text-xs text-amber-700'>Sin acceso preparado</span>}
                           </td>
                         </tr>
@@ -245,7 +272,8 @@ export function OnsiteApplicationPage() {
               </div>
             )}
           </section>
-          <p className='mt-4 text-xs text-[#94A3B8]'>Se actualiza automáticamente cada 20 segundos. Cada marca de asistencia y cada habilitación quedan registradas con el usuario que la realizó.</p>
+          <p className='mt-4 text-xs text-[#94A3B8]'>Se actualiza automáticamente cada 20 segundos. Cada marca de asistencia, habilitación y recuperación queda registrada con el usuario que la realizó.</p>
+          {reissued && <IssuedCodesDialog result={reissued} eventName={event?.name} onClose={() => { setReissued(null); load(); }} />}
         </div>
       </main>
     </div>

@@ -17,6 +17,7 @@ const MESSAGES = {
   REVOKED: 'Este código fue anulado. Solicita uno nuevo al aplicador.',
   EXPIRED: 'Este código ya venció. Avisa al aplicador.',
   COMPLETED: 'Esta evaluación ya fue completada.',
+  OTHER_COMPUTER: 'Debes continuar la evaluación en la misma computadora donde la comenzaste. Avisa al aplicador.',
   ERROR: 'No se pudo conectar con el servidor. Comprueba la conexión e inténtalo de nuevo.',
 };
 
@@ -110,8 +111,17 @@ function WelcomeScreen({ access, onStart }) {
   );
 }
 
-/** Shown after the final submission. Says nothing about who just finished. */
-function FinishedScreen({ onReset }) {
+const END_COPY = {
+  finished: ['Evaluación enviada', 'Gracias. Tus respuestas quedaron registradas y la sesión se cerró.', '✓'],
+  closed: ['La sesión se cerró', 'Tus respuestas guardadas se conservan. Si necesitas continuar, avisa al aplicador.', '!'],
+};
+
+/**
+ * Shown after the final submission, or when a supervisor closed the
+ * session. Says nothing about who was using the computer.
+ */
+function EndScreen({ variant = 'finished', onReset }) {
+  const [title, text, icon] = END_COPY[variant];
   const [seconds, setSeconds] = useState(RESET_AFTER_SECONDS);
   useEffect(() => {
     if (seconds <= 0) {
@@ -125,9 +135,9 @@ function FinishedScreen({ onReset }) {
   return (
     <main className='mx-auto max-w-md px-5 py-16'>
       <section className='rounded-2xl border border-[#D9E2EA] bg-white p-9 text-center shadow-sm'>
-        <span className='mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-[#E8F7F6] text-xl text-[#0A8F8A]'>✓</span>
-        <h1 className='mt-6 font-display text-2xl font-bold text-[#10233A]'>Evaluación enviada</h1>
-        <p className='mt-3 text-sm leading-6 text-[#56677B]'>Gracias. Tus respuestas quedaron registradas y la sesión se cerró.</p>
+        <span className='mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-[#E8F7F6] text-xl text-[#0A8F8A]'>{icon}</span>
+        <h1 className='mt-6 font-display text-2xl font-bold text-[#10233A]'>{title}</h1>
+        <p className='mt-3 text-sm leading-6 text-[#56677B]'>{text}</p>
         <p className='mt-6 text-xs text-[#7C8AA0]' aria-live='polite'>Esta computadora volverá a la pantalla de inicio en {seconds} s.</p>
         <button type='button' onClick={onReset} className='mt-4 rounded-xl border border-[#D9E2EA] px-5 py-2.5 text-sm font-semibold text-[#334E68] hover:bg-[#F6F9FC]'>Volver al inicio ahora</button>
       </section>
@@ -179,6 +189,13 @@ export function OnsiteAccessPage() {
     setPhase('finished');
   };
 
+  // A supervisor revoked or replaced the code (or it expired) midway.
+  const handleClosed = () => {
+    clearSession();
+    setAccess(null);
+    setPhase('closed');
+  };
+
   const reset = () => {
     clearSession();
     setAccess(null);
@@ -192,9 +209,9 @@ export function OnsiteAccessPage() {
       {phase === 'code' && <CodeScreen onAccess={handleAccess} />}
       {phase === 'welcome' && access && <WelcomeScreen access={access} onStart={() => setPhase('evaluation')} />}
       {phase === 'evaluation' && access && (access.module === 'B'
-        ? <MacrocaseEvaluation source={macrocaseSource} onCompleted={handleCompleted} />
-        : <LikertQuestionnaire token={token} onCompleted={handleCompleted} />)}
-      {phase === 'finished' && <FinishedScreen onReset={reset} />}
+        ? <MacrocaseEvaluation source={macrocaseSource} onCompleted={handleCompleted} onClosed={handleClosed} />
+        : <LikertQuestionnaire token={token} onCompleted={handleCompleted} onClosed={handleClosed} />)}
+      {(phase === 'finished' || phase === 'closed') && <EndScreen key={phase} variant={phase} onReset={reset} />}
     </div>
   );
 }

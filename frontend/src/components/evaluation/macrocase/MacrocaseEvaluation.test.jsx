@@ -164,6 +164,16 @@ describe('MacrocaseEvaluation', () => {
     expect(screen.getByLabelText('Tu respuesta').value).toBe('Avisaría');
   });
 
+  test('tells the host page when the session is closed midway', async () => {
+    const onClosed = vi.fn();
+    const source = createLocalMacrocaseSource({ ...DEMO_MACROCASE, defaultTimeLimit: 0 });
+    source.advance = vi.fn(async () => ({ state: 'CANCELLED' }));
+    render(<MacrocaseEvaluation source={source} onClosed={onClosed} />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Comenzar →' }));
+    await waitFor(() => expect(onClosed).toHaveBeenCalledWith('CANCELLED'));
+  });
+
   test('shows a closed state instead of the macrocase when the access is no longer valid', async () => {
     const source = { getStage: vi.fn(async () => ({ state: 'EXPIRED' })), advance: vi.fn(), finalize: vi.fn() };
     render(<MacrocaseEvaluation source={source} />);

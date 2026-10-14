@@ -17,8 +17,11 @@ const OPTIONS = [
   'Totalmente de acuerdo',
 ];
 
-/** `onCompleted`: called once the evaluation was submitted (e.g. to reset a shared computer). */
-export function LikertQuestionnaire({ token, onCompleted }) {
+/**
+ * `onCompleted`: called once the evaluation was submitted (e.g. to reset a
+ * shared computer). `onClosed(state)`: the access stopped being valid.
+ */
+export function LikertQuestionnaire({ token, onCompleted, onClosed }) {
   const [questionIndex, setQuestionIndex] = useState(0);
   const [answers, setAnswers] = useState([]);
   const [selected, setSelected] = useState(null);
@@ -46,7 +49,8 @@ export function LikertQuestionnaire({ token, onCompleted }) {
     try {
       const result = await submitEvaluation(token, answers);
       if (result?.state !== 'COMPLETED') {
-        setSubmitError('Este acceso ya no permite enviar la evaluación.');
+        if (onClosed && result?.state) onClosed(result.state);
+        else setSubmitError('Este acceso ya no permite enviar la evaluación.');
         return;
       }
       setSubmittedAt(result.submittedAt || new Date().toISOString());

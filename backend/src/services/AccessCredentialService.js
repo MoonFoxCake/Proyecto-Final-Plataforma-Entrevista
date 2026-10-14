@@ -1,5 +1,5 @@
 const {
-  AUDIT_ACTIONS, CANDIDATE_STATUSES, CITATION_STATUSES, CREDENTIAL_STATUSES, MODULE_B_STATUSES, MODULES,
+  ACCESS_CHANNELS, AUDIT_ACTIONS, CANDIDATE_STATUSES, CITATION_STATUSES, CREDENTIAL_STATUSES, INVITATION_STATUSES, MODULE_B_STATUSES, MODULES,
 } = require('../utils/constants');
 const { ExternalServiceError, NotFoundError, ValidationError } = require('../utils/errors');
 const { isOnsite, modulesOf } = require('../utils/eventModality');
@@ -8,6 +8,8 @@ const { endOfAppointmentDay, generateAccessCode, hashAccessCode } = require('../
 const MAX_CODE_ATTEMPTS = 5;
 // Printable or usable: an assignment with one of these already has a code.
 const LIVE = [CREDENTIAL_STATUSES.GENERATED, CREDENTIAL_STATUSES.ENABLED];
+// Can still be revoked or replaced: printable, usable, or in use by an open evaluation.
+const REVOCABLE = [...LIVE, CREDENTIAL_STATUSES.USED];
 
 const byName = (a, b) => a.nombreCompleto.localeCompare(b.nombreCompleto, 'es', { sensitivity: 'base' });
 
@@ -30,9 +32,11 @@ const slug = (text = '') => text.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowe
  */
 class AccessCredentialService {
   constructor({
-    credentialRepo, auditRepo, candidateRepo, eventService, printableService, pepper, now = () => new Date(), generateCode = generateAccessCode,
+    credentialRepo, auditRepo, candidateRepo, eventService, printableService, invitationRepo, pepper,
+    now = () => new Date(), generateCode = generateAccessCode,
   }) {
     this.credentialRepo = credentialRepo;
+    this.invitationRepo = invitationRepo;
     this.auditRepo = auditRepo;
     this.candidateRepo = candidateRepo;
     this.eventService = eventService;
@@ -48,12 +52,20 @@ class AccessCredentialService {
     return credential.status;
   }
 
-  /** Each assignment's current (latest) credential, keyed `${candidateId}_${module}`. */
+  /**
+   * Each assignment's current credential, keyed `${candidateId}_${module}`:
+   * the one not replaced by another (creation time only breaks ties, since
+   * a replacement can share its predecessor's timestamp).
+   */
   static latestByAssignment(credentials, orgId) {
     const latest = new Map();
+    const rank = (credential) => [credential.replacedById ? 0 : 1, new Date(credential.createdAt).getTime()];
     for (const credential of credentials.filter((item) => item.orgId === orgId)) {
       const key = `${credential.candidateId}_${credential.module}`;
-      if (!latest.has(key) || new Date(credential.createdAt) > new Date(latest.get(key).createdAt)) latest.set(key, credential);
+      const current = latest.get(key);
+      const [replaced, created] = rank(credential);
+      const [currentReplaced, currentCreated] = current ? rank(current) : [-1, -Infinity];
+      if (replaced > currentReplaced || (replaced === currentReplaced && created > currentCreated)) latest.set(key, credential);
     }
     return latest;
   }
@@ -196,48 +208,87 @@ class AccessCredentialService {
   }
 
   /**
-   * Controlled replacement of one credential (e.g. a lost card): revokes it
-   * and issues a new code for the same assignment. The evaluation itself is
-   * not duplicated — it belongs to the candidate, not to the code.
+   * Controlled replacement of one credential: a lost card, or recovering an
+   * interrupted session (closed tab, crashed browser). Revokes the current
+   * code — ending its session if it had one — and issues a new code for the
+   * same assignment. The evaluation is not duplicated: it belongs to the
+   * candidate, not to the code, so saved answers are kept.
+   *
+   * Candidates cannot switch computers (D7): a code replacing one that was
+   * already used only works from the browser that used it.
    */
   async reissue(eventId, orgId, credentialId, actorUid, reason, paper) {
     this.requirePepper();
     const event = await this.requireOnsiteEvent(eventId, orgId);
     const credential = await this.requireCredential(credentialId, eventId, orgId);
     const now = this.now();
-    if (AccessCredentialService.effectiveStatus(credential, now) === CREDENTIAL_STATUSES.USED) {
-      throw new ValidationError('Esta credencial ya se utilizó para iniciar la evaluación: no se puede reemitir.');
-    }
     const candidate = await this.candidateRepo.findById(credential.candidateId);
     const eligibility = this.eligibility(event, candidate, credential.module, now);
     if (eligibility.problem) throw new ValidationError(`No se puede reemitir: ${eligibility.problem}`);
 
+    const wasUsed = AccessCredentialService.effectiveStatus(credential, now) === CREDENTIAL_STATUSES.USED;
     const result = await this.issueOne({
-      event, candidate, module: credential.module, eligibility, actorUid, now, replaceId: credential.id, reason,
+      event,
+      candidate,
+      module: credential.module,
+      eligibility,
+      actorUid,
+      now,
+      replaceId: credential.id,
+      reason,
+      requiredClientId: credential.usedByClient || credential.requiredClientId,
     });
+    if (wasUsed) await this.cancelSessions(credential, now, actorUid, reason || 'Reemitida');
     return this.withCards(event, { module: credential.module, issued: [result.issued], skipped: [], rejected: [] }, paper);
   }
 
-  /** Revokes a credential that has not been used, so its code stops working. */
+  /**
+   * Revokes a credential so its code stops working. A used one can be
+   * revoked too while its evaluation is still open: its session ends at the
+   * candidate's next step (e.g. suspected misuse).
+   */
   async revoke(eventId, orgId, credentialId, actorUid, reason) {
-    await this.requireOnsiteEvent(eventId, orgId);
+    const event = await this.requireOnsiteEvent(eventId, orgId);
+    const credential = await this.requireCredential(credentialId, eventId, orgId);
     const now = this.now();
+    const wasUsed = AccessCredentialService.effectiveStatus(credential, now) === CREDENTIAL_STATUSES.USED;
+    if (wasUsed) {
+      const candidate = await this.candidateRepo.findById(credential.candidateId);
+      const { problem } = this.eligibility(event, candidate, credential.module, now);
+      if (problem) throw new ValidationError(`No se puede revocar: ${problem}`);
+    }
     const updated = await this.credentialRepo.update(credentialId, (current) => {
       if (!current || current.eventId !== eventId || current.orgId !== orgId) throw new NotFoundError('Credencial no encontrada.');
-      if (!LIVE.includes(AccessCredentialService.effectiveStatus(current, now))) {
-        throw new ValidationError('Solo se pueden revocar credenciales generadas o habilitadas que no hayan vencido.');
+      if (!REVOCABLE.includes(AccessCredentialService.effectiveStatus(current, now))) {
+        throw new ValidationError('Solo se pueden revocar credenciales vigentes (generadas, habilitadas o en uso) que no hayan vencido.');
       }
       return {
         status: CREDENTIAL_STATUSES.REVOKED, revokedAt: now, revokedBy: actorUid, revokeReason: reason || '',
       };
     });
     await this.audit({ action: AUDIT_ACTIONS.CREDENTIAL_REVOKED, credential: updated, actorUid, at: now, reason });
+    if (wasUsed) await this.cancelSessions(updated, now, actorUid, reason || 'Revocada');
     return AccessCredentialService.toPublic(updated, now);
   }
 
   // ------------------------------------------------------------- internal
 
-  async issueOne({ event, candidate, module, eligibility, actorUid, now, replaceId = null, reason = '' }) {
+  /** Ends the open onsite session of a credential's evaluation, if any. */
+  async cancelSessions(credential, now, actorUid, reason) {
+    if (!this.invitationRepo) return;
+    const session = await this.invitationRepo.findActiveByCandidate(credential.candidateId, credential.eventId, credential.module);
+    if (!session || session.channel !== ACCESS_CHANNELS.ONSITE) return;
+    await this.invitationRepo.update(session.id, {
+      status: INVITATION_STATUSES.CANCELLED, cancelledAt: now, cancelledBy: actorUid, cancelReason: reason,
+    });
+    await this.audit({
+      action: AUDIT_ACTIONS.ONSITE_SESSION_CANCELLED, credential, actorUid, at: now, reason,
+    });
+  }
+
+  async issueOne({
+    event, candidate, module, eligibility, actorUid, now, replaceId = null, reason = '', requiredClientId,
+  }) {
     for (let attempt = 0; attempt < MAX_CODE_ATTEMPTS; attempt += 1) {
       const code = this.generateCode();
       let revokedCurrent = false;
@@ -252,6 +303,8 @@ class AccessCredentialService {
         appointmentStartsAt: eligibility.appointment.startsAt,
         createdAt: now,
         createdBy: actorUid,
+        // Same computer only (D7): set when replacing a code already used there.
+        requiredClientId,
       }, (current) => {
         const decision = this.decide(current, { replaceId, now, actorUid, reason });
         revokedCurrent = Boolean(decision.currentChanges);
@@ -294,12 +347,9 @@ class AccessCredentialService {
     if (current?.id !== replaceId) {
       throw new ValidationError('Esta credencial ya fue reemplazada por otra. Actualiza la lista.');
     }
-    if (status === CREDENTIAL_STATUSES.USED) {
-      throw new ValidationError('Esta credencial ya se utilizó para iniciar la evaluación: no se puede reemitir.');
-    }
     return {
       action: 'issue',
-      currentChanges: LIVE.includes(status)
+      currentChanges: REVOCABLE.includes(status)
         ? { status: CREDENTIAL_STATUSES.REVOKED, revokedAt: now, revokedBy: actorUid, revokeReason: reason || 'Reemitida' }
         : null,
     };

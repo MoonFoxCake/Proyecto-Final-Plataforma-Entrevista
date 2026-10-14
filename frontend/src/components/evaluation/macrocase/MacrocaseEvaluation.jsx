@@ -37,9 +37,10 @@ function ClosedPanel({ state }) {
  * and applies each action; for a real invitation that is the backend, which
  * stores the progress, so a reload resumes the same stage and answers can
  * never be changed after moving on. `onCompleted` is called once the final
- * submission went through.
+ * submission went through; `onClosed(state)` if the access stops being
+ * valid midway (cancelled, expired…).
  */
-export function MacrocaseEvaluation({ source, completedFootnote, onCompleted }) {
+export function MacrocaseEvaluation({ source, completedFootnote, onCompleted, onClosed }) {
   const [stage, setStage] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -60,6 +61,14 @@ export function MacrocaseEvaluation({ source, completedFootnote, onCompleted }) 
       .catch(() => active && setStage({ state: 'ERROR' }));
     return () => { active = false; };
   }, [source]);
+
+  // The access stopped being valid (e.g. a supervisor closed the session):
+  // the host page may take over instead of showing the closed panel.
+  const closedState = stage && !['VALID', 'COMPLETED', 'ERROR'].includes(stage.state) ? stage.state : null;
+  useEffect(() => {
+    if (closedState) onClosed?.(closedState);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [closedState]);
 
   // New stage on screen: start reading from the top.
   const stepKey = stage ? `${stage.step}:${stage.section?.id ?? ''}:${stage.question?.id ?? ''}` : '';

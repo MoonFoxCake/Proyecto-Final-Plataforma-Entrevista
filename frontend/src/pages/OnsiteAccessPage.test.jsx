@@ -12,7 +12,12 @@ vi.mock('../services/onsiteAccessService.js', () => ({
 vi.mock('../services/invitationService.js', () => ({ validateInvitationAccess: vi.fn() }));
 // The questionnaires have their own tests: here they only report completion.
 vi.mock('../components/evaluation/LikertQuestionnaire.jsx', () => ({
-  LikertQuestionnaire: ({ token, onCompleted }) => <button type='button' onClick={onCompleted}>Enviar cuestionario ({token})</button>,
+  LikertQuestionnaire: ({ token, onCompleted, onClosed }) => (
+    <>
+      <button type='button' onClick={onCompleted}>Enviar cuestionario ({token})</button>
+      <button type='button' onClick={() => onClosed('CANCELLED')}>Sesión cancelada</button>
+    </>
+  ),
 }));
 vi.mock('../components/evaluation/macrocase/MacrocaseEvaluation.jsx', () => ({
   MacrocaseEvaluation: ({ onCompleted }) => <button type='button' onClick={onCompleted}>Enviar macrocaso</button>,
@@ -89,6 +94,7 @@ test.each([
   ['REVOKED', 'fue anulado'],
   ['EXPIRED', 'ya venció'],
   ['COMPLETED', 'ya fue completada'],
+  ['OTHER_COMPUTER', 'en la misma computadora donde la comenzaste'],
 ])('explains a %s code without revealing anything about the candidate', async (state, text) => {
   loginWithCode.mockResolvedValue({ state });
   render(<OnsiteAccessPage />);
@@ -104,6 +110,22 @@ test('too many attempts: tells how long to wait', async () => {
   typeCode('K7M2P9QX4R');
   fireEvent.click(screen.getByRole('button', { name: 'Ingresar' }));
   expect((await screen.findByRole('alert')).textContent).toMatch(/Espera 4 minutos/);
+});
+
+test('if a supervisor closes the session midway, the computer shows a neutral notice and forgets it', async () => {
+  loginWithCode.mockResolvedValue(ACCESS);
+  render(<OnsiteAccessPage />);
+  typeCode('K7M2P9QX4R');
+  fireEvent.click(screen.getByRole('button', { name: 'Ingresar' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Comenzar evaluación →' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Sesión cancelada' }));
+
+  expect(await screen.findByRole('heading', { name: 'La sesión se cerró' })).toBeTruthy();
+  expect(screen.getByText(/Tus respuestas guardadas se conservan/)).toBeTruthy();
+  expect(screen.queryByText(/María López/)).toBeNull();
+  expect(clearSession).toHaveBeenCalled();
+  fireEvent.click(screen.getByRole('button', { name: 'Volver al inicio ahora' }));
+  expect(await screen.findByRole('heading', { name: 'Ingresa tu código de acceso' })).toBeTruthy();
 });
 
 test('a reload resumes the open session of this tab', async () => {

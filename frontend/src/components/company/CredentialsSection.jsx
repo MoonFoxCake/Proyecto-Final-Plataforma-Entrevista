@@ -90,7 +90,8 @@ export function CredentialsSection({ event, candidatesVersion = '' }) {
   });
 
   const revoke = (row) => run(async () => {
-    const reason = window.prompt(`Revocar el acceso de ${row.nombreCompleto}. Su código dejará de funcionar.\nMotivo (opcional):`, '');
+    const inUse = row.credential.status === 'USED';
+    const reason = window.prompt(`Revocar el acceso de ${row.nombreCompleto}. Su código dejará de funcionar${inUse ? ' y su evaluación en curso se cerrará (las respuestas guardadas se conservan)' : ''}.\nMotivo (opcional):`, '');
     if (reason === null) return;
     await credentialService.revokeCredential(event.id, row.credential.id, reason.trim() || undefined);
     await load();
@@ -98,7 +99,13 @@ export function CredentialsSection({ event, candidatesVersion = '' }) {
   });
 
   const reissue = (row) => run(async () => {
-    const reason = window.prompt(`Reemitir el acceso de ${row.nombreCompleto}: el código actual dejará de funcionar y se generará uno nuevo para imprimir.\nMotivo (opcional):`, 'Tarjeta extraviada');
+    const inUse = row.credential.status === 'USED';
+    const reason = window.prompt(
+      inUse
+        ? `Recuperar la evaluación de ${row.nombreCompleto}: su sesión actual se cerrará y se generará un código nuevo que solo funcionará en la misma computadora. Sus respuestas guardadas se conservan.\nMotivo (opcional):`
+        : `Reemitir el acceso de ${row.nombreCompleto}: el código actual dejará de funcionar y se generará uno nuevo.\nMotivo (opcional):`,
+      inUse ? 'Sesión interrumpida' : 'Tarjeta extraviada',
+    );
     if (reason === null) return;
     const result = await credentialService.reissueCredential(event.id, row.credential.id, reason.trim() || undefined, paper);
     setIssuedResult(result);
@@ -197,12 +204,13 @@ export function CredentialsSection({ event, candidatesVersion = '' }) {
                       {!credential && !row.canIssue && row.blockedReason && <span>No disponible: {row.blockedReason}</span>}
                       {credential && LIVE.includes(credential.status) && <span>Válido hasta {formatDateTime(credential.expiresAt)}</span>}
                       {credential?.status === 'REVOKED' && <span>Revocado el {formatDateTime(credential.revokedAt)}{credential.revokeReason ? ` · ${credential.revokeReason}` : ''}</span>}
-                      {credential?.status === 'USED' && <span>Utilizado el {formatDateTime(credential.usedAt)}</span>}
+                      {credential?.status === 'USED' && <span>Utilizado el {formatDateTime(credential.usedAt)}{row.canIssue ? ' · evaluación en curso' : ''}</span>}
+                      {credential?.requiredClientId && LIVE.includes(credential.status) && <span className='block'>Solo en la computadora donde comenzó</span>}
                       {credential?.status === 'EXPIRED' && <span>Venció el {formatDateTime(credential.expiresAt)}</span>}
                     </td>
                     <td className='px-5 py-3 text-right'>
                       <div className='flex justify-end gap-2'>
-                        {credential && LIVE.includes(credential.status) && (
+                        {credential && (LIVE.includes(credential.status) || (credential.status === 'USED' && row.canIssue)) && (
                           <>
                             <button type='button' onClick={() => reissue(row)} disabled={busy || !row.canIssue} className='rounded-lg border border-[#D9E2EA] px-3 py-1.5 text-xs font-semibold text-[#334E68] hover:border-[#13A9A4] hover:text-[#087D79] disabled:opacity-50'>Reemitir</button>
                             <button type='button' onClick={() => revoke(row)} disabled={busy} className='rounded-lg px-3 py-1.5 text-xs font-semibold text-[#B42318] hover:bg-red-50 disabled:opacity-50'>Revocar</button>

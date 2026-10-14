@@ -179,8 +179,8 @@ igualmente que la cliente las confirme.
 | D4 | ¿La narrativa de la sección sigue visible mientras se responden sus preguntas? | ✅ Decidido: el texto de la sección se oculta al pasar a sus preguntas. | Fase 2 |
 | D5 | ¿Se mantiene el límite de tiempo por pregunta (`defaultTimeLimit`) en el modelo por secciones? | ✅ Decidido: se mantiene por pregunta. | Fase 2 |
 | D6 | ¿Cuánto tiempo permanecen habilitadas las credenciales? | ✅ Decidido (2026-10-12): válidas hasta que concluye la jornada de la cita (23:59:59, hora de Guatemala). | Fase 4 |
-| D7 | ¿Pueden cambiar de computadora? | Propuesta: solo mediante revocación y reemisión por el supervisor. | Fase 8 |
-| D8 | ¿El supervisor puede pausar una evaluación? | Propuesta: no en este incremento; la revocación y reemisión cubre los incidentes. | Fase 8 |
+| D7 | ¿Pueden cambiar de computadora? | ✅ Decidido (2026-10-13): no, por ahora. Una credencial que reemplaza a otra ya usada solo funciona en el navegador donde se usó la anterior. | Fase 8 |
+| D8 | ¿El supervisor puede pausar una evaluación? | ✅ Decidido (2026-10-13): no, por ahora. La revocación y reemisión cubre los incidentes. | Fase 8 |
 | D9 | ¿Quién puede operar la aplicación presencial? | ✅ Decidido (2026-10-13): cualquier usuario `company` de la organización puede ser aplicador. | Fase 6 |
 | D10 | ¿Cómo se manejan ausentes o reprogramados? | ✅ Decidido (2026-10-13): el ausente conserva su credencial `GENERATED` hasta que expire; la reprogramación revoca y reemite. | Fase 6 |
 | D11 | ¿Los módulos A y B en citas presenciales separadas? | Afecta al modelo `modules` y a las citaciones. Hoy el B exige el A publicado y revisado. | Fase 3 |

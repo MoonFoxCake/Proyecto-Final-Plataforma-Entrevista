@@ -81,9 +81,14 @@ class OnsiteAccessService {
     const { candidate, event } = await this.assignment(credential);
     if (!candidate || !event) return { state: 'INVALID' };
     if (this.completed(candidate, credential.module)) return { state: 'COMPLETED' };
+    // A code replacing one already used works only on that computer (D7).
+    if (credential.requiredClientId && credential.requiredClientId !== clientId) {
+      await this.audit(credential, now, AUDIT_ACTIONS.ONSITE_LOGIN_OTHER_COMPUTER);
+      return { state: 'OTHER_COMPUTER' };
+    }
 
     try {
-      await this.consume(credential, now);
+      await this.consume(credential, now, clientId);
     } catch (error) {
       if (error.accessState) return { state: error.accessState };
       throw error;
@@ -91,13 +96,13 @@ class OnsiteAccessService {
 
     let token;
     try {
-      token = await this.openSession(credential, now);
+      token = await this.openSession(credential, now, clientId);
     } catch (error) {
       // No session could be opened: give the code back so it can be retried.
-      await this.credentialRepo.update(credential.id, () => ({ status: CREDENTIAL_STATUSES.ENABLED, usedAt: null })).catch(() => {});
+      await this.credentialRepo.update(credential.id, () => ({ status: CREDENTIAL_STATUSES.ENABLED, usedAt: null, usedByClient: null })).catch(() => {});
       throw error;
     }
-    await this.audit(credential, now);
+    await this.audit(credential, now, AUDIT_ACTIONS.ONSITE_SESSION_STARTED);
 
     const access = await this.invitationService.validateAccess(token);
     return access.state === 'VALID' ? { ...access, token } : access;
@@ -122,14 +127,18 @@ class OnsiteAccessService {
       : candidate.moduleB?.status === MODULE_B_STATUSES.COMPLETED;
   }
 
-  /** ENABLED → USED atomically: two logins with the same code cannot both succeed. */
-  async consume(credential, now) {
+  /**
+   * ENABLED → USED atomically: two logins with the same code cannot both
+   * succeed. Remembers which browser used it, so a replacement code is
+   * bound to the same computer.
+   */
+  async consume(credential, now, clientId) {
     await this.credentialRepo.update(credential.id, (current) => {
       const status = AccessCredentialService.effectiveStatus(current, now);
       if (status !== CREDENTIAL_STATUSES.ENABLED) {
         throw Object.assign(new ValidationError('El acceso ya no está disponible.'), { accessState: STATE_BY_STATUS[status] || 'INVALID' });
       }
-      return { status: CREDENTIAL_STATUSES.USED, usedAt: now };
+      return { status: CREDENTIAL_STATUSES.USED, usedAt: now, usedByClient: clientId };
     });
   }
 
@@ -138,7 +147,7 @@ class OnsiteAccessService {
    * the appointment day). Any other open session for the same evaluation is
    * cancelled: only one at a time.
    */
-  async openSession(credential, now) {
+  async openSession(credential, now, clientId) {
     const previous = await this.invitationRepo.findActiveByCandidate(credential.candidateId, credential.eventId, credential.module);
     if (previous) {
       await this.invitationRepo.update(previous.id, { status: INVITATION_STATUSES.CANCELLED, cancelledAt: now });
@@ -151,6 +160,7 @@ class OnsiteAccessService {
       module: credential.module,
       channel: ACCESS_CHANNELS.ONSITE,
       credentialId: credential.id,
+      clientId,
       tokenHash: hashToken(token),
       status: INVITATION_STATUSES.ACTIVE,
       availableAt: now,
@@ -159,7 +169,8 @@ class OnsiteAccessService {
     return token;
   }
 
-  async audit(credential, now) {
+  /** `recovery`: the code replaces another one, i.e. an interrupted evaluation resumes. */
+  async audit(credential, now, action) {
     try {
       await this.auditRepo.record({
         orgId: credential.orgId,
@@ -167,12 +178,13 @@ class OnsiteAccessService {
         candidateId: credential.candidateId,
         module: credential.module,
         credentialId: credential.id,
-        action: AUDIT_ACTIONS.ONSITE_SESSION_STARTED,
+        action,
         actorUid: null,
         at: now,
+        ...(credential.replacesId ? { recovery: true, replacesId: credential.replacesId } : {}),
       });
     } catch (error) {
-      console.error(`No se pudo registrar el inicio de sesión de la credencial ${credential.id}:`, error.message);
+      console.error(`No se pudo registrar ${action} de la credencial ${credential.id}:`, error.message);
     }
   }
 }
