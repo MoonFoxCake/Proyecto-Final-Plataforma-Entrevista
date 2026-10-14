@@ -130,7 +130,7 @@ describe('InvitationService · onsite events', () => {
       expect(result).toMatchObject({ sent: 1, failed: 0 });
       expect(emailService.sendCitation).toHaveBeenCalledWith(expect.objectContaining({
         module: 'B',
-        appointment: { venue: 'Campus Norte', room: 'Sala 3', startsAt: new Date('2026-11-20T15:00:00.000Z'), endsAt: new Date('2026-11-20T17:00:00.000Z'), instructions: '' },
+        appointment: { venue: 'Campus Norte', room: 'Sala 3', startsAt: new Date('2026-11-20T15:00:00.000Z'), endsAt: new Date('2026-11-20T17:00:00.000Z'), entryWindowMinutes: 30, instructions: '' },
       }));
       expect(invitationRepo.data).toEqual([]);
       const stored = await candidateRepo.findById(maria.id);

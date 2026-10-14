@@ -25,6 +25,18 @@ export function formatSession(session) {
   return endsAt ? `${date} · ${time(startsAt)} – ${time(endsAt)}` : `${date} · ${time(startsAt)}`;
 }
 
+// Mirrors DEFAULT_ENTRY_WINDOW_MINUTES (backend): sessions stored before the field existed.
+const DEFAULT_ENTRY_WINDOW_MINUTES = 30;
+
+/** "De 8:00 a. m. a 8:30 a. m. (30 min)": when the access codes let candidates begin. */
+export function formatEntryWindow(session) {
+  const startsAt = toDate(session?.startsAt);
+  if (!startsAt) return '—';
+  const minutes = session.entryWindowMinutes ?? DEFAULT_ENTRY_WINDOW_MINUTES;
+  const time = (value) => new Intl.DateTimeFormat('es-GT', { timeStyle: 'short' }).format(value);
+  return `De ${time(startsAt)} a ${time(new Date(startsAt.getTime() + minutes * 60000))} (${minutes} min)`;
+}
+
 // Resend `last_event` values.
 const DELIVERY_LABELS = {
   sent: ['Enviada', 'info'],

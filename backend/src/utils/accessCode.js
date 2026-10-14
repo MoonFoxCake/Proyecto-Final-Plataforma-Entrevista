@@ -58,6 +58,30 @@ function endOfAppointmentDay(startsAt) {
 /** Whether `now` falls on the appointment's day (appointment time zone). */
 const isAppointmentDay = (startsAt, now) => appointmentDay(startsAt) === appointmentDay(now);
 
+// Minutes after the start of the appointment during which a code can be used
+// to begin the evaluation, for appointments stored before the field existed.
+const DEFAULT_ENTRY_WINDOW_MINUTES = 30;
+
+/**
+ * When the codes of an appointment work: from its start, for its entry
+ * window. The window only limits beginning; a session already open
+ * continues after it closes.
+ *
+ * @returns {{ opensAt: Date, closesAt: Date, minutes: number }}
+ */
+function entryWindow(appointment) {
+  const minutes = appointment?.entryWindowMinutes ?? DEFAULT_ENTRY_WINDOW_MINUTES;
+  const opensAt = new Date(appointment.startsAt);
+  return { opensAt, closesAt: new Date(opensAt.getTime() + minutes * 60 * 1000), minutes };
+}
+
+/** 'PENDING' before the window, 'OPEN' during it, 'CLOSED' after it. */
+function entryWindowState(appointment, now) {
+  const { opensAt, closesAt } = entryWindow(appointment);
+  if (now < opensAt) return 'PENDING';
+  return now < closesAt ? 'OPEN' : 'CLOSED';
+}
+
 module.exports = {
   ALPHABET,
   CODE_LENGTH,
@@ -68,4 +92,7 @@ module.exports = {
   hashAccessCode,
   endOfAppointmentDay,
   isAppointmentDay,
+  DEFAULT_ENTRY_WINDOW_MINUTES,
+  entryWindow,
+  entryWindowState,
 };

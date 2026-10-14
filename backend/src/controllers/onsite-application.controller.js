@@ -25,20 +25,6 @@ class OnsiteApplicationController {
       next(error);
     }
   };
-
-  enable = async (req, res, next) => {
-    try {
-      const result = await this.onsiteApplicationService.enable(
-        req.params.eventId,
-        req.user.orgId,
-        { module: req.body.modulo, candidateIds: req.body.candidateIds },
-        req.user.uid
-      );
-      res.json({ data: result });
-    } catch (error) {
-      next(error);
-    }
-  };
 }
 
 module.exports = OnsiteApplicationController;

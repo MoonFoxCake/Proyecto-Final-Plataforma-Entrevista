@@ -5,6 +5,7 @@ import * as credentialService from '../../services/credentialService.js';
 import { CredentialStatus, LIVE_STATUSES } from './CredentialStatus.jsx';
 
 const formatDateTime = (value) => (value ? new Intl.DateTimeFormat('es-GT', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)) : '');
+const formatTime = (value) => (value ? new Intl.DateTimeFormat('es-GT', { timeStyle: 'short' }).format(new Date(value)) : '');
 const errorMessage = (error, fallback) => error.response?.data?.error?.message || fallback;
 
 /** A row can get a new code if it has none that is still printable, usable or in use. */
@@ -93,8 +94,8 @@ export function OnsitePrepareStage({ event, module, summary, loaded, reload, not
         <summary className='cursor-pointer font-semibold text-[#334E68] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0AADA8]/40'>Cómo funcionan los accesos</summary>
         <ul className='mt-3 list-disc space-y-1.5 pl-5 leading-6'>
           <li>Los códigos y las hojas de acceso (PDF) solo se entregan al generarlos: no se guardan en el sistema.</li>
-          <li>Cada código sirve una sola vez y vence al terminar el día de la cita.</li>
-          <li>No funciona hasta que el aplicador lo habilita en la sede, después de verificar la identidad del candidato.</li>
+          <li>Cada código sirve una sola vez. Se activa solo a la hora de inicio de la cita y permite comenzar durante la ventana de inicio configurada.</li>
+          <li>Quien ya comenzó puede terminar aunque la ventana cierre. Una sesión interrumpida se recupera en la etapa Aplicar, en la misma computadora.</li>
           <li>Si se pierde una hoja, reemite ese acceso: el código anterior deja de funcionar.</li>
         </ul>
       </details>
@@ -129,10 +130,11 @@ export function OnsitePrepareStage({ event, module, summary, loaded, reload, not
                       )}
                     </td>
                     <td className='px-5 py-3 font-medium text-[#101828]'>{row.nombreCompleto}</td>
-                    <td className='px-5 py-3'><CredentialStatus credential={credential} /></td>
+                    <td className='px-5 py-3'><CredentialStatus credential={credential} accessWindow={row.accessWindow} /></td>
                     <td className='hidden px-5 py-3 text-xs text-[#64748B] md:table-cell'>
                       {!credential && !row.canIssue && row.blockedReason && <span>No disponible: {row.blockedReason}</span>}
-                      {live && <span>Válido hasta {formatDateTime(credential.expiresAt)}</span>}
+                      {live && credential.recovery && <span>Válido hasta {formatDateTime(credential.expiresAt)}</span>}
+                      {live && !credential.recovery && row.accessWindow && <span>Se puede usar de {formatDateTime(row.accessWindow.opensAt)} a {formatTime(row.accessWindow.closesAt)}</span>}
                       {credential?.status === 'REVOKED' && <span>Revocado el {formatDateTime(credential.revokedAt)}{credential.revokeReason ? ` · ${credential.revokeReason}` : ''}</span>}
                       {credential?.status === 'USED' && <span>En uso desde {formatDateTime(credential.usedAt)}</span>}
                       {credential?.status === 'EXPIRED' && <span>Venció el {formatDateTime(credential.expiresAt)}</span>}
@@ -141,7 +143,7 @@ export function OnsitePrepareStage({ event, module, summary, loaded, reload, not
                     <td className='px-5 py-3'>
                       {live && (
                         <div className='flex justify-end gap-2'>
-                          <button type='button' onClick={() => reissue(row)} disabled={busy || !row.canIssue} className='rounded-lg border border-[#D9E2EA] px-3 py-1.5 text-xs font-semibold text-[#334E68] hover:border-[#13A9A4] hover:text-[#087D79] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0AADA8]/40 disabled:opacity-50'>Reemitir</button>
+                          <button type='button' onClick={() => reissue(row)} disabled={busy || (!row.canIssue && !credential.recovery)} className='rounded-lg border border-[#D9E2EA] px-3 py-1.5 text-xs font-semibold text-[#334E68] hover:border-[#13A9A4] hover:text-[#087D79] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0AADA8]/40 disabled:opacity-50'>Reemitir</button>
                           <button type='button' onClick={() => revoke(row)} disabled={busy} className='rounded-lg px-3 py-1.5 text-xs font-semibold text-[#B42318] hover:bg-red-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-300 disabled:opacity-50'>Revocar</button>
                         </div>
                       )}

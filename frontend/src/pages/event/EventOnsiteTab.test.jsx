@@ -13,7 +13,7 @@ vi.mock('../../services/credentialService.js', () => ({
   reissueCredential: vi.fn(),
   getAttendanceSheet: vi.fn(),
 }));
-vi.mock('../../services/onsiteService.js', () => ({ getRoster: vi.fn(), setAttendance: vi.fn(), enableCredentials: vi.fn() }));
+vi.mock('../../services/onsiteService.js', () => ({ getRoster: vi.fn(), setAttendance: vi.fn() }));
 vi.mock('../../utils/download.js', () => ({ saveFile: vi.fn(), base64ToBlob: vi.fn((base64, type) => ({ base64, type })) }));
 vi.mock('../../components/company/CompanySidebar.jsx', () => ({ CompanySidebar: () => <nav aria-label='Menú' /> }));
 
@@ -24,10 +24,12 @@ const PREPARE_ROWS = [
   { candidateId: 'c3', nombreCompleto: 'Zoe Ruiz', canIssue: true, credential: null },
   { candidateId: 'c4', nombreCompleto: 'Ya Evaluada', canIssue: false, blockedReason: 'ya completó el Módulo A', credential: null },
 ];
-const counts = { total: 4, prepared: 1, enabled: 0, used: 0, revoked: 0, expired: 0, pending: 3 };
+const counts = { total: 4, prepared: 1, used: 0, revoked: 0, expired: 0, pending: 3 };
+// 8:00 – 8:30 a. m. in Guatemala.
+const windowAt = (state) => ({ opensAt: '2026-11-05T14:00:00.000Z', closesAt: '2026-11-05T14:30:00.000Z', minutes: 30, state });
 const issued = (items) => ({ module: 'A', issued: items.map((item) => ({ module: 'A', expiresAt: EXPIRES, appointment: SESSION, ...item })), skipped: [], rejected: [], cardsPdf: { fileName: 'credenciales-acceso.pdf', contentType: 'application/pdf', base64: 'JVBERi0=' } });
 
-const rosterRow = (overrides) => ({ appointmentAt: SESSION.startsAt, attendance: null, credential: { id: `cred-${overrides.candidateId}`, status: 'GENERATED', expiresAt: EXPIRES }, evaluation: 'PENDING', ...overrides });
+const rosterRow = (overrides) => ({ appointmentAt: SESSION.startsAt, accessWindow: windowAt('OPEN'), attendance: null, credential: { id: `cred-${overrides.candidateId}`, status: 'GENERATED', expiresAt: EXPIRES }, evaluation: 'PENDING', ...overrides });
 const ROSTER = [
   rosterRow({ candidateId: 'c1', nombreCompleto: 'Ana López', cedula: '100', attendance: { status: 'PRESENT', markedAt: '2026-11-05T14:05:00.000Z' } }),
   rosterRow({ candidateId: 'c2', nombreCompleto: 'Bruno Díaz', cedula: '200' }),
@@ -43,7 +45,7 @@ beforeEach(() => {
   eventService.getEvent.mockResolvedValue(ONSITE_EVENT);
   eventService.getEventCandidates.mockResolvedValue([]);
   credentialService.getCredentials.mockResolvedValue({ modules: [{ module: 'A', rows: PREPARE_ROWS, counts }, { module: 'B', rows: [], counts: { ...counts, total: 0, pending: 0 } }] });
-  onsiteService.getRoster.mockResolvedValue({ module: 'A', isAppointmentDay: true, rows: ROSTER, counts: { cited: 4, present: 2, enabled: 0, inProgress: 1, completed: 1 } });
+  onsiteService.getRoster.mockResolvedValue({ module: 'A', isAppointmentDay: true, accessWindow: windowAt('OPEN'), rows: ROSTER, counts: { cited: 4, present: 2, withCode: 3, inProgress: 1, completed: 1 } });
 });
 
 describe('stage navigation', () => {
@@ -123,19 +125,35 @@ describe('2 · organize', () => {
 });
 
 describe('3 · apply', () => {
-  test('marks attendance after the identity check and enables only present candidates', async () => {
+  test('nothing to enable: the codes are active during the window; attendance is only a record', async () => {
     onsiteService.setAttendance.mockResolvedValue({ status: 'PRESENT' });
-    onsiteService.enableCredentials.mockResolvedValue({ module: 'A', enabled: [{ candidateId: 'c1', nombreCompleto: 'Ana López' }], skipped: [] });
     renderEvent('/company/events/event-1/presencial?etapa=aplicar');
 
     const bruno = (await screen.findByText('Bruno Díaz')).closest('tr');
+    expect(screen.getByText(/Accesos activos: los candidatos pueden comenzar hasta las 8:30/)).toBeTruthy();
+    expect(within(bruno).getByText(/Activo hasta las 8:30/)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Habilitar/ })).toBeNull();
+
     fireEvent.click(within(bruno).getByRole('button', { name: 'Marcar presente' }));
     expect(window.confirm.mock.calls[0][0]).toBe('¿Verificaste la identidad de Bruno Díaz con su documento (cédula 200)?');
     await waitFor(() => expect(onsiteService.setAttendance).toHaveBeenCalledWith('event-1', 'A', 'c2', true));
+    expect(await screen.findByText('Bruno Díaz quedó marcado como presente.')).toBeTruthy();
+  });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Habilitar presentes (1)' }));
-    await waitFor(() => expect(onsiteService.enableCredentials).toHaveBeenCalledWith('event-1', 'A', ['c1']));
-    expect(await screen.findByText('Se habilitó el acceso de 1 candidato(s).')).toBeTruthy();
+  test('before and after the window the applicator sees when the codes work', async () => {
+    const roster = (state) => ({ module: 'A', isAppointmentDay: true, accessWindow: windowAt(state), rows: ROSTER.map((row) => ({ ...row, accessWindow: windowAt(state) })), counts: {} });
+    onsiteService.getRoster.mockResolvedValue(roster('PENDING'));
+    const { unmount } = renderEvent('/company/events/event-1/presencial?etapa=aplicar');
+    expect(await screen.findByText(/se activan solos a las 8:00.*hasta las 8:30/)).toBeTruthy();
+    expect(within(screen.getByText('Bruno Díaz').closest('tr')).getByText(/Se activa a las 8:00/)).toBeTruthy();
+    unmount();
+
+    onsiteService.getRoster.mockResolvedValue(roster('CLOSED'));
+    renderEvent('/company/events/event-1/presencial?etapa=aplicar');
+    expect(await screen.findByText(/La ventana de inicio ya cerró \(terminó a las 8:30/)).toBeTruthy();
+    expect(within(screen.getByText('Bruno Díaz').closest('tr')).getByText('Sin usar · ventana cerrada')).toBeTruthy();
+    // A session in progress can still be recovered.
+    expect(within(screen.getByText('Carla Méndez').closest('tr')).getByRole('button', { name: 'Recuperar acceso' })).toBeTruthy();
   });
 
   test('recovers an interrupted session only for evaluations in progress', async () => {

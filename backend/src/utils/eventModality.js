@@ -1,4 +1,5 @@
 const { MODALITIES, MODULES } = require('./constants');
+const { DEFAULT_ENTRY_WINDOW_MINUTES } = require('./accessCode');
 
 /**
  * Reading an event's modality and modules. Events created before these
@@ -21,6 +22,7 @@ function toAppointment(citation) {
     room: citation.ubicacion.trim(),
     startsAt: new Date(citation.fechaHoraInicio),
     endsAt: new Date(citation.fechaHoraFin),
+    entryWindowMinutes: citation.ventanaInicioMinutos ?? DEFAULT_ENTRY_WINDOW_MINUTES,
     instructions: citation.indicaciones?.trim() || '',
   };
 }

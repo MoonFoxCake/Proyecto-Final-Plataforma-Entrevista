@@ -1,4 +1,5 @@
 const { ExternalServiceError } = require('../utils/errors');
+const { entryWindow } = require('../utils/accessCode');
 
 const esc = (value = '') => String(value).replaceAll('&', '&amp;').replaceAll('<', '&lt;')
   .replaceAll('>', '&gt;').replaceAll(/\x22/g, '&quot;').replaceAll(/\x27/g, '&#039;');
@@ -66,6 +67,7 @@ class ResendEmailService {
       event.position ? row('Puesto', event.position) : '',
       row('Fecha', formatDate(appointment.startsAt)),
       row('Horario', `${formatTime(appointment.startsAt)} a ${formatTime(appointment.endsAt)}`),
+      row('Inicio de la evaluación', `de ${formatTime(appointment.startsAt)} a ${formatTime(entryWindow(appointment).closesAt)}`),
       row('Sede', appointment.venue),
       row('Ubicación', appointment.room),
     ].join('');
@@ -75,7 +77,7 @@ class ResendEmailService {
     const intro = isModuleB
       ? `${esc(company)} te cita a la segunda etapa presencial del proceso:`
       : `${esc(company)} te cita a una evaluación presencial:`;
-    const html = layout(isModuleB ? 'CITACIÓN · SEGUNDA ETAPA' : 'CITACIÓN PRESENCIAL', `<h1>Hola, ${esc(candidate.nombreCompleto)}.</h1><p>${intro}</p><div style='background:#f4f8fb;border-radius:12px;padding:18px;margin:18px 0'><table style='border-collapse:collapse;font-size:14px'>${details}</table></div>${instructions}<p style='margin-top:18px'>Llega con anticipación y lleva un documento de identidad: se verificará tu identidad antes de comenzar. Tus datos de acceso a la evaluación se te entregarán en la sede.</p><p style='margin-top:24px;color:#718096;font-size:13px'>Este correo es solo una citación: no contiene enlaces, contraseñas ni códigos de acceso.</p>`);
+    const html = layout(isModuleB ? 'CITACIÓN · SEGUNDA ETAPA' : 'CITACIÓN PRESENCIAL', `<h1>Hola, ${esc(candidate.nombreCompleto)}.</h1><p>${intro}</p><div style='background:#f4f8fb;border-radius:12px;padding:18px;margin:18px 0'><table style='border-collapse:collapse;font-size:14px'>${details}</table></div>${instructions}<p style='margin-top:18px'>Llega con anticipación y lleva un documento de identidad. Solo podrás iniciar la evaluación dentro del horario de inicio indicado. Tus datos de acceso a la evaluación se te entregarán en la sede.</p><p style='margin-top:24px;color:#718096;font-size:13px'>Este correo es solo una citación: no contiene enlaces, contraseñas ni códigos de acceso.</p>`);
 
     return this.send({
       to: candidate.correo,

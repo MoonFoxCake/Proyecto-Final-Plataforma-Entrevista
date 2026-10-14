@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useOutletContext } from 'react-router-dom';
 import { Button } from '../../components/ui';
 import * as credentialService from '../../services/credentialService.js';
-import { formatSession } from '../../utils/eventModality.js';
+import { formatEntryWindow, formatSession } from '../../utils/eventModality.js';
 import { formatDateTime, isToday, nextAction } from './eventState.js';
 
 function Fact({ label, children }) {
@@ -71,6 +71,7 @@ export function EventSummaryTab() {
           {state.onsite ? (
             <>
               <Fact label='Fecha y horario'>{formatSession(event?.onsite)}</Fact>
+              <Fact label='Ventana de inicio'>{formatEntryWindow(event?.onsite)}</Fact>
               <Fact label='Sede'>{event?.onsite?.venue || '—'}</Fact>
               <Fact label='Ubicación'>{event?.onsite?.room || '—'}</Fact>
             </>

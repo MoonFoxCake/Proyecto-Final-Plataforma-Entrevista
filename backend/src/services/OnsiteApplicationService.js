@@ -11,16 +11,16 @@ const formatDay = (value) => new Intl.DateTimeFormat('es-GT', { dateStyle: 'long
 
 /**
  * The applicator's side of an onsite evaluation, on the day of the
- * appointment: the roster of cited candidates, marking who is present
- * (after checking their identity) and enabling their access codes.
+ * appointment: the roster of cited candidates, with when their codes work,
+ * and marking who is present.
  *
  * - Any company user of the organization can act as applicator (D9); the
  *   event must belong to their organization.
- * - A code is only enabled for a candidate marked present: absent
- *   candidates keep their code unused until it expires (D10).
- * - Attendance and enabling are only accepted on the appointment's day, so
- *   a code cannot be enabled days before and used from anywhere.
- * - Every mark and every enabling records who did it and when.
+ * - Codes are not enabled by hand: each one works by itself from the start
+ *   of the appointment, during its entry window. Attendance is the
+ *   applicator's own record and does not gate access.
+ * - Attendance is only accepted on the appointment's day, and every mark
+ *   records who did it and when.
  */
 class OnsiteApplicationService {
   constructor({
@@ -35,7 +35,7 @@ class OnsiteApplicationService {
 
   /**
    * Candidates cited to a module (or holding a code for it), alphabetical,
-   * with attendance, access and evaluation status, and counts.
+   * with attendance, access window, access and evaluation status, and counts.
    */
   async roster(eventId, orgId, module) {
     const event = await this.requireOnsiteEvent(eventId, orgId, module);
@@ -52,12 +52,14 @@ class OnsiteApplicationService {
         const citation = module === MODULES.A ? candidate.citation : candidate.moduleB?.citation;
         if (citation?.status !== CITATION_STATUSES.SENT && !credential) return null;
         const publicCredential = credential ? AccessCredentialService.toPublic(credential, now) : null;
+        const appointment = this.appointmentOf(event, candidate, module);
         return {
           candidateId: candidate.id,
           nombreCompleto: candidate.nombreCompleto,
           // To check against the candidate's ID document.
           cedula: candidate.cedula,
-          appointmentAt: this.appointmentOf(event, candidate, module)?.startsAt ?? null,
+          appointmentAt: appointment?.startsAt ?? null,
+          accessWindow: AccessCredentialService.accessWindow(appointment, now),
           attendance: candidate.attendance?.[module] ?? null,
           credential: publicCredential,
           evaluation: this.evaluationStatus(candidate, module, publicCredential),
@@ -71,25 +73,22 @@ class OnsiteApplicationService {
       eventId,
       module,
       session: module === MODULES.A ? event.onsite : null,
+      accessWindow: module === MODULES.A ? AccessCredentialService.accessWindow(event.onsite, now) : null,
       isAppointmentDay: module === MODULES.A ? isAppointmentDay(event.onsite.startsAt, now) : null,
       rows,
       counts: {
         cited: rows.length,
         present: count((row) => row.attendance?.status === ATTENDANCE_STATUSES.PRESENT),
         withCode: count((row) => row.credential && row.credential.status !== CREDENTIAL_STATUSES.REVOKED),
-        enabled: count((row) => row.credential?.status === CREDENTIAL_STATUSES.ENABLED),
         inProgress: count((row) => row.evaluation === 'IN_PROGRESS'),
         completed: count((row) => row.evaluation === 'COMPLETED'),
-        // Present, with a code ready to enable: what "enable present" would do.
-        readyToEnable: count((row) => row.attendance?.status === ATTENDANCE_STATUSES.PRESENT
-          && row.credential?.status === CREDENTIAL_STATUSES.GENERATED),
       },
     };
   }
 
   /**
    * Marks a candidate present (after checking their identity) or undoes it.
-   * Undoing is refused once their code was enabled or used.
+   * Undoing is refused once their code was used: they did come.
    */
   async setAttendance(eventId, orgId, { module, candidateId, present }, actorUid) {
     const event = await this.requireOnsiteEvent(eventId, orgId, module);
@@ -100,8 +99,8 @@ class OnsiteApplicationService {
     if (!present) {
       const credential = await this.currentCredential(eventId, orgId, candidateId, module);
       const status = credential && AccessCredentialService.effectiveStatus(credential, now);
-      if ([CREDENTIAL_STATUSES.ENABLED, CREDENTIAL_STATUSES.USED].includes(status)) {
-        throw new ValidationError('No se puede quitar la asistencia: su acceso ya fue habilitado o utilizado. Si es necesario, revoca el acceso.');
+      if (status === CREDENTIAL_STATUSES.USED) {
+        throw new ValidationError('No se puede quitar la asistencia: el candidato ya utilizó su acceso.');
       }
     }
 
@@ -116,69 +115,7 @@ class OnsiteApplicationService {
     return attendance[module] ?? null;
   }
 
-  /**
-   * Enables the codes of the given candidates (one or many). Only candidates
-   * marked present with a code that is prepared and not expired are
-   * enabled; the rest are reported with the reason, so a mass action can
-   * never enable an absent candidate.
-   */
-  async enable(eventId, orgId, { module, candidateIds }, actorUid) {
-    const event = await this.requireOnsiteEvent(eventId, orgId, module);
-    const now = this.now();
-    const candidates = await this.candidateRepo.findByEvent(eventId, orgId);
-    const byId = new Map(candidates.map((candidate) => [candidate.id, candidate]));
-    const selected = [...new Set(candidateIds)].map((id) => byId.get(id));
-    if (selected.some((candidate) => !candidate)) {
-      throw new ValidationError('Uno o más candidatos no pertenecen a este evento.');
-    }
-    const latest = AccessCredentialService.latestByAssignment(await this.credentialRepo.findByEvent(eventId), orgId);
-    const enabled = [];
-    const skipped = [];
-
-    for (const candidate of selected.sort(byName)) {
-      const skip = (reason) => skipped.push({ candidateId: candidate.id, nombreCompleto: candidate.nombreCompleto, reason });
-      const appointment = this.appointmentOf(event, candidate, module);
-      if (!appointment?.startsAt || !isAppointmentDay(appointment.startsAt, now)) {
-        skip('hoy no es el día de su cita');
-        continue;
-      }
-      if (candidate.attendance?.[module]?.status !== ATTENDANCE_STATUSES.PRESENT) {
-        skip('no está marcado como presente');
-        continue;
-      }
-      const credential = latest.get(`${candidate.id}_${module}`);
-      if (!credential) {
-        skip('no tiene un acceso preparado');
-        continue;
-      }
-      try {
-        const updated = await this.credentialRepo.update(credential.id, (current) => {
-          const status = AccessCredentialService.effectiveStatus(current, now);
-          if (status !== CREDENTIAL_STATUSES.GENERATED) throw new ValidationError(this.notEnableableReason(status));
-          return { status: CREDENTIAL_STATUSES.ENABLED, enabledAt: now, enabledBy: actorUid };
-        });
-        await this.audit({
-          action: AUDIT_ACTIONS.CREDENTIAL_ENABLED, orgId, eventId, candidateId: candidate.id, module, credentialId: updated.id, actorUid, at: now,
-        });
-        enabled.push({ candidateId: candidate.id, nombreCompleto: candidate.nombreCompleto, credentialId: updated.id });
-      } catch (error) {
-        if (!(error instanceof ValidationError)) throw error;
-        skip(error.message);
-      }
-    }
-    return { module, enabled, skipped };
-  }
-
   // ------------------------------------------------------------- internal
-
-  notEnableableReason(status) {
-    return {
-      [CREDENTIAL_STATUSES.ENABLED]: 'su acceso ya está habilitado',
-      [CREDENTIAL_STATUSES.USED]: 'su acceso ya se utilizó',
-      [CREDENTIAL_STATUSES.REVOKED]: 'su acceso fue revocado; reemítelo',
-      [CREDENTIAL_STATUSES.EXPIRED]: 'su acceso venció',
-    }[status] || 'su acceso no se puede habilitar';
-  }
 
   evaluationStatus(candidate, module, credential) {
     const completed = module === MODULES.A
@@ -196,7 +133,7 @@ class OnsiteApplicationService {
     const appointment = this.appointmentOf(event, candidate, module);
     if (!appointment?.startsAt) throw new ValidationError('El candidato no tiene una cita para este módulo.');
     if (!isAppointmentDay(appointment.startsAt, now)) {
-      throw new ValidationError(`La asistencia y la habilitación solo se registran el día de la cita (${formatDay(appointment.startsAt)}).`);
+      throw new ValidationError(`La asistencia solo se registra el día de la cita (${formatDay(appointment.startsAt)}).`);
     }
   }
 

@@ -8,7 +8,7 @@ import * as credentialService from '../../services/credentialService.js';
 const STAGES = [
   ['preparar', 'Preparar accesos', 'Genera e imprime los accesos temporales para los candidatos seleccionados.'],
   ['organizar', 'Organizar', 'Revisa qué está listo y descarga la lista de asistencia.'],
-  ['aplicar', 'Aplicar', 'Registra la asistencia y habilita los accesos el día de la evaluación.'],
+  ['aplicar', 'Aplicar', 'Sigue el ingreso el día de la evaluación: los accesos se activan solos a la hora de inicio.'],
 ];
 
 const errorMessage = (error, fallback) => error.response?.data?.error?.message || fallback;

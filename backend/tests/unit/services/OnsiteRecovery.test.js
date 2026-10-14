@@ -88,10 +88,8 @@ describe('onsite incident recovery', () => {
   });
 
   const issueB = async () => (await credentials.issueBatch('event-1', 'org-1', { module: 'B', candidateIds: [ana.id] }, 'preparer')).issued[0];
-  const checkIn = async () => {
-    await applicator.setAttendance('event-1', 'org-1', { module: 'B', candidateId: ana.id, present: true }, 'applicator');
-    return applicator.enable('event-1', 'org-1', { module: 'B', candidateIds: [ana.id] }, 'applicator');
-  };
+  // Attendance is only the applicator's record: the codes work by themselves in the window.
+  const checkIn = () => applicator.setAttendance('event-1', 'org-1', { module: 'B', candidateId: ana.id, present: true }, 'applicator');
   const credentialOf = (id) => repos.credentialRepo.data.find((item) => item.id === id);
 
   async function startAndAnswerFirstQuestion() {
@@ -112,12 +110,13 @@ describe('onsite incident recovery', () => {
     // The tab was closed. The supervisor reissues the code (no reprint needed: it is shown on screen).
     const { issued: [replacement] } = await credentials.reissue('event-1', 'org-1', card.credentialId, 'supervisor', 'Se cerró el navegador');
     expect(credentialOf(card.credentialId)).toMatchObject({ status: 'REVOKED', revokedBy: 'supervisor', replacedById: replacement.credentialId });
-    expect(credentialOf(replacement.credentialId)).toMatchObject({ status: 'GENERATED', requiredClientId: 'lab-pc-07', replacesId: card.credentialId });
+    expect(credentialOf(replacement.credentialId)).toMatchObject({ status: 'GENERATED', requiredClientId: 'lab-pc-07', replacesId: card.credentialId, recovery: true });
+    expect(replacement).toMatchObject({ recovery: true, closesAt: replacement.expiresAt });
     // The old session cannot be used any more (no concurrent sessions).
     await expect(invitations.getMacrocaseStage(oldToken)).resolves.toEqual({ state: 'CANCELLED' });
 
-    // Still marked present: the applicator only has to enable the new code.
-    expect((await applicator.enable('event-1', 'org-1', { module: 'B', candidateIds: [ana.id] }, 'applicator')).enabled).toHaveLength(1);
+    // The entry window (15:00–15:30) has closed by now: a recovery code still works.
+    clock.now = new Date('2026-11-20T16:10:00.000Z');
     const resumed = await access.login(replacement.code, LAB_PC);
     expect(resumed.state).toBe('VALID');
 
@@ -141,7 +140,7 @@ describe('onsite incident recovery', () => {
     await expect(access.login(replacement.code, OTHER_PC)).resolves.toEqual({ state: 'OTHER_COMPUTER' });
     await expect(access.login(replacement.code, { ip: '10.0.0.1' })).resolves.toEqual({ state: 'OTHER_COMPUTER' });
     // Not consumed: it still works on the right computer.
-    expect(credentialOf(replacement.credentialId).status).toBe('ENABLED');
+    expect(credentialOf(replacement.credentialId).status).toBe('GENERATED');
     await expect(access.login(replacement.code, LAB_PC)).resolves.toMatchObject({ state: 'VALID' });
     expect(repos.auditRepo.data.filter((entry) => entry.action === 'ONSITE_LOGIN_OTHER_COMPUTER')).toHaveLength(2);
   });
@@ -164,6 +163,14 @@ describe('onsite incident recovery', () => {
     await checkIn();
     await expect(access.login(card.code, OTHER_PC)).resolves.toEqual({ state: 'REVOKED' });
     await expect(access.login(replacement.code, OTHER_PC)).resolves.toMatchObject({ state: 'VALID' });
+  });
+
+  test('a lost card that was never used cannot be replaced once the entry window closed', async () => {
+    const card = await issueB();
+    clock.now = new Date('2026-11-20T15:31:00.000Z');
+    await expect(credentials.reissue('event-1', 'org-1', card.credentialId, 'supervisor', 'Tarjeta extraviada'))
+      .rejects.toThrow('la ventana de inicio de su cita ya terminó');
+    await expect(access.login(card.code, OTHER_PC)).resolves.toEqual({ state: 'WINDOW_CLOSED' });
   });
 
   test('every recovery step is recorded, without codes', async () => {

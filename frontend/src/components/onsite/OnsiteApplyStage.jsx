@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Button, StatusBadge } from '../ui';
+import { StatusBadge } from '../ui';
 import { IssuedCodesDialog } from '../company/IssuedCodesDialog.jsx';
 import * as onsiteService from '../../services/onsiteService.js';
 import * as credentialService from '../../services/credentialService.js';
-import { CredentialStatus } from './CredentialStatus.jsx';
+import { CredentialStatus, LIVE_STATUSES } from './CredentialStatus.jsx';
 
 // Several applicators may work at once: keep the roster fresh.
 const REFRESH_MS = 20_000;
@@ -19,14 +19,15 @@ const EVALUATION = {
 };
 
 const ACCESS_FILTERS = [
-  ['all', 'Todos los accesos'], ['none', 'Sin acceso'], ['GENERATED', 'Preparado'], ['ENABLED', 'Habilitado'],
+  ['all', 'Todos los accesos'], ['none', 'Sin acceso'], ['GENERATED', 'Sin usar'],
   ['USED', 'En uso'], ['REVOKED', 'Revocado'], ['EXPIRED', 'Vencido'],
 ];
 const ATTENDANCE_FILTERS = [['all', 'Toda la asistencia'], ['present', 'Presentes'], ['unmarked', 'Sin marcar']];
 const EVALUATION_FILTERS = [['all', 'Todas las evaluaciones'], ['PENDING', 'Pendientes'], ['IN_PROGRESS', 'En curso'], ['COMPLETED', 'Completadas']];
 
 const isPresent = (row) => row.attendance?.status === 'PRESENT';
-const canEnable = (row) => isPresent(row) && row.credential?.status === 'GENERATED';
+// ENABLED only exists on older credentials and works like GENERATED.
+const accessStatus = (row) => (LIVE_STATUSES.includes(row.credential?.status) ? 'GENERATED' : row.credential?.status);
 // An interrupted session of an open evaluation (lost cards are handled while preparing).
 const canRecover = (row) => row.credential?.status === 'USED' && row.evaluation !== 'COMPLETED';
 
@@ -40,11 +41,30 @@ function FilterSelect({ label, value, options, onChange }) {
   );
 }
 
+/** What the codes allow right now, for the whole session (Module A, or Module B rows sharing one window). */
+function WindowBanner({ accessWindow }) {
+  if (!accessWindow) return null;
+  const opens = formatTime(accessWindow.opensAt);
+  const closes = formatTime(accessWindow.closesAt);
+  const [tone, text] = {
+    PENDING: ['border-[#D9E2EA] bg-[#F8FAFC] text-[#334E68]', `Los accesos se activan solos a las ${opens} y permiten comenzar hasta las ${closes}`],
+    OPEN: ['border-emerald-200 bg-emerald-50 text-emerald-800', `Accesos activos: los candidatos pueden comenzar hasta las ${closes}`],
+    CLOSED: ['border-amber-200 bg-amber-50 text-amber-800', `La ventana de inicio ya cerró (terminó a las ${closes}). Quien ya comenzó puede terminar; para retomar una sesión interrumpida usa «Recuperar acceso».`],
+  }[accessWindow.state] || [];
+  return text ? <p role='status' className={`rounded-xl border px-4 py-3 text-sm ${tone}`}>{text}</p> : null;
+}
+
+const sameWindow = (rows) => {
+  const windows = rows.map((row) => row.accessWindow).filter(Boolean);
+  return windows.length && windows.every((item) => item.opensAt === windows[0].opensAt && item.closesAt === windows[0].closesAt) ? windows[0] : null;
+};
+
 /**
- * Stage 3 · Apply, on the day of the appointment: check each candidate's
- * identity, mark them present and enable their code, one by one or all
- * present at once. Absent candidates are never enabled. An interrupted
- * session is recovered here (new code, same computer).
+ * Stage 3 · Apply, on the day of the appointment. Codes are not enabled by
+ * hand: they activate by themselves at the start of the appointment and let
+ * candidates begin during its entry window. Here the applicator follows who
+ * came (attendance is their own record, after checking each identity), who
+ * is answering, and recovers an interrupted session (new code, same computer).
  */
 export function OnsiteApplyStage({ event, module, notify, onCredentialsChanged }) {
   const eventId = event.id;
@@ -80,14 +100,14 @@ export function OnsiteApplyStage({ event, module, notify, onCredentialsChanged }
       if (attendanceFilter === 'present' && !isPresent(row)) return false;
       if (attendanceFilter === 'unmarked' && isPresent(row)) return false;
       if (accessFilter === 'none' && row.credential) return false;
-      if (!['all', 'none'].includes(accessFilter) && row.credential?.status !== accessFilter) return false;
+      if (!['all', 'none'].includes(accessFilter) && accessStatus(row) !== accessFilter) return false;
       if (evaluationFilter !== 'all' && row.evaluation !== evaluationFilter) return false;
       return true;
     });
   }, [roster, search, attendanceFilter, accessFilter, evaluationFilter]);
 
-  const ready = (roster?.rows || []).filter(canEnable);
   const counts = roster?.counts;
+  const sessionWindow = roster ? roster.accessWindow || sameWindow(roster.rows) : null;
   const blockedDay = roster && roster.isAppointmentDay === false;
 
   const run = async (action) => {
@@ -114,44 +134,27 @@ export function OnsiteApplyStage({ event, module, notify, onCredentialsChanged }
     await onsiteService.setAttendance(eventId, module, row.candidateId, false);
   });
 
-  const reportEnable = (result) => {
-    const skipped = result.skipped.map((item) => `${item.nombreCompleto}: ${item.reason}`).join(' · ');
-    if (result.enabled.length && !skipped) notify(`Se habilitó el acceso de ${result.enabled.length} candidato(s).`);
-    else if (result.enabled.length) setError(`Se habilitó el acceso de ${result.enabled.length} candidato(s). No se habilitó a: ${skipped}.`);
-    else setError(`No se habilitó ningún acceso. ${skipped}`);
-    onCredentialsChanged?.();
-  };
-
-  const enableOne = (row) => run(async () => {
-    reportEnable(await onsiteService.enableCredentials(eventId, module, [row.candidateId]));
-  });
-
-  const enablePresent = () => run(async () => {
-    const names = ready.map((row) => row.nombreCompleto);
-    const preview = names.slice(0, 10).join(', ') + (names.length > 10 ? ` y ${names.length - 10} más` : '');
-    if (!window.confirm(`Se habilitará el acceso de ${names.length} candidato(s) marcados como presentes: ${preview}. Los candidatos sin asistencia no se habilitan. ¿Deseas continuar?`)) return;
-    reportEnable(await onsiteService.enableCredentials(eventId, module, ready.map((row) => row.candidateId)));
-  });
-
   const recover = (row) => run(async () => {
     const reason = window.prompt(
-      `Recuperar la evaluación de ${row.nombreCompleto}: su sesión actual se cerrará y recibirá un código nuevo que solo funcionará en la misma computadora donde comenzó. Sus respuestas guardadas se conservan.\nMotivo:`,
+      `Recuperar la evaluación de ${row.nombreCompleto}: su sesión actual se cerrará y recibirá un código nuevo que solo funcionará en la misma computadora donde comenzó, aunque la ventana de inicio ya haya cerrado. Sus respuestas guardadas se conservan.\nMotivo:`,
       'Sesión interrumpida',
     );
     if (reason === null) return;
     const result = await credentialService.reissueCredential(eventId, row.credential.id, reason.trim() || undefined);
     setReissued(result);
-    notify(`Se reemitió el acceso de ${row.nombreCompleto}.${isPresent(row) ? ' Habilítalo para que pueda ingresar.' : ''}`);
+    notify(`Se reemitió el acceso de ${row.nombreCompleto}. El código nuevo funciona solo en su computadora.`);
     onCredentialsChanged?.();
   });
 
   return (
     <section aria-labelledby='apply-title' className='space-y-4'>
-      <h3 id='apply-title' className='sr-only'>Asistencia y habilitación · Módulo {module}</h3>
+      <h3 id='apply-title' className='sr-only'>Aplicación · Módulo {module}</h3>
+
+      <WindowBanner accessWindow={sessionWindow} />
 
       {blockedDay && (
         <p className='rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800'>
-          Hoy no es el día de la cita. La asistencia y la habilitación solo se registran el {formatDay(module === 'A' ? event?.onsite?.startsAt : roster.rows[0]?.appointmentAt)}.
+          Hoy no es el día de la cita. La asistencia solo se registra el {formatDay(module === 'A' ? event?.onsite?.startsAt : roster.rows[0]?.appointmentAt)}.
         </p>
       )}
 
@@ -159,7 +162,7 @@ export function OnsiteApplyStage({ event, module, notify, onCredentialsChanged }
         <dl className='grid grid-cols-2 gap-x-6 gap-y-2 text-sm text-[#64748B] sm:flex sm:flex-wrap'>
           <div className='flex gap-1.5'><dt>Citados</dt><dd className='font-semibold text-[#101828]'>{counts.cited}</dd></div>
           <div className='flex gap-1.5'><dt>Presentes</dt><dd className='font-semibold text-[#101828]'>{counts.present}</dd></div>
-          <div className='flex gap-1.5'><dt>Habilitados</dt><dd className='font-semibold text-[#101828]'>{counts.enabled}</dd></div>
+          <div className='flex gap-1.5'><dt>Con acceso</dt><dd className='font-semibold text-[#101828]'>{counts.withCode}</dd></div>
           <div className='flex gap-1.5'><dt>En evaluación</dt><dd className='font-semibold text-[#101828]'>{counts.inProgress}</dd></div>
           <div className='flex gap-1.5'><dt>Completadas</dt><dd className='font-semibold text-[#101828]'>{counts.completed}</dd></div>
         </dl>
@@ -172,9 +175,6 @@ export function OnsiteApplyStage({ event, module, notify, onCredentialsChanged }
           <FilterSelect label='Filtrar por acceso' value={accessFilter} options={ACCESS_FILTERS} onChange={setAccessFilter} />
           <FilterSelect label='Filtrar por evaluación' value={evaluationFilter} options={EVALUATION_FILTERS} onChange={setEvaluationFilter} />
         </div>
-        <Button type='button' variant='accent' className='h-11 shrink-0 px-5' onClick={enablePresent} disabled={busy || ready.length === 0}>
-          Habilitar presentes ({ready.length})
-        </Button>
       </div>
 
       {error && <p role='alert' className='rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700'>{error}</p>}
@@ -201,7 +201,7 @@ export function OnsiteApplyStage({ event, module, notify, onCredentialsChanged }
             <tbody className='divide-y divide-[#E8EDF2]'>
               {rows.map((row) => {
                 const [evaluationLabel, evaluationTone] = EVALUATION[row.evaluation] || EVALUATION.PENDING;
-                const locked = ['ENABLED', 'USED'].includes(row.credential?.status);
+                const locked = row.credential?.status === 'USED';
                 return (
                   <tr key={row.candidateId}>
                     <td className='px-5 py-3'>
@@ -221,12 +221,11 @@ export function OnsiteApplyStage({ event, module, notify, onCredentialsChanged }
                         <button type='button' onClick={() => markPresent(row)} disabled={busy || blockedDay || row.evaluation === 'COMPLETED'} className='rounded-lg border border-[#D9E2EA] px-3 py-1.5 text-xs font-semibold text-[#334E68] hover:border-[#13A9A4] hover:text-[#087D79] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0AADA8]/40 disabled:opacity-50'>Marcar presente</button>
                       )}
                     </td>
-                    <td className='px-5 py-3'><CredentialStatus credential={row.credential} /></td>
+                    <td className='px-5 py-3'><CredentialStatus credential={row.credential} accessWindow={row.accessWindow} /></td>
                     <td className='hidden px-5 py-3 xl:table-cell'><StatusBadge tone={evaluationTone}>{evaluationLabel}</StatusBadge></td>
                     <td className='px-5 py-3 text-right'>
                       <div className='flex flex-wrap justify-end gap-2'>
                         {canRecover(row) && <button type='button' onClick={() => recover(row)} disabled={busy} className='rounded-lg border border-[#D9E2EA] px-3 py-1.5 text-xs font-semibold text-[#334E68] hover:border-[#13A9A4] hover:text-[#087D79] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0AADA8]/40 disabled:opacity-50'>Recuperar acceso</button>}
-                        {canEnable(row) && <button type='button' onClick={() => enableOne(row)} disabled={busy || blockedDay} className='rounded-lg bg-[#0AADA8] px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-[#089490] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0AADA8]/40 disabled:opacity-50'>Habilitar</button>}
                         {isPresent(row) && !row.credential && <span className='text-xs text-amber-700'>Sin acceso preparado</span>}
                       </div>
                     </td>
@@ -237,7 +236,7 @@ export function OnsiteApplyStage({ event, module, notify, onCredentialsChanged }
           </table>
         )}
       </div>
-      <p className='text-xs text-[#94A3B8]'>Se actualiza cada 20 segundos. Cada marca de asistencia, habilitación y recuperación queda registrada con el usuario que la realizó.</p>
+      <p className='text-xs text-[#94A3B8]'>Se actualiza cada 20 segundos. La asistencia es un registro del aplicador: no condiciona el acceso. Cada marca y cada recuperación queda registrada con el usuario que la realizó.</p>
 
       {reissued && <IssuedCodesDialog result={reissued} eventName={event?.name} onClose={() => { setReissued(null); load(); }} />}
     </section>

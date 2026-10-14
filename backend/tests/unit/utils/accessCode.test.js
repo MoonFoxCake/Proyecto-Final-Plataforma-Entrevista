@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const {
   ALPHABET, generateAccessCode, normalizeAccessCode, isWellFormedAccessCode, hashAccessCode, endOfAppointmentDay, formatAccessCode,
+  entryWindow, entryWindowState,
 } = require('../../../src/utils/accessCode');
 
 describe('access codes', () => {
@@ -47,5 +48,17 @@ describe('access codes', () => {
     // 8:00 a. m. and 11:30 p. m. in Guatemala (UTC−6) are the same day there.
     expect(endOfAppointmentDay(new Date('2026-11-05T14:00:00.000Z'))).toEqual(new Date('2026-11-06T05:59:59.999Z'));
     expect(endOfAppointmentDay(new Date('2026-11-06T05:30:00.000Z'))).toEqual(new Date('2026-11-06T05:59:59.999Z'));
+  });
+
+  test('the entry window opens at the start of the appointment and lasts its minutes (30 by default)', () => {
+    const startsAt = new Date('2026-11-05T14:00:00.000Z');
+    expect(entryWindow({ startsAt })).toEqual({ opensAt: startsAt, closesAt: new Date('2026-11-05T14:30:00.000Z'), minutes: 30 });
+    expect(entryWindow({ startsAt, entryWindowMinutes: 15 }).closesAt).toEqual(new Date('2026-11-05T14:15:00.000Z'));
+
+    const appointment = { startsAt, entryWindowMinutes: 15 };
+    expect(entryWindowState(appointment, new Date('2026-11-05T13:59:59.999Z'))).toBe('PENDING');
+    expect(entryWindowState(appointment, startsAt)).toBe('OPEN');
+    expect(entryWindowState(appointment, new Date('2026-11-05T14:14:59.999Z'))).toBe('OPEN');
+    expect(entryWindowState(appointment, new Date('2026-11-05T14:15:00.000Z'))).toBe('CLOSED');
   });
 });

@@ -3,7 +3,9 @@ const {
 } = require('../utils/constants');
 const { ExternalServiceError, NotFoundError, ValidationError } = require('../utils/errors');
 const { isOnsite, modulesOf } = require('../utils/eventModality');
-const { endOfAppointmentDay, generateAccessCode, hashAccessCode } = require('../utils/accessCode');
+const {
+  endOfAppointmentDay, entryWindow, entryWindowState, generateAccessCode, hashAccessCode,
+} = require('../utils/accessCode');
 
 const MAX_CODE_ATTEMPTS = 5;
 // Printable or usable: an assignment with one of these already has a code.
@@ -21,8 +23,10 @@ const slug = (text = '') => text.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowe
  * Temporary access credentials for onsite evaluations, prepared ahead of
  * the appointment and printed on cards.
  *
- * - One code per candidate and module, valid until the end of the
- *   appointment's day (Guatemala time) and only once (used at login).
+ * - One code per candidate and module, used only once (at login). It works
+ *   by itself from the start of the appointment, during its entry window;
+ *   a recovery code (replacing one already used) works until the end of
+ *   the appointment's day (Guatemala time), on the same computer.
  * - The code is returned only in the response that issues it; the server
  *   keeps its HMAC. A lost card is revoked and reissued, never re-printed.
  * - Issuing for everyone again skips whoever already has a code, so a
@@ -73,7 +77,19 @@ class AccessCredentialService {
   /** What the company may see of a credential: never the code or its hash. */
   static toPublic(credential, now) {
     const { codeHash, ...rest } = credential;
-    return { ...rest, status: AccessCredentialService.effectiveStatus(credential, now) };
+    return { ...rest, recovery: Boolean(credential.recovery), status: AccessCredentialService.effectiveStatus(credential, now) };
+  }
+
+  /** When the codes of an appointment let candidates begin, and whether that is now. */
+  static accessWindow(appointment, now) {
+    if (!appointment?.startsAt) return null;
+    const { opensAt, closesAt, minutes } = entryWindow(appointment);
+    return { opensAt, closesAt, minutes, state: entryWindowState(appointment, now) };
+  }
+
+  /** Module A: the event's session; Module B: the candidate's own citation. */
+  appointmentOf(event, candidate, module) {
+    return module === MODULES.A ? event.onsite : candidate.moduleB?.citation?.appointment;
   }
 
   /**
@@ -95,11 +111,12 @@ class AccessCredentialService {
         .sort(byName)
         .map((candidate) => {
           const credential = latest.get(`${candidate.id}_${module}`);
-          const eligibility = this.eligibility(event, candidate, module, now);
+          const eligibility = this.eligibility(event, candidate, module, now, { requireOpenWindow: true });
           return {
             candidateId: candidate.id,
             nombreCompleto: candidate.nombreCompleto,
             credential: credential ? AccessCredentialService.toPublic(credential, now) : null,
+            accessWindow: AccessCredentialService.accessWindow(this.appointmentOf(event, candidate, module), now),
             canIssue: !eligibility.problem,
             ...(eligibility.problem ? { blockedReason: eligibility.problem } : {}),
           };
@@ -110,8 +127,7 @@ class AccessCredentialService {
         rows,
         counts: {
           total: rows.length,
-          prepared: count(CREDENTIAL_STATUSES.GENERATED),
-          enabled: count(CREDENTIAL_STATUSES.ENABLED),
+          prepared: count(CREDENTIAL_STATUSES.GENERATED) + count(CREDENTIAL_STATUSES.ENABLED),
           used: count(CREDENTIAL_STATUSES.USED),
           revoked: count(CREDENTIAL_STATUSES.REVOKED),
           expired: count(CREDENTIAL_STATUSES.EXPIRED),
@@ -140,7 +156,7 @@ class AccessCredentialService {
     const rejected = [];
 
     for (const candidate of candidates) {
-      const eligibility = this.eligibility(event, candidate, module, now);
+      const eligibility = this.eligibility(event, candidate, module, now, { requireOpenWindow: true });
       if (eligibility.problem) {
         rejected.push({ candidateId: candidate.id, nombreCompleto: candidate.nombreCompleto, reason: eligibility.problem });
         continue;
@@ -215,7 +231,9 @@ class AccessCredentialService {
    * candidate, not to the code, so saved answers are kept.
    *
    * Candidates cannot switch computers (D7): a code replacing one that was
-   * already used only works from the browser that used it.
+   * already used only works from the browser that used it. That recovery
+   * code works outside the entry window (until the end of the day): the
+   * candidate had already begun. Any other new code needs the window open.
    */
   async reissue(eventId, orgId, credentialId, actorUid, reason, paper) {
     this.requirePepper();
@@ -223,11 +241,13 @@ class AccessCredentialService {
     const credential = await this.requireCredential(credentialId, eventId, orgId);
     const now = this.now();
     const candidate = await this.candidateRepo.findById(credential.candidateId);
-    const eligibility = this.eligibility(event, candidate, credential.module, now);
+    const wasUsed = AccessCredentialService.effectiveStatus(credential, now) === CREDENTIAL_STATUSES.USED;
+    const recovery = wasUsed || Boolean(credential.recovery);
+    const eligibility = this.eligibility(event, candidate, credential.module, now, { requireOpenWindow: !recovery });
     if (eligibility.problem) throw new ValidationError(`No se puede reemitir: ${eligibility.problem}`);
 
-    const wasUsed = AccessCredentialService.effectiveStatus(credential, now) === CREDENTIAL_STATUSES.USED;
     const result = await this.issueOne({
+      recovery,
       event,
       candidate,
       module: credential.module,
@@ -287,7 +307,7 @@ class AccessCredentialService {
   }
 
   async issueOne({
-    event, candidate, module, eligibility, actorUid, now, replaceId = null, reason = '', requiredClientId,
+    event, candidate, module, eligibility, actorUid, now, replaceId = null, reason = '', requiredClientId, recovery = false,
   }) {
     for (let attempt = 0; attempt < MAX_CODE_ATTEMPTS; attempt += 1) {
       const code = this.generateCode();
@@ -305,6 +325,8 @@ class AccessCredentialService {
         createdBy: actorUid,
         // Same computer only (D7): set when replacing a code already used there.
         requiredClientId,
+        // Resumes a begun evaluation: not limited to the entry window.
+        recovery,
       }, (current) => {
         const decision = this.decide(current, { replaceId, now, actorUid, reason });
         revokedCurrent = Boolean(decision.currentChanges);
@@ -332,6 +354,10 @@ class AccessCredentialService {
           code,
           expiresAt: eligibility.expiresAt,
           appointment: eligibility.appointment,
+          // When it works, for the printed sheet.
+          opensAt: recovery ? now : eligibility.window.opensAt,
+          closesAt: recovery ? eligibility.expiresAt : eligibility.window.closesAt,
+          recovery,
         },
       };
     }
@@ -358,9 +384,10 @@ class AccessCredentialService {
   /**
    * Whether a candidate can get a code for a module now, and until when it
    * would be valid. Module A uses the event's session; Module B the
-   * candidate's own Module B citation.
+   * candidate's own Module B citation. `requireOpenWindow`: a new (not
+   * recovery) code is useless once the entry window has closed.
    */
-  eligibility(event, candidate, module, now) {
+  eligibility(event, candidate, module, now, { requireOpenWindow = false } = {}) {
     if (!modulesOf(event).includes(module)) return { problem: `Este evento no incluye el Módulo ${module}.` };
     let appointment;
     if (module === MODULES.A) {
@@ -376,10 +403,17 @@ class AccessCredentialService {
     if (!appointment?.startsAt) return { problem: 'la cita no tiene fecha' };
     const expiresAt = endOfAppointmentDay(appointment.startsAt);
     if (expiresAt <= now) return { problem: 'la jornada de su cita ya concluyó' };
+    const window = entryWindow(appointment);
+    if (requireOpenWindow && window.closesAt <= now) return { problem: 'la ventana de inicio de su cita ya terminó' };
     return {
       expiresAt,
+      window,
       appointment: {
-        venue: appointment.venue, room: appointment.room, startsAt: appointment.startsAt, endsAt: appointment.endsAt,
+        venue: appointment.venue,
+        room: appointment.room,
+        startsAt: appointment.startsAt,
+        endsAt: appointment.endsAt,
+        entryWindowMinutes: window.minutes,
       },
     };
   }

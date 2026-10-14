@@ -95,7 +95,8 @@ class PrintableService {
    * middle one. Printed on one side, no cutting. It never shows the module,
    * the ID number or other personal data.
    *
-   * @param {{ eventName: string, items: Array<{ nombreCompleto: string, code: string, expiresAt?: Date }>,
+   * @param {{ eventName: string, items: Array<{ nombreCompleto: string, code: string, expiresAt?: Date,
+   *   opensAt?: Date, closesAt?: Date, recovery?: boolean }>,
    *   paper?: 'CARTA'|'A4' }} params
    * @returns {Promise<Buffer>}
    */
@@ -136,7 +137,14 @@ class PrintableService {
       .text(name, SHEET_MARGIN, box.top, { width: contentWidth, height, lineGap: 2, ellipsis: true });
   }
 
-  /** The private part: the code, three steps and the expiry. */
+  /** When the code works: its entry window, or until the end of the day for a recovery code. */
+  validity({ opensAt, closesAt, recovery, expiresAt }) {
+    if (recovery && expiresAt) return `Válido el ${formatShortDate(expiresAt)} hasta las ${formatTime(expiresAt)}`;
+    if (opensAt && closesAt) return `Activo el ${formatShortDate(opensAt)}, de ${formatTime(opensAt)} a ${formatTime(closesAt)}`;
+    return expiresAt ? `Vence el ${formatShortDate(expiresAt)} a las ${formatTime(expiresAt)}` : '';
+  }
+
+  /** The private part: the code, three steps and when it works. */
   sheetCode(doc, item, { pageHeight, contentWidth, code: box }) {
     const line = (text, top, { font = 'Helvetica', size = 10, color = COLORS.ink, ...options } = {}) => {
       // One line, clipped with an ellipsis: nothing can overflow the sheet.
@@ -158,9 +166,10 @@ class PrintableService {
       line(step, y);
       y += 15;
     });
-    if (item.expiresAt) {
+    const validity = this.validity(item);
+    if (validity) {
       y += 6;
-      line(`Vence el ${formatShortDate(item.expiresAt)} a las ${formatTime(item.expiresAt)}`, y, { size: 9, color: COLORS.muted });
+      line(validity, y, { size: 9, color: COLORS.muted });
       y += 12;
     }
     if (y > box.bottom) throw new Error('El código no cabe en la zona privada de la hoja.');

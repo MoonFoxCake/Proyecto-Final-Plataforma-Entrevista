@@ -185,6 +185,7 @@ igualmente que la cliente las confirme.
 | D10 | ¿Cómo se manejan ausentes o reprogramados? | ✅ Decidido (2026-10-13): el ausente conserva su credencial `GENERATED` hasta que expire; la reprogramación revoca y reemite. | Fase 6 |
 | D11 | ¿Los módulos A y B en citas presenciales separadas? | Afecta al modelo `modules` y a las citaciones. Hoy el B exige el A publicado y revisado. | Fase 3 |
 | D12 | ¿PDF generado en el servidor o en el navegador? | ✅ Implementado en el servidor con `pdfkit`: las tarjetas viajan en la misma respuesta de emisión (`no-store`) y no se guardan; la lista de asistencia (sin códigos) se descarga aparte. | Fase 5 |
+| D13 | ¿El aplicador habilita cada código a mano? | ✅ Cambiado (2026-10-14): ya no. Cada código se activa solo a la hora de inicio de la cita y permite comenzar durante una ventana de inicio configurable (5–240 min, 30 por omisión; campo `entryWindowMinutes` de la sesión). La ventana solo limita el ingreso: quien ya comenzó termina (la sesión dura hasta el fin del día, D6). El código de recuperación (reemplaza uno ya usado) funciona fuera de la ventana, solo en la misma computadora (D7). La asistencia se mantiene como registro del aplicador y no condiciona el acceso. No se emiten códigos nuevos una vez cerrada la ventana. | Fase 6 |
 
 ## 11. Pruebas previstas por fase
 

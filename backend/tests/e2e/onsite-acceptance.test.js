@@ -94,8 +94,9 @@ describe('Phase 9 · onsite evaluation, end to end', () => {
       },
     });
     expect(response.status).toBe(201);
-    expect(response.body.data).toMatchObject({ modality: 'onsite', modules: ['A', 'B'], onsite: { venue: 'Campus Central', room: 'Edificio T2, aula 204' } });
+    expect(response.body.data).toMatchObject({ modality: 'onsite', modules: ['A', 'B'], onsite: { venue: 'Campus Central', room: 'Edificio T2, aula 204', entryWindowMinutes: 30 } });
     state.eventId = response.body.data.id;
+    state.startsAt = startsAt;
 
     // Missing data is rejected.
     const invalid = await company('post', '/events', { nombre: 'Sin sede', puesto: 'X', modalidad: 'presencial', presencial: { sede: '', ubicacion: '', fechaHoraInicio: startsAt.toISOString(), fechaHoraFin: startsAt.toISOString() } });
@@ -172,12 +173,23 @@ describe('Phase 9 · onsite evaluation, end to end', () => {
     expect(pdfPages(response.body)).toBeGreaterThanOrEqual(1);
   });
 
-  test('7. a generated code that was not enabled does not let anyone in', async () => {
-    const response = await login(state.codes[state.candidates[0].id], candidatePc(1));
-    expect(response.body.data).toEqual({ state: 'NOT_ENABLED' });
+  test('7. outside the entry window a code does not let anyone in, and nobody has to enable it', async () => {
+    const realNow = container.onsiteAccessService.now;
+    try {
+      container.onsiteAccessService.now = () => new Date(state.startsAt.getTime() - 60000);
+      expect((await login(state.codes[state.candidates[0].id], candidatePc(1))).body.data).toEqual({ state: 'NOT_YET' });
+      container.onsiteAccessService.now = () => new Date(state.startsAt.getTime() + 31 * 60000);
+      expect((await login(state.codes[state.candidates[0].id], candidatePc(1))).body.data).toEqual({ state: 'WINDOW_CLOSED' });
+    } finally {
+      container.onsiteAccessService.now = realNow;
+    }
+    // Not consumed: it still works inside the window.
+    const roster = await request(app).get(`${API}/events/${state.eventId}/onsite?modulo=A`).set(as('applicator-1'));
+    expect(roster.body.data.accessWindow).toMatchObject({ state: 'OPEN', minutes: 30 });
+    expect(roster.body.data.rows[0].credential.status).toBe('GENERATED');
   });
 
-  test('8. the applicator verifies identity, marks attendance and enables one by one', async () => {
+  test('8. the applicator verifies identity and marks attendance, only as a record', async () => {
     const roster = await request(app).get(`${API}/events/${state.eventId}/onsite?modulo=A`).set(as('applicator-1'));
     expect(roster.body.data.rows).toHaveLength(20);
     expect(roster.body.data.rows[0]).toMatchObject({ cedula: 'CED-1001', credential: { status: 'GENERATED' } });
@@ -185,22 +197,19 @@ describe('Phase 9 · onsite evaluation, end to end', () => {
     const first = state.candidates[0];
     const marked = await request(app).post(`${API}/events/${state.eventId}/onsite/attendance`).set(as('applicator-1')).send({ modulo: 'A', candidateId: first.id, presente: true });
     expect(marked.body.data).toMatchObject({ status: 'PRESENT', markedBy: 'applicator-1' });
-    const enabled = await request(app).post(`${API}/events/${state.eventId}/onsite/enable`).set(as('applicator-1')).send({ modulo: 'A', candidateIds: [first.id] });
-    expect(enabled.body.data.enabled).toHaveLength(1);
+    // The manual enabling step no longer exists.
+    expect((await request(app).post(`${API}/events/${state.eventId}/onsite/enable`).set(as('applicator-1')).send({ modulo: 'A', candidateIds: [first.id] })).status).toBe(404);
   });
 
-  test('9. enables several verified candidates at once, never the absent ones', async () => {
+  test('9. the rest arrive; the absent candidate keeps an unused code', async () => {
     // 18 more arrive; candidate 20 is absent.
     for (const candidate of state.candidates.slice(1, 19)) {
       await request(app).post(`${API}/events/${state.eventId}/onsite/attendance`).set(as('applicator-1')).send({ modulo: 'A', candidateId: candidate.id, presente: true });
     }
-    const response = await request(app).post(`${API}/events/${state.eventId}/onsite/enable`).set(as('applicator-1')).send({ modulo: 'A', candidateIds: state.candidates.map((candidate) => candidate.id) });
-    expect(response.body.data.enabled).toHaveLength(18);
-    expect(response.body.data.skipped.map((item) => item.reason).sort()).toEqual(['no está marcado como presente', 'su acceso ya está habilitado']);
     const absent = state.candidates[19];
     const roster = await request(app).get(`${API}/events/${state.eventId}/onsite?modulo=A`).set(as('company-1'));
     expect(roster.body.data.rows.find((row) => row.candidateId === absent.id).credential.status).toBe('GENERATED');
-    expect(roster.body.data.counts).toMatchObject({ present: 19, enabled: 19 });
+    expect(roster.body.data.counts).toMatchObject({ present: 19, withCode: 20 });
   });
 
   test('10 & 15. 18 candidates start at the same time on different computers; answers stay isolated', async () => {
@@ -253,13 +262,12 @@ describe('Phase 9 · onsite evaluation, end to end', () => {
     expect(reissued.body.data.cardsPdf).toBeTruthy();
     expect((await login(state.codes[candidate.id], candidatePc(19))).body.data).toEqual({ state: 'REVOKED' });
 
-    await request(app).post(`${API}/events/${state.eventId}/onsite/enable`).set(as('applicator-1')).send({ modulo: 'A', candidateIds: [candidate.id] });
     const session = await login(newCode, candidatePc(19));
     expect(session.body.data.state).toBe('VALID');
     await request(app).post(`${API}/invitations/access/submit`).send({ token: session.body.data.token, answers: LIKERT(18) });
 
     const actions = (await container.repos.auditLogRepo.findByEvent(state.eventId)).map((entry) => entry.action);
-    expect(actions).toEqual(expect.arrayContaining(['CREDENTIAL_ISSUED', 'CREDENTIAL_REVOKED', 'CREDENTIAL_REISSUED', 'CREDENTIAL_ENABLED', 'ATTENDANCE_MARKED', 'ONSITE_SESSION_STARTED']));
+    expect(actions).toEqual(expect.arrayContaining(['CREDENTIAL_ISSUED', 'CREDENTIAL_REVOKED', 'CREDENTIAL_REISSUED', 'ATTENDANCE_MARKED', 'ONSITE_SESSION_STARTED']));
     expect(containsIssuedCode(JSON.stringify(container.repos.auditLogRepo.data))).toBe(false);
   });
 
@@ -275,7 +283,7 @@ describe('Phase 9 · onsite evaluation, end to end', () => {
     expect((await asOther('get', `/events/${state.eventId}/candidates`)).status).toBe(404);
     expect((await asOther('get', `/events/${state.eventId}/credentials`)).status).toBe(404);
     expect((await asOther('get', `/events/${state.eventId}/onsite?modulo=A`)).status).toBe(404);
-    expect((await asOther('post', `/events/${state.eventId}/onsite/enable`, { modulo: 'A', candidateIds: [state.candidates[19].id] })).status).toBe(404);
+    expect((await asOther('post', `/events/${state.eventId}/onsite/attendance`, { modulo: 'A', candidateId: state.candidates[19].id, presente: true })).status).toBe(404);
     // Its own event cannot reach our candidates either.
     expect((await asOther('post', `/events/${otherEventId}/credentials`, { modulo: 'A', candidateIds: [state.candidates[19].id] })).status).toBe(400);
     expect((await asOther('get', `/events/${otherEventId}/credentials`)).body.data.modules[0].rows).toEqual([]);
@@ -329,7 +337,6 @@ describe('Phase 9 · onsite evaluation, end to end', () => {
     const issued = await company('post', `/events/${state.eventId}/credentials`, { modulo: 'B', candidateIds: [candidate.id] });
     const codeB = issued.body.data.issued[0].code;
     await request(app).post(`${API}/events/${state.eventId}/onsite/attendance`).set(as('applicator-1')).send({ modulo: 'B', candidateId: candidate.id, presente: true });
-    await request(app).post(`${API}/events/${state.eventId}/onsite/enable`).set(as('applicator-1')).send({ modulo: 'B', candidateIds: [candidate.id] });
 
     const session = await login(codeB, candidatePc(1));
     expect(session.body.data).toMatchObject({ state: 'VALID', module: 'B', macrocase: { totalSections: 3, totalQuestions: 4 } });
@@ -353,7 +360,6 @@ describe('Phase 9 · onsite evaluation, end to end', () => {
     const recovered = await company('post', `/events/${state.eventId}/credentials/${credentialId}/reissue`, { motivo: 'Se cerró el navegador' });
     const recoveryCode = recovered.body.data.issued[0].code;
     expect((await stage()).state).toBe('CANCELLED');
-    await request(app).post(`${API}/events/${state.eventId}/onsite/enable`).set(as('applicator-1')).send({ modulo: 'B', candidateIds: [candidate.id] });
     expect((await login(recoveryCode, candidatePc(7))).body.data).toEqual({ state: 'OTHER_COMPUTER' });
     const resumed = await login(recoveryCode, candidatePc(1));
     const resumedToken = resumed.body.data.token;

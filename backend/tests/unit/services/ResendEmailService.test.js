@@ -33,6 +33,9 @@ describe('ResendEmailService', () => {
     expect(body.html).toContain('Edificio T2, aula 204');
     expect(body.html).toContain('Llegar 15 minutos antes.');
     expect(body.html).toMatch(/>8:00\sa\.\s?m\. a 10:00\sa\.\s?m\./);
+    // When they can begin: the entry window (30 minutes by default).
+    expect(body.html).toMatch(/Inicio de la evaluación.*de 8:00\sa\.\s?m\. a 8:30\sa\.\s?m\./);
+    expect(body.html).toContain('Solo podrás iniciar la evaluación dentro del horario de inicio indicado');
     expect(body.html).not.toMatch(/href=|https?:\/\//i);
     expect(body.html).not.toMatch(/token|contraseña:|código:/i);
   });

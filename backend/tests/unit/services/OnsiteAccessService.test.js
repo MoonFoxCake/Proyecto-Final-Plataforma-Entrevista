@@ -71,20 +71,14 @@ describe('OnsiteAccessService', () => {
       now: () => clock.now, sleep: jest.fn(async () => {}),
     });
 
-    // Codes prepared before the appointment; the day comes.
+    // Codes prepared before the appointment; its entry window (default 30 min) opens.
     const { issued } = await credentials.issueBatch('event-1', 'org-1', { module: 'A', candidateIds: [ana.id, bruno.id] }, 'preparer');
     codes = Object.fromEntries(issued.map((item) => [item.candidateId, item.code]));
-    clock.now = new Date('2026-11-05T14:30:00.000Z');
+    clock.now = new Date('2026-11-05T14:10:00.000Z');
   });
 
   const client = { ip: '10.0.0.1', clientId: 'browser-1' };
-  const checkIn = async (candidate) => {
-    await applicator.setAttendance('event-1', 'org-1', { module: 'A', candidateId: candidate.id, present: true }, 'applicator');
-    await applicator.enable('event-1', 'org-1', { module: 'A', candidateIds: [candidate.id] }, 'applicator');
-  };
-
-  test('an enabled code opens an individual session and is consumed, without finishing the evaluation', async () => {
-    await checkIn(ana);
+  test('during the entry window a code opens an individual session by itself and is consumed, without finishing the evaluation', async () => {
     const result = await service.login(codes[ana.id].toLowerCase().replace('-', ' '), client);
 
     expect(result).toMatchObject({
@@ -104,7 +98,6 @@ describe('OnsiteAccessService', () => {
   });
 
   test('the session runs the evaluation and is closed by the final submission', async () => {
-    await checkIn(ana);
     const { token } = await service.login(codes[ana.id], client);
 
     await expect(invitations.submitEvaluation(token, { answers: LIKERT })).resolves.toMatchObject({ state: 'COMPLETED', alreadySubmitted: false });
@@ -114,28 +107,47 @@ describe('OnsiteAccessService', () => {
     await expect(invitations.validateAccess(token)).resolves.toMatchObject({ state: 'COMPLETED' });
   });
 
-  test('a code that was not enabled does not open anything', async () => {
-    await expect(service.login(codes[bruno.id], client)).resolves.toEqual({ state: 'NOT_ENABLED' });
+  test('before the appointment starts the code does not open anything yet', async () => {
+    clock.now = new Date('2026-11-05T13:59:00.000Z');
+    await expect(service.login(codes[bruno.id], client)).resolves.toEqual({ state: 'NOT_YET' });
+    expect(invitationRepo.data).toEqual([]);
+    expect(credentialRepo.data.find((item) => item.candidateId === bruno.id).status).toBe('GENERATED');
+  });
+
+  test('once the entry window closes the code no longer lets anyone begin', async () => {
+    clock.now = new Date('2026-11-05T14:30:00.000Z');
+    await expect(service.login(codes[bruno.id], client)).resolves.toEqual({ state: 'WINDOW_CLOSED' });
     expect(invitationRepo.data).toEqual([]);
   });
 
+  test('the window lasts the minutes configured for the appointment', async () => {
+    event = { ...event, onsite: { ...SESSION, entryWindowMinutes: 10 } };
+    clock.now = new Date('2026-11-05T14:09:59.000Z');
+    await expect(service.login(codes[ana.id], client)).resolves.toMatchObject({ state: 'VALID' });
+    clock.now = new Date('2026-11-05T14:10:00.000Z');
+    await expect(service.login(codes[bruno.id], client)).resolves.toEqual({ state: 'WINDOW_CLOSED' });
+  });
+
+  test('a session begun inside the window continues after it closes', async () => {
+    const { token } = await service.login(codes[ana.id], client);
+    clock.now = new Date('2026-11-05T15:40:00.000Z');
+    await expect(invitations.validateAccess(token)).resolves.toMatchObject({ state: 'VALID' });
+    await expect(invitations.submitEvaluation(token, { answers: LIKERT })).resolves.toMatchObject({ state: 'COMPLETED' });
+  });
+
   test('a code works only once', async () => {
-    await checkIn(ana);
     await service.login(codes[ana.id], client);
     await expect(service.login(codes[ana.id], { ip: '10.0.0.2', clientId: 'browser-2' })).resolves.toEqual({ state: 'USED' });
     expect(invitationRepo.data).toHaveLength(1);
   });
 
   test('two simultaneous logins with the same code: only one gets a session', async () => {
-    await checkIn(ana);
     const results = await Promise.all([service.login(codes[ana.id], client), service.login(codes[ana.id], client)]);
     expect(results.map((result) => result.state).sort()).toEqual(['USED', 'VALID']);
     expect(invitationRepo.data.filter((item) => item.status === 'ACTIVE')).toHaveLength(1);
   });
 
   test('revoked and expired codes are refused with their reason', async () => {
-    await checkIn(ana);
-    await checkIn(bruno);
     const roster = await applicator.roster('event-1', 'org-1', 'A');
     await credentials.revoke('event-1', 'org-1', roster.rows.find((row) => row.candidateId === bruno.id).credential.id, 'supervisor');
     await expect(service.login(codes[bruno.id], client)).resolves.toEqual({ state: 'REVOKED' });
@@ -145,10 +157,9 @@ describe('OnsiteAccessService', () => {
   });
 
   test('an evaluation already completed cannot be opened again', async () => {
-    await checkIn(ana);
     await candidateRepo.update(ana.id, { status: 'EVALUATION_COMPLETED', submittedAt: clock.now });
     await expect(service.login(codes[ana.id], client)).resolves.toEqual({ state: 'COMPLETED' });
-    expect(credentialRepo.data.find((item) => item.candidateId === ana.id).status).toBe('ENABLED');
+    expect(credentialRepo.data.find((item) => item.candidateId === ana.id).status).toBe('GENERATED');
   });
 
   test('wrong codes are answered slowly and, after a few, the browser must wait', async () => {
@@ -158,7 +169,6 @@ describe('OnsiteAccessService', () => {
     expect(service.sleep).toHaveBeenCalledTimes(3);
 
     // Even the right code waits now, from this browser.
-    await checkIn(ana);
     const blocked = await service.login(codes[ana.id], client);
     expect(blocked).toEqual({ state: 'TOO_MANY_ATTEMPTS', retryAfterSeconds: 300 });
     // Another computer in the room is not affected.
@@ -173,6 +183,7 @@ describe('OnsiteAccessService', () => {
   });
 
   test('correct codes that cannot be used now do not count as failed attempts', async () => {
+    clock.now = new Date('2026-11-05T13:00:00.000Z');
     for (let index = 0; index < 5; index += 1) await service.login(codes[bruno.id], client);
     expect(limiter.retryAfter([`client:${client.clientId}`])).toBe(0);
   });
@@ -191,8 +202,6 @@ describe('OnsiteAccessService', () => {
     clock.now = new Date('2026-11-18T12:00:00.000Z');
     const { issued: [{ code }] } = await credentials.issueBatch('event-1', 'org-1', { module: 'B', candidateIds: [ana.id] }, 'preparer');
     clock.now = new Date('2026-11-20T15:10:00.000Z');
-    await applicator.setAttendance('event-1', 'org-1', { module: 'B', candidateId: ana.id, present: true }, 'applicator');
-    await applicator.enable('event-1', 'org-1', { module: 'B', candidateIds: [ana.id] }, 'applicator');
 
     const result = await service.login(code, client);
     expect(result).toMatchObject({ state: 'VALID', module: 'B', macrocase: { name: 'Caso', totalQuestions: 1 } });

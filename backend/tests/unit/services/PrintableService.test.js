@@ -103,6 +103,17 @@ describe('access sheets', () => {
     expect(texts.some((text) => text.startsWith('Vence el '))).toBe(true);
   });
 
+  test('shows when the code works: its entry window, or the rest of the day for a recovery code', async () => {
+    const window = { opensAt: appointment.startsAt, closesAt: new Date('2026-11-05T14:30:00.000Z') };
+    const { drawn } = await render([
+      { ...card('Ana López', 'AAAAA-BBBBB'), ...window, recovery: false },
+      { ...card('Bruno Díaz', 'CCCCC-DDDDD'), opensAt: new Date('2026-11-05T15:00:00.000Z'), closesAt: new Date('2026-11-06T05:59:59.999Z'), recovery: true },
+    ]);
+    const texts = drawn.map((entry) => entry.text);
+    expect(texts.find((text) => text.startsWith('Activo el '))).toMatch(/de 8:00\sa\.\s?m\. a 8:30\sa\.\s?m\.$/);
+    expect(texts.find((text) => text.startsWith('Válido el '))).toMatch(/hasta las 11:59\sp\.\s?m\.$/);
+  });
+
   test('never shows the module, the event session or personal data', async () => {
     const { drawn: moduleA } = await render([card('Ana López', 'K7M2P-9QX4R', 'A')]);
     const { drawn: moduleB } = await render([card('Ana López', 'K7M2P-9QX4R', 'B')]);

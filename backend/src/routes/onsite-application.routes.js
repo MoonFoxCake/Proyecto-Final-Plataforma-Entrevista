@@ -2,7 +2,7 @@ const { Router } = require('express');
 const { checkPersistedRole } = require('../middleware/checkPersistedRole');
 const { validateInput } = require('../middleware/validateInput');
 const { validateQuery } = require('../middleware/validateQuery');
-const { onsiteRosterQuerySchema, attendanceSchema, enableSchema } = require('../validators/event.schema');
+const { onsiteRosterQuerySchema, attendanceSchema } = require('../validators/event.schema');
 
 /**
  * `/events/:eventId/onsite` — the applicator panel. Any company user of the
@@ -15,7 +15,6 @@ function createOnsiteApplicationRoutes(controller, authService) {
 
   router.get('/', companyOnly, validateQuery(onsiteRosterQuerySchema), controller.roster);
   router.post('/attendance', companyOnly, validateInput(attendanceSchema), controller.attendance);
-  router.post('/enable', companyOnly, validateInput(enableSchema), controller.enable);
 
   return router;
 }

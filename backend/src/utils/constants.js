@@ -51,10 +51,11 @@ const INVITATION_STATUSES = Object.freeze({
   CANCELLED: 'CANCELLED',
 });
 
-// accessCredentials.status. GENERATED (printed, not usable yet) → ENABLED
-// (the applicator verified the candidate) → USED (a session was opened).
-// REVOKED at any point before use. EXPIRED is not stored: a GENERATED or
-// ENABLED credential past `expiresAt` reads as expired.
+// accessCredentials.status. GENERATED (printed; it works by itself during
+// the appointment's entry window) → USED (a session was opened). REVOKED at
+// any point. EXPIRED is not stored: a GENERATED credential past `expiresAt`
+// reads as expired. ENABLED only exists on credentials from when the
+// applicator enabled each code by hand; it works like GENERATED.
 const CREDENTIAL_STATUSES = Object.freeze({
   GENERATED: 'GENERATED',
   ENABLED: 'ENABLED',

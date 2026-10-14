@@ -12,7 +12,8 @@ const CODE_LENGTH = 10;
 
 const MESSAGES = {
   INVALID: 'El código no es correcto. Revisa tu hoja de acceso e inténtalo de nuevo.',
-  NOT_ENABLED: 'Tu acceso aún no ha sido habilitado. Acércate al aplicador para verificar tu identidad.',
+  NOT_YET: 'Tu código aún no está activo. Se activará a la hora de inicio de tu cita.',
+  WINDOW_CLOSED: 'El horario para comenzar la evaluación ya terminó. Avisa al aplicador.',
   USED: 'Este código ya se utilizó. Si necesitas continuar tu evaluación, avisa al aplicador.',
   REVOKED: 'Este código fue anulado. Solicita uno nuevo al aplicador.',
   EXPIRED: 'Este código ya venció. Avisa al aplicador.',
@@ -63,7 +64,7 @@ function CodeScreen({ onAccess }) {
       <form onSubmit={submit} className='rounded-2xl border border-[#D9E2EA] bg-white p-8 shadow-sm' noValidate>
         <span className='inline-flex rounded-md bg-[#FFF7E8] px-2.5 py-1 text-xs font-semibold text-[#9A651E]'>Evaluación presencial</span>
         <h1 className='mt-4 font-display text-2xl font-bold text-[#10233A]'>Ingresa tu código de acceso</h1>
-        <p className='mt-2 text-sm leading-6 text-[#56677B]'>Escribe el código impreso en tu hoja de acceso. El aplicador debe haberlo habilitado después de verificar tu identidad.</p>
+        <p className='mt-2 text-sm leading-6 text-[#56677B]'>Escribe el código impreso en tu hoja de acceso. Funciona desde la hora de inicio de tu cita.</p>
 
         <label htmlFor='access-code' className='mt-6 block text-sm font-medium text-[#364153]'>Código de acceso</label>
         <input

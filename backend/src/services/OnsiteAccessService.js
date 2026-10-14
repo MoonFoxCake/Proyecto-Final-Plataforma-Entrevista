@@ -4,7 +4,7 @@ const {
 } = require('../utils/constants');
 const { ExternalServiceError, ValidationError } = require('../utils/errors');
 const { isOnsite } = require('../utils/eventModality');
-const { hashAccessCode, isWellFormedAccessCode } = require('../utils/accessCode');
+const { entryWindowState, hashAccessCode, isWellFormedAccessCode } = require('../utils/accessCode');
 const AccessCredentialService = require('./AccessCredentialService');
 
 // Every failed attempt answers a bit later: slows down automated guessing.
@@ -13,20 +13,30 @@ const FAILURE_DELAY_MS = 750;
 const hashToken = (token) => crypto.createHash('sha256').update(token).digest('hex');
 const wait = (ms) => new Promise((resolve) => { setTimeout(resolve, ms); });
 
+// A code not used yet: printed (GENERATED) or, on older credentials, enabled by hand.
+const USABLE = [CREDENTIAL_STATUSES.GENERATED, CREDENTIAL_STATUSES.ENABLED];
+
 // What the candidate is told for a known code that cannot be used now. No
 // candidate data is revealed before a successful login.
 const STATE_BY_STATUS = Object.freeze({
-  [CREDENTIAL_STATUSES.GENERATED]: 'NOT_ENABLED',
   [CREDENTIAL_STATUSES.USED]: 'USED',
   [CREDENTIAL_STATUSES.REVOKED]: 'REVOKED',
   [CREDENTIAL_STATUSES.EXPIRED]: 'EXPIRED',
 });
+// Before / after the appointment's entry window.
+const STATE_BY_WINDOW = Object.freeze({ PENDING: 'NOT_YET', CLOSED: 'WINDOW_CLOSED' });
 
 /**
  * Candidate login at the venue with the temporary code printed on their
- * card — no e-mail, password or phone.
+ * access sheet — no e-mail, password or phone.
  *
- * A valid, enabled code is consumed (USED) and exchanged for an individual
+ * A code works by itself from the start of the appointment, during its
+ * entry window; nobody enables it by hand. A recovery code (replacing one
+ * already used) works outside the window, until its expiry, and only on
+ * the same computer. The window only limits beginning: the session lasts
+ * until the end of the appointment's day.
+ *
+ * A valid code is consumed (USED) and exchanged for an individual
  * session: an opaque token stored hashed as an `invitations` document with
  * `channel: 'onsite'`, so the evaluation runs through the same access and
  * submission flow as an online invitation (and is closed by the final
@@ -56,8 +66,8 @@ class OnsiteAccessService {
    * @param {string} code as typed by the candidate
    * @param {{ ip?: string, clientId?: string }} client who is trying, for the attempt limits
    * @returns {Promise<object>} `{ state: 'VALID', token, module, candidate, event, … }` or
-   *   `{ state }` (INVALID, NOT_ENABLED, USED, REVOKED, EXPIRED, COMPLETED,
-   *   TOO_MANY_ATTEMPTS with `retryAfterSeconds`)
+   *   `{ state }` (INVALID, NOT_YET, WINDOW_CLOSED, USED, REVOKED, EXPIRED, COMPLETED,
+   *   OTHER_COMPUTER, TOO_MANY_ATTEMPTS with `retryAfterSeconds`)
    */
   async login(code, { ip, clientId } = {}) {
     const keys = [`ip:${ip || 'unknown'}`, ...(clientId ? [`client:${clientId}`] : [])];
@@ -76,7 +86,7 @@ class OnsiteAccessService {
 
     const now = this.now();
     const status = AccessCredentialService.effectiveStatus(credential, now);
-    if (status !== CREDENTIAL_STATUSES.ENABLED) return { state: STATE_BY_STATUS[status] || 'INVALID' };
+    if (!USABLE.includes(status)) return { state: STATE_BY_STATUS[status] || 'INVALID' };
 
     const { candidate, event } = await this.assignment(credential);
     if (!candidate || !event) return { state: 'INVALID' };
@@ -85,6 +95,13 @@ class OnsiteAccessService {
     if (credential.requiredClientId && credential.requiredClientId !== clientId) {
       await this.audit(credential, now, AUDIT_ACTIONS.ONSITE_LOGIN_OTHER_COMPUTER);
       return { state: 'OTHER_COMPUTER' };
+    }
+    if (!credential.recovery) {
+      // The current appointment, so a rescheduled session moves its window too.
+      const appointment = credential.module === MODULES.A ? event.onsite : candidate.moduleB?.citation?.appointment;
+      if (!appointment?.startsAt) return { state: 'INVALID' };
+      const windowState = entryWindowState(appointment, now);
+      if (windowState !== 'OPEN') return { state: STATE_BY_WINDOW[windowState] };
     }
 
     try {
@@ -99,7 +116,7 @@ class OnsiteAccessService {
       token = await this.openSession(credential, now, clientId);
     } catch (error) {
       // No session could be opened: give the code back so it can be retried.
-      await this.credentialRepo.update(credential.id, () => ({ status: CREDENTIAL_STATUSES.ENABLED, usedAt: null, usedByClient: null })).catch(() => {});
+      await this.credentialRepo.update(credential.id, () => ({ status: credential.status, usedAt: null, usedByClient: null })).catch(() => {});
       throw error;
     }
     await this.audit(credential, now, AUDIT_ACTIONS.ONSITE_SESSION_STARTED);
@@ -128,14 +145,14 @@ class OnsiteAccessService {
   }
 
   /**
-   * ENABLED → USED atomically: two logins with the same code cannot both
+   * Unused → USED atomically: two logins with the same code cannot both
    * succeed. Remembers which browser used it, so a replacement code is
    * bound to the same computer.
    */
   async consume(credential, now, clientId) {
     await this.credentialRepo.update(credential.id, (current) => {
       const status = AccessCredentialService.effectiveStatus(current, now);
-      if (status !== CREDENTIAL_STATUSES.ENABLED) {
+      if (!USABLE.includes(status)) {
         throw Object.assign(new ValidationError('El acceso ya no está disponible.'), { accessState: STATE_BY_STATUS[status] || 'INVALID' });
       }
       return { status: CREDENTIAL_STATUSES.USED, usedAt: now, usedByClient: clientId };

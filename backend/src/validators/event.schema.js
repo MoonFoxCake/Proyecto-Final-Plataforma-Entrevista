@@ -12,10 +12,17 @@ const citationSchema = z.object({
   ubicacion: z.string().trim().min(1, 'Indica la ubicación dentro de la sede (aula, sala, piso…).').max(160),
   fechaHoraInicio: z.string().datetime(),
   fechaHoraFin: z.string().datetime(),
+  // Minutes from the start during which the access codes let candidates begin.
+  ventanaInicioMinutos: z.number().int().min(5, 'La ventana de inicio debe ser de al menos 5 minutos.')
+    .max(240, 'La ventana de inicio no puede superar 240 minutos.').optional(),
   indicaciones: z.string().trim().max(1000).optional(),
 }).strict().refine((data) => new Date(data.fechaHoraFin) > new Date(data.fechaHoraInicio), {
   path: ['fechaHoraFin'],
   message: 'La hora de finalización debe ser posterior a la de inicio.',
+}).refine((data) => data.ventanaInicioMinutos === undefined
+  || new Date(data.fechaHoraInicio).getTime() + data.ventanaInicioMinutos * 60 * 1000 <= new Date(data.fechaHoraFin).getTime(), {
+  path: ['ventanaInicioMinutos'],
+  message: 'La ventana de inicio no puede terminar después de la hora de finalización.',
 });
 
 const eventBase = {
@@ -103,11 +110,6 @@ const attendanceSchema = z.object({
   presente: z.boolean(),
 }).strict();
 
-const enableSchema = z.object({
-  modulo: z.enum(['A', 'B']),
-  candidateIds: z.array(z.string().min(1).max(120)).min(1, 'Selecciona al menos un candidato.').max(500),
-}).strict();
-
 // Candidate login at the venue: only the code (format checked by the service).
 const onsiteLoginSchema = z.object({
   codigo: z.string().max(32),
@@ -145,6 +147,5 @@ module.exports = {
   attendanceQuerySchema,
   onsiteRosterQuerySchema,
   attendanceSchema,
-  enableSchema,
   onsiteLoginSchema,
 };

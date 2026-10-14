@@ -53,6 +53,17 @@ describe('AccessCredentialService', () => {
 
   const issueA = (ids, actor = 'user-1') => service.issueBatch('event-1', 'org-1', { module: 'A', candidateIds: ids }, actor);
 
+  test('no new codes once the entry window closed: they could not be used', async () => {
+    clock.now = new Date('2026-11-05T14:30:00.000Z');
+    const result = await issueA([ana.id]);
+    expect(result.issued).toEqual([]);
+    expect(result.rejected).toEqual([expect.objectContaining({ candidateId: ana.id, reason: 'la ventana de inicio de su cita ya terminó' })]);
+    const summary = await service.summary('event-1', 'org-1');
+    expect(summary.modules[0].rows.find((row) => row.candidateId === ana.id)).toMatchObject({
+      canIssue: false, accessWindow: { state: 'CLOSED', minutes: 30 },
+    });
+  });
+
   test('issues one code per candidate, returned once and stored only as an HMAC', async () => {
     const result = await issueA([zoe.id, ana.id, bruno.id]);
 
@@ -61,7 +72,10 @@ describe('AccessCredentialService', () => {
     expect(result).toMatchObject({ module: 'A', skipped: [], rejected: [] });
     const [first] = result.issued;
     expect(first.code).toMatch(/^[A-Z2-9]{5}-[A-Z2-9]{5}$/);
-    expect(first).toMatchObject({ module: 'A', expiresAt: END_OF_DAY, appointment: { venue: 'Campus Central', room: 'Aula 204' } });
+    expect(first).toMatchObject({
+      module: 'A', expiresAt: END_OF_DAY, appointment: { venue: 'Campus Central', room: 'Aula 204', entryWindowMinutes: 30 },
+      opensAt: SESSION.startsAt, closesAt: new Date('2026-11-05T14:30:00.000Z'), recovery: false,
+    });
     expect(new Set(result.issued.map((item) => item.code)).size).toBe(3);
 
     const stored = await credentialRepo.findById(first.credentialId);

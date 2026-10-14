@@ -45,6 +45,7 @@ test('creates an onsite event with venue, session and only Module A', async () =
       ubicacion: 'Aula 204',
       fechaHoraInicio: new Date('2026-11-05T08:00').toISOString(),
       fechaHoraFin: new Date('2026-11-05T10:00').toISOString(),
+      ventanaInicioMinutos: 30,
       indicaciones: 'Llegar 15 minutos antes.',
     },
   });

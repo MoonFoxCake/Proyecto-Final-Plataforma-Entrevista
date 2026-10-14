@@ -100,7 +100,8 @@ test('after the submission the computer returns by itself to a neutral code scre
 
 test.each([
   ['INVALID', 'El código no es correcto'],
-  ['NOT_ENABLED', 'aún no ha sido habilitado'],
+  ['NOT_YET', 'aún no está activo'],
+  ['WINDOW_CLOSED', 'El horario para comenzar la evaluación ya terminó'],
   ['USED', 'ya se utilizó'],
   ['REVOKED', 'fue anulado'],
   ['EXPIRED', 'ya venció'],

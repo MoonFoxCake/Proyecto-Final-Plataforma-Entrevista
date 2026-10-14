@@ -1,6 +1,14 @@
 import { FormField, Input } from '../ui';
 
-export const EMPTY_SESSION = { sede: '', ubicacion: '', fecha: '', horaInicio: '', horaFin: '', indicaciones: '' };
+export const EMPTY_SESSION = { sede: '', ubicacion: '', fecha: '', horaInicio: '', horaFin: '', ventana: '30', indicaciones: '' };
+
+// Minutes from the start during which the access codes let candidates begin.
+const WINDOW_OPTIONS = [10, 15, 20, 30, 45, 60, 90, 120];
+
+const minutesOf = (time) => {
+  const [hours, minutes] = time.split(':').map(Number);
+  return hours * 60 + minutes;
+};
 
 const inputClass = 'w-full rounded-xl border border-[#E5E7EB] bg-white px-4 py-3 text-sm text-[#101828] focus:border-[#0AADA8] focus:outline-none focus:ring-2 focus:ring-[#0AADA8]/30';
 
@@ -10,6 +18,9 @@ export function sessionProblem(session) {
   if (!session.ubicacion.trim()) return 'Indica la ubicación dentro de la sede (aula, sala, piso…).';
   if (!session.fecha || !session.horaInicio || !session.horaFin) return 'Indica la fecha y el horario de la evaluación.';
   if (session.horaFin <= session.horaInicio) return 'La hora de finalización debe ser posterior a la de inicio.';
+  if (minutesOf(session.horaInicio) + Number(session.ventana) > minutesOf(session.horaFin)) {
+    return 'La ventana de inicio no puede terminar después de la hora de fin.';
+  }
   return '';
 }
 
@@ -20,11 +31,12 @@ export function toCitationPayload(session) {
     ubicacion: session.ubicacion.trim(),
     fechaHoraInicio: new Date(`${session.fecha}T${session.horaInicio}`).toISOString(),
     fechaHoraFin: new Date(`${session.fecha}T${session.horaFin}`).toISOString(),
+    ventanaInicioMinutos: Number(session.ventana),
     indicaciones: session.indicaciones.trim() || undefined,
   };
 }
 
-/** Venue, location, date, time window and instructions of an onsite session. */
+/** Venue, location, date, time window, entry window and instructions of an onsite session. */
 export function SessionFields({ value, onChange, idPrefix = 'session' }) {
   const update = (field) => (event) => onChange({ ...value, [field]: event.target.value });
   const id = (field) => `${idPrefix}-${field}`;
@@ -46,6 +58,14 @@ export function SessionFields({ value, onChange, idPrefix = 'session' }) {
         <FormField label='Hora de fin' htmlFor={id('horaFin')}>
           <input id={id('horaFin')} type='time' value={value.horaFin} onChange={update('horaFin')} className={inputClass} required />
         </FormField>
+      </div>
+      <div className='sm:col-span-2'>
+        <FormField label='Ventana de inicio' htmlFor={id('ventana')}>
+          <select id={id('ventana')} value={value.ventana} onChange={update('ventana')} aria-describedby={id('ventana-ayuda')} className={`${inputClass} sm:max-w-xs`}>
+            {WINDOW_OPTIONS.map((minutes) => <option key={minutes} value={String(minutes)}>{minutes} minutos</option>)}
+          </select>
+        </FormField>
+        <p id={id('ventana-ayuda')} className='mt-2 text-xs text-[#64748B]'>Los códigos de acceso se activan solos a la hora de inicio y solo permiten comenzar durante estos minutos. Quien ya comenzó puede terminar.</p>
       </div>
       <div className='sm:col-span-2'>
         <FormField label='Indicaciones para los candidatos (opcional)' htmlFor={id('indicaciones')}>

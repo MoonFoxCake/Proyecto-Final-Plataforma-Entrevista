@@ -59,6 +59,17 @@ describe('event modality', () => {
     expect(JSON.stringify(backwards.error.flatten())).toContain('posterior');
   });
 
+  test('the entry window: optional, 5 to 240 minutes, and it cannot end after the session', () => {
+    const withWindow = (ventanaInicioMinutos) => eventSchema.safeParse({ ...base, modalidad: 'presencial', presencial: { ...session, ventanaInicioMinutos } });
+    expect(withWindow(30).success).toBe(true);
+    expect(withWindow(120).success).toBe(true);
+    expect(withWindow(4).success).toBe(false);
+    expect(withWindow(15.5).success).toBe(false);
+    const tooLong = withWindow(121);
+    expect(tooLong.success).toBe(false);
+    expect(JSON.stringify(tooLong.error.flatten())).toContain('hora de finalización');
+  });
+
   test('fields of the other modality are rejected', () => {
     expect(eventSchema.safeParse({ ...base, modalidad: 'presencial', presencial: session, fechaHoraHabilitacion: '2026-10-10T15:00:00.000Z' }).success).toBe(false);
     expect(eventSchema.safeParse({ ...base, modalidad: 'remota', fechaHoraHabilitacion: '2026-10-10T15:00:00.000Z' }).success).toBe(false);

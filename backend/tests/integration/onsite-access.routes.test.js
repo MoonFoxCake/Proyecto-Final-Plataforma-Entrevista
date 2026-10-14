@@ -31,7 +31,6 @@ describe('POST /api/v1/onsite/access (public)', () => {
     const { issued } = await container.accessCredentialService.issueBatch(event.id, 'org-1', { module: 'A', candidateIds: [candidate.id] }, 'company-1');
     code = issued[0].code;
     await container.onsiteApplicationService.setAttendance(event.id, 'org-1', { module: 'A', candidateId: candidate.id, present: true }, 'company-1');
-    await container.onsiteApplicationService.enable(event.id, 'org-1', { module: 'A', candidateIds: [candidate.id] }, 'company-1');
     container.onsiteAccessService.sleep = async () => {};
     app = createApp(container);
   });

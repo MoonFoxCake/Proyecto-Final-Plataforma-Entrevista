@@ -78,7 +78,7 @@ export function nextAction(state, { pendingAccesses = 0, onsiteToday = false } =
       return { title: `Prepara los accesos (${pendingAccesses})`, description: 'Genera e imprime los accesos temporales antes del día de la evaluación.', label: 'Preparar accesos', to: 'presencial?etapa=preparar' };
     }
     if (state.onsite && onsiteToday) {
-      return { title: 'Aplica la evaluación', description: 'Registra la asistencia y habilita los accesos de los candidatos presentes.', label: 'Ir a aplicar', to: 'presencial?etapa=aplicar' };
+      return { title: 'Aplica la evaluación', description: 'Los accesos se activan solos a la hora de inicio. Registra la asistencia y sigue el avance.', label: 'Ir a aplicar', to: 'presencial?etapa=aplicar' };
     }
     return state.completed < state.total
       ? { title: 'Evaluación en curso', description: `${state.completed} de ${state.total} candidatos completaron la evaluación.` }

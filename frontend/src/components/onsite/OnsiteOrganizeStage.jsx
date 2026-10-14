@@ -49,7 +49,7 @@ export function OnsiteOrganizeStage({ eventId, module, summary, loaded, onPrepar
         <h3 id='organize-counts' className='sr-only'>Estado de los accesos del Módulo {module}</h3>
         <dl className='grid grid-cols-2 divide-[#EEF2F6] sm:grid-cols-4 sm:divide-x'>
           <Count label='Candidatos' value={counts?.total ?? 0} />
-          <Count label='Preparados' value={(counts?.prepared ?? 0) + (counts?.enabled ?? 0)} />
+          <Count label='Preparados' value={counts?.prepared ?? 0} />
           <Count label='Sin preparar' value={counts?.pending ?? 0} />
           <Count label='Revocados' value={counts?.revoked ?? 0} />
         </dl>

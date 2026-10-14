@@ -12,8 +12,3 @@ export async function setAttendance(eventId, modulo, candidateId, presente) {
   return data?.data ?? null;
 }
 
-/** Enables the access codes of present candidates; the rest come back in `skipped` with the reason. */
-export async function enableCredentials(eventId, modulo, candidateIds) {
-  const { data } = await api.post(`/events/${eventId}/onsite/enable`, { modulo, candidateIds });
-  return data?.data ?? null;
-}

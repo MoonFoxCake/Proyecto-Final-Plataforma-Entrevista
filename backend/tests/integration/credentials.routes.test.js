@@ -99,7 +99,9 @@ describe('/api/v1/events/:eventId/credentials', () => {
 
     expect((await request(app).get(`${onsite}?modulo=A`).set(as('company-2'))).status).toBe(404);
     expect((await request(app).post(`${onsite}/attendance`).set(as('company-2')).send({ modulo: 'A', candidateId: candidate.id, presente: true })).status).toBe(404);
-    expect((await request(app).post(`${onsite}/enable`).set(as('admin-1')).send({ modulo: 'A', candidateIds: [candidate.id] })).status).toBe(403);
+    expect((await request(app).post(`${onsite}/attendance`).set(as('admin-1')).send({ modulo: 'A', candidateId: candidate.id, presente: true })).status).toBe(403);
+    // There is no manual enabling any more.
+    expect((await request(app).post(`${onsite}/enable`).set(as('company-1')).send({ modulo: 'A', candidateIds: [candidate.id] })).status).toBe(404);
     expect((await request(app).post(`${onsite}/attendance`).set(as('company-1')).send({ modulo: 'A', candidateId: candidate.id })).status).toBe(400);
 
     // Another user of the same company acts as applicator.
@@ -107,12 +109,9 @@ describe('/api/v1/events/:eventId/credentials', () => {
     expect(marked.status).toBe(200);
     expect(marked.body.data).toMatchObject({ status: 'PRESENT', markedBy: 'company-1b' });
 
-    const enabled = await request(app).post(`${onsite}/enable`).set(as('company-1b')).send({ modulo: 'A', candidateIds: [candidate.id] });
-    expect(enabled.body.data.enabled).toHaveLength(1);
-
     const roster = await request(app).get(`${onsite}?modulo=A`).set(as('company-1'));
     expect(roster.status).toBe(200);
-    expect(roster.body.data.rows[0]).toMatchObject({ attendance: { status: 'PRESENT' }, credential: { status: 'ENABLED', enabledBy: 'company-1b' } });
+    expect(roster.body.data.rows[0]).toMatchObject({ attendance: { status: 'PRESENT' }, credential: { status: 'GENERATED' }, accessWindow: { state: 'OPEN' } });
   });
 
   test('revoke and reissue go through the same checks', async () => {

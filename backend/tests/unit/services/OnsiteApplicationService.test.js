@@ -52,7 +52,6 @@ describe('OnsiteApplicationService', () => {
   });
 
   const mark = (candidate, present = true, actor = 'applicator-1') => service.setAttendance('event-1', 'org-1', { module: 'A', candidateId: candidate.id, present }, actor);
-  const enable = (ids, actor = 'applicator-1') => service.enable('event-1', 'org-1', { module: 'A', candidateIds: ids }, actor);
 
   test('the roster lists the cited candidates alphabetically with attendance, access and evaluation', async () => {
     const roster = await service.roster('event-1', 'org-1', 'A');
@@ -62,11 +61,11 @@ describe('OnsiteApplicationService', () => {
       ['Bruno Díaz', '200', 'GENERATED', 'PENDING'],
       ['Carla Méndez', '300', null, 'PENDING'],
     ]);
-    expect(roster).toMatchObject({ isAppointmentDay: true, counts: { cited: 3, present: 0, withCode: 2, enabled: 0, readyToEnable: 0 } });
+    expect(roster).toMatchObject({ isAppointmentDay: true, counts: { cited: 3, present: 0, withCode: 2, inProgress: 0, completed: 0 } });
     expect(JSON.stringify(roster)).not.toContain('codeHash');
   });
 
-  test('marking present records who verified the candidate, and can be undone before enabling', async () => {
+  test('marking present records who verified the candidate, and can be undone', async () => {
     const record = await mark(ana);
     expect(record).toEqual({ status: 'PRESENT', markedAt: ON_THE_DAY, markedBy: 'applicator-1' });
     expect((await candidateRepo.findById(ana.id)).attendance).toEqual({ A: record });
@@ -78,70 +77,47 @@ describe('OnsiteApplicationService', () => {
     ]);
   });
 
-  test('enables a present candidate code and records who did it', async () => {
-    await mark(ana);
-    const result = await enable([ana.id], 'applicator-2');
+  test('codes are not enabled by hand: the roster shows when each one works', async () => {
+    clock.now = new Date('2026-11-05T13:30:00.000Z');
+    let roster = await service.roster('event-1', 'org-1', 'A');
+    const window = { opensAt: SESSION.startsAt, closesAt: new Date('2026-11-05T14:30:00.000Z'), minutes: 30 };
+    expect(roster.accessWindow).toEqual({ ...window, state: 'PENDING' });
+    expect(roster.rows[0].accessWindow).toEqual({ ...window, state: 'PENDING' });
 
-    expect(result.enabled).toEqual([expect.objectContaining({ candidateId: ana.id })]);
-    const credential = await credentialRepo.findById(result.enabled[0].credentialId);
-    expect(credential).toMatchObject({ status: 'ENABLED', enabledBy: 'applicator-2', enabledAt: ON_THE_DAY });
-    expect(auditRepo.data.at(-1)).toMatchObject({ action: 'CREDENTIAL_ENABLED', actorUid: 'applicator-2', candidateId: ana.id, credentialId: credential.id });
-  });
-
-  test('a mass enabling never enables an absent candidate', async () => {
-    await mark(ana);
-    const result = await enable([ana.id, bruno.id, carla.id]);
-
-    expect(result.enabled.map((item) => item.nombreCompleto)).toEqual(['Ana López']);
-    expect(result.skipped).toEqual([
-      { candidateId: bruno.id, nombreCompleto: 'Bruno Díaz', reason: 'no está marcado como presente' },
-      { candidateId: carla.id, nombreCompleto: 'Carla Méndez', reason: 'no está marcado como presente' },
-    ]);
-    const roster = await service.roster('event-1', 'org-1', 'A');
-    expect(roster.rows.find((row) => row.candidateId === bruno.id).credential.status).toBe('GENERATED');
-  });
-
-  test('reports why a present candidate cannot be enabled', async () => {
-    await mark(carla);
-    await mark(ana);
-    await enable([ana.id]);
-    const result = await enable([ana.id, carla.id]);
-    expect(result.enabled).toEqual([]);
-    expect(result.skipped.map((item) => item.reason)).toEqual(['su acceso ya está habilitado', 'no tiene un acceso preparado']);
-  });
-
-  test('a revoked code cannot be enabled until it is reissued', async () => {
-    await mark(bruno);
-    const roster = await service.roster('event-1', 'org-1', 'A');
-    const credentialId = roster.rows.find((row) => row.candidateId === bruno.id).credential.id;
-    await credentials.revoke('event-1', 'org-1', credentialId, 'supervisor', 'Extraviada');
-    expect((await enable([bruno.id])).skipped[0].reason).toBe('su acceso fue revocado; reemítelo');
-
-    await credentials.issueBatch('event-1', 'org-1', { module: 'A', candidateIds: [bruno.id] }, 'supervisor');
-    expect((await enable([bruno.id])).enabled).toHaveLength(1);
-  });
-
-  test('attendance cannot be removed once the code was enabled', async () => {
-    await mark(ana);
-    await enable([ana.id]);
-    await expect(mark(ana, false)).rejects.toThrow('ya fue habilitado');
-  });
-
-  test('attendance and enabling only happen on the appointment day', async () => {
-    clock.now = new Date('2026-11-04T15:00:00.000Z');
-    await expect(mark(ana)).rejects.toThrow('solo se registran el día de la cita');
-    expect((await service.roster('event-1', 'org-1', 'A')).isAppointmentDay).toBe(false);
+    clock.now = new Date('2026-11-05T14:05:00.000Z');
+    roster = await service.roster('event-1', 'org-1', 'A');
+    expect(roster.accessWindow.state).toBe('OPEN');
 
     clock.now = ON_THE_DAY;
+    roster = await service.roster('event-1', 'org-1', 'A');
+    expect(roster.accessWindow.state).toBe('CLOSED');
+    // Nobody had to touch the codes.
+    expect(roster.rows.map((row) => row.credential?.status ?? null)).toEqual(['GENERATED', 'GENERATED', null]);
+  });
+
+  test('attendance is only a record: it changes nothing in the codes', async () => {
     await mark(ana);
-    clock.now = new Date('2026-11-06T15:00:00.000Z');
-    expect((await enable([ana.id])).skipped[0].reason).toBe('hoy no es el día de su cita');
+    const roster = await service.roster('event-1', 'org-1', 'A');
+    expect(roster.rows.find((row) => row.candidateId === ana.id)).toMatchObject({ attendance: { status: 'PRESENT' }, credential: { status: 'GENERATED' } });
+    expect(roster.counts).toMatchObject({ present: 1, withCode: 2 });
+  });
+
+  test('attendance cannot be removed once the candidate used the code', async () => {
+    await mark(ana);
+    const roster = await service.roster('event-1', 'org-1', 'A');
+    await credentialRepo.update(roster.rows.find((row) => row.candidateId === ana.id).credential.id, () => ({ status: 'USED', usedAt: ON_THE_DAY }));
+    await expect(mark(ana, false)).rejects.toThrow('ya utilizó su acceso');
+  });
+
+  test('attendance only happens on the appointment day', async () => {
+    clock.now = new Date('2026-11-04T15:00:00.000Z');
+    await expect(mark(ana)).rejects.toThrow('solo se registra el día de la cita');
+    expect((await service.roster('event-1', 'org-1', 'A')).isAppointmentDay).toBe(false);
   });
 
   test('shows evaluations in progress and completed', async () => {
-    await mark(ana);
-    const { enabled: [{ credentialId }] } = await enable([ana.id]);
-    await credentialRepo.update(credentialId, () => ({ status: 'USED', usedAt: ON_THE_DAY }));
+    const before = await service.roster('event-1', 'org-1', 'A');
+    await credentialRepo.update(before.rows.find((row) => row.candidateId === ana.id).credential.id, () => ({ status: 'USED', usedAt: ON_THE_DAY }));
     await candidateRepo.update(bruno.id, { status: 'EVALUATION_COMPLETED', submittedAt: ON_THE_DAY });
 
     const roster = await service.roster('event-1', 'org-1', 'A');
@@ -165,13 +141,11 @@ describe('OnsiteApplicationService', () => {
     test('another organization cannot see or act on the event', async () => {
       await expect(service.roster('event-1', 'org-2', 'A')).rejects.toBeInstanceOf(NotFoundError);
       await expect(service.setAttendance('event-1', 'org-2', { module: 'A', candidateId: ana.id, present: true }, 'x')).rejects.toBeInstanceOf(NotFoundError);
-      await expect(service.enable('event-1', 'org-2', { module: 'A', candidateIds: [ana.id] }, 'x')).rejects.toBeInstanceOf(NotFoundError);
     });
 
-    test('candidates of another event cannot be marked or enabled', async () => {
+    test('candidates of another event cannot be marked', async () => {
       const outsider = await candidateRepo.create({ eventId: 'event-2', orgId: 'org-1', nombreCompleto: 'Otro Evento' });
       await expect(mark(outsider)).rejects.toBeInstanceOf(NotFoundError);
-      await expect(enable([outsider.id])).rejects.toThrow('no pertenecen a este evento');
     });
 
     test('only onsite events and their modules', async () => {
