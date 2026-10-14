@@ -50,7 +50,17 @@ class AuthService {
     let organization;
     try {
       const acceptedTermsAt = new Date();
+      const requestedPlan = ['fase-a', 'fase-a-b', 'completo'].includes(data.subscriptionPlan)
+        ? data.subscriptionPlan
+        : 'fase-a';
       organization = await this.organizationRepo.create({
+        subscription: {
+          planId: requestedPlan,
+          status: 'pending_simulation',
+          paymentMode: 'simulated',
+          createdAt: acceptedTermsAt,
+          updatedAt: acceptedTermsAt,
+        },
         companyName,
         name: companyName,
         industry: data.industry.trim(),

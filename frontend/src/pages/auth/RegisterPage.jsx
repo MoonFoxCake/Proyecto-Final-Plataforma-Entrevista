@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Button, FormField, Input, Select } from '../../components/ui';
 import { Logo } from '../../components/auth/Logo.jsx';
 import { REGISTER_STEPS, RegisterBrandPanel } from '../../components/auth/RegisterBrandPanel.jsx';
@@ -14,6 +14,12 @@ const COMPANY_SIZES = [
   ['51-200', '51 a 200 colaboradores'], ['201-500', '201 a 500 colaboradores'], ['501+', 'Más de 500 colaboradores'],
 ];
 
+const PLAN_CODES = {
+  'fase-a': 'A',
+  'fase-a-b': 'AB',
+  completo: 'COMPLETE',
+};
+
 const INITIAL_FORM = {
   companyName: '', industry: '', companySize: '', website: '', companyPhone: '',
   contactName: '', contactRole: '', contactPhone: '', email: '', city: '', country: '',
@@ -22,6 +28,8 @@ const INITIAL_FORM = {
 
 export function RegisterPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const selectedPlan = ['fase-a', 'fase-a-b', 'completo'].includes(searchParams.get('plan')) ? searchParams.get('plan') : 'fase-a';
   const [step, setStep] = useState(0);
   const [done, setDone] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -74,7 +82,7 @@ export function RegisterPage() {
         companySize: form.companySize, website: form.website.trim() || undefined,
         companyPhone: form.companyPhone.trim(), city: form.city.trim(), country: form.country.trim(),
         displayName: form.contactName.trim(), contactRole: form.contactRole.trim(), contactPhone: form.contactPhone.trim(),
-        email: form.email.trim(), password: form.password, acceptTerms: form.terms,
+        email: form.email.trim(), password: form.password, acceptTerms: form.terms, subscriptionPlan: PLAN_CODES[selectedPlan],
       });
       setDone(true);
     } catch (error) { setSubmitError(getAuthErrorMessage(error)); }
@@ -89,6 +97,7 @@ export function RegisterPage() {
       <div className='w-full max-w-[500px] py-8'>
         <div className='mb-6 lg:hidden'><Logo dark /></div>
         <div className='mb-6 lg:hidden'><div className='mb-2 flex justify-between text-xs text-[#99A1AF]'><span>Paso {step + 1} de {REGISTER_STEPS.length}</span><span>{REGISTER_STEPS[step]}</span></div><div className='h-1.5 overflow-hidden rounded-full bg-[#F3F4F6]'><div className='h-full rounded-full bg-[#0AADA8] transition-all' style={{ width: `${((step + 1) / REGISTER_STEPS.length) * 100}%` }} /></div></div>
+        <div className='mb-4 rounded-xl border border-[#BFE5E2] bg-[#F0FFFE] p-4 text-sm text-[#27625F]'>Plan seleccionado: <strong>{selectedPlan === 'fase-a' ? 'Fase A' : selectedPlan === 'fase-a-b' ? 'Fase A + B' : 'Plan completo'}</strong>. Podrás revisarlo antes de completar la contratación.</div>
         <div className='mb-7'><h2 className='font-display text-3xl font-bold text-[#101828]'>{step === 0 ? 'Datos de la empresa' : step === 1 ? 'Responsable de la cuenta' : 'Configura el acceso'}</h2><p className='mt-2 text-sm text-[#6A7282]'>{step === 0 ? 'Identifica la organización que contratará y administrará el servicio.' : step === 1 ? 'Esta persona será el primer usuario con acceso al portal de empresa.' : 'Crea una contraseña segura y confirma las condiciones del servicio.'}</p></div>
         <form onSubmit={handleSubmit} className='space-y-4' noValidate>
           {step === 0 && <>

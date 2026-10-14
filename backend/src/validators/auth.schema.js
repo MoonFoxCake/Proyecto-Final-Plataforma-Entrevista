@@ -21,6 +21,7 @@ const registerSchema = z.object({
   contactRole: z.string().trim().min(2).max(120),
   contactPhone: z.string().trim().min(5).max(30),
   acceptTerms: z.literal(true),
+  subscriptionPlan: z.enum(['A', 'AB', 'COMPLETE']).optional(),
 }).strict();
 
 const companyUserSchema = z.object({

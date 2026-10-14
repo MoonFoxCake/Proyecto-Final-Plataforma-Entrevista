@@ -1,5 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 
+import { LandingPage } from '../pages/LandingPage.jsx';
+import { PlanSelectionPage } from '../pages/PlanSelectionPage.jsx';
 import { LoginPage } from '../pages/auth/LoginPage.jsx';
 import { RegisterPage } from '../pages/auth/RegisterPage.jsx';
 import { ForgotPasswordPage } from '../pages/auth/ForgotPasswordPage.jsx';
@@ -23,8 +25,8 @@ import { ROLES } from '../utils/constants.js';
 /** Sends `/` to the dashboard if already signed in, to `/login` otherwise. */
 function RootRedirect() {
   const { user, loading } = useAuth();
-  if (loading) return null;
-  return <Navigate to={user ? '/dashboard' : '/login'} replace />;
+  if (loading && user) return null;
+  return user ? <Navigate to='/dashboard' replace /> : <LandingPage />;
 }
 
 /**
@@ -40,6 +42,7 @@ export function AppRouter() {
       <Routes>
         <Route path="/" element={<RootRedirect />} />
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/planes" element={<PlanSelectionPage />} />
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
@@ -71,3 +74,4 @@ export function AppRouter() {
     </BrowserRouter>
   );
 }
+
