@@ -7,6 +7,8 @@ const { ROLES } = require('../utils/constants');
  * Public company registration. Candidates never create accounts here;
  * they access evaluations only through invitation links.
  */
+
+
 const registerSchema = z.object({
   companyName: z.string().trim().min(2).max(160),
   industry: z.string().trim().min(2).max(120),
@@ -41,4 +43,8 @@ const setRoleSchema = z.object({
   orgId: z.string().min(1).optional(),
 });
 
-module.exports = { registerSchema, companyUserSchema, setRoleSchema };
+const updateSubscriptionSchema = z.object({
+  planId: z.enum(['fase-a', 'fase-a-b', 'completo']),
+}).strict();
+
+module.exports = { registerSchema, companyUserSchema, setRoleSchema, updateSubscriptionSchema };

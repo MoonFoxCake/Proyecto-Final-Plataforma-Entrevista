@@ -1,9 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CompanySidebar } from '../components/company/CompanySidebar.jsx';
 import { Button, FormField, Input } from '../components/ui';
 import { BriefcaseIcon, SpinnerIcon } from '../components/auth/icons.jsx';
 import * as eventService from '../services/eventService.js';
+import * as subscriptionService from '../services/subscriptionService.js';
+import { normalizePlanId, SUBSCRIPTION_PLANS } from '../utils/subscriptionPlans.js';
 
 const EMPTY_FORM = {
   nombre: '',
@@ -17,6 +19,14 @@ export function NewEventPage() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [subscription, setSubscription] = useState(null);
+
+  useEffect(() => {
+    subscriptionService.getSubscription().then(setSubscription).catch(() => setSubscription(null));
+  }, []);
+
+  const planId = normalizePlanId(subscription?.subscription?.planId);
+  const plan = SUBSCRIPTION_PLANS[planId] || SUBSCRIPTION_PLANS['fase-a'];
 
   const update = (field) => (event) => {
     setForm((current) => ({ ...current, [field]: event.target.value }));
@@ -85,9 +95,9 @@ export function NewEventPage() {
             </FormField>
 
             <div>
-              <p className='mb-2 text-sm font-medium text-[#364153]'>Plan de evaluación</p>
+              <p className='mb-2 text-sm font-medium text-[#364153]'>Tu suscripción</p>
               <div className='rounded-xl border-2 border-[#0AADA8] bg-[#F0FFFE] p-4'>
-                <div className='flex items-center justify-between gap-3'><div><p className='text-sm font-semibold text-[#101828]'>Plan A</p><p className='mt-1 text-xs text-[#64748B]'>Único plan disponible para esta demo.</p></div><span className='rounded-full bg-[#0AADA8] px-2.5 py-1 text-xs font-semibold text-white'>Seleccionado</span></div>
+                <div className='flex items-center justify-between gap-3'><div><p className='text-sm font-semibold text-[#101828]'>{plan.name}</p><p className='mt-1 text-xs leading-5 text-[#64748B]'>Incluye: {plan.modules.map((module) => `Módulo ${module}`).join(', ')}.</p></div><span className='rounded-full bg-[#0AADA8] px-2.5 py-1 text-xs font-semibold text-white'>Contratado</span></div>
               </div>
             </div>
 

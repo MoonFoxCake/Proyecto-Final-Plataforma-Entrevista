@@ -5,6 +5,8 @@ import { CandidateForm } from '../components/company/CandidateForm.jsx';
 import { CandidateList, canReceiveModuleB } from '../components/company/CandidateList.jsx';
 import { Button } from '../components/ui';
 import * as eventService from '../services/eventService.js';
+import * as subscriptionService from '../services/subscriptionService.js';
+import { canUseModule, normalizePlanId, SUBSCRIPTION_PLANS } from '../utils/subscriptionPlans.js';
 
 function eventName(event) {
   return event?.name || event?.title || event?.eventName || event?.positionName || 'Detalle del evento';
@@ -42,6 +44,14 @@ export function EventDetailPage() {
   const [publishing, setPublishing] = useState(false);
   const [selectedForModuleB, setSelectedForModuleB] = useState(() => new Set());
   const [sendingModuleB, setSendingModuleB] = useState(false);
+  const [subscription, setSubscription] = useState(null);
+
+  useEffect(() => {
+    subscriptionService.getSubscription().then(setSubscription).catch(() => setSubscription(null));
+  }, []);
+  const planId = normalizePlanId(subscription?.subscription?.planId);
+  const hasModuleB = canUseModule(planId, 'B');
+  const currentPlan = SUBSCRIPTION_PLANS[planId] || SUBSCRIPTION_PLANS['fase-a'];
 
   const load = useCallback(async () => {
     try {
@@ -184,7 +194,16 @@ export function EventDetailPage() {
                 {published && <p><strong className='mr-1 text-[#101828]'>{moduleBCompleted}/{moduleBSent}</strong> Módulo B respondidos</p>}
               </div>
 
-              {published && (
+              {published && !hasModuleB && (
+                <section className='mt-6 rounded-2xl border border-amber-200 bg-amber-50 p-5'>
+                  <span className='inline-flex rounded-md bg-white px-2.5 py-1 text-xs font-semibold text-amber-800'>Módulo bloqueado por suscripción</span>
+                  <h2 className='mt-3 font-display text-lg font-bold text-[#101828]'>Módulo B · Macrocaso</h2>
+                  <p className='mt-2 text-sm leading-6 text-amber-900'>Tu plan actual ({currentPlan.name}) incluye únicamente el Módulo A. Para enviar el Módulo B, necesitas Fase A + B o Plan completo.</p>
+                  <Button type='button' variant='accent' className='mt-4 h-11 px-5' onClick={() => navigate('/planes')}>Ver planes disponibles</Button>
+                </section>
+              )}
+
+              {published && hasModuleB && (
                 <section className='mt-6 rounded-2xl border border-[#CDEBEA] bg-[#F4FBFB] p-5'>
                   <div className='flex flex-col justify-between gap-4 lg:flex-row lg:items-start'>
                     <div className='max-w-2xl'>
@@ -230,3 +249,4 @@ export function EventDetailPage() {
     </div>
   );
 }
+

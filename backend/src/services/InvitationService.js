@@ -2,7 +2,7 @@ const crypto = require('crypto');
 const {
   CANDIDATE_STATUSES, INVITATION_STATUSES, MODULES, MODULE_B_STATUSES,
 } = require('../utils/constants');
-const { ValidationError } = require('../utils/errors');
+const { ValidationError, ForbiddenError } = require('../utils/errors');
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 // Module B is sent once Module A results are out, so it is available right
@@ -67,6 +67,16 @@ class InvitationService {
     return this.summarize(results);
   }
 
+  /** Prevents companies without the right plan from invoking Module B through the API. */
+  async requireModuleBSubscription(orgId) {
+    const organization = await this.organizationRepo.findById(orgId);
+    const planId = organization?.subscription?.planId || organization?.subscriptionPlan || 'fase-a';
+    const normalizedPlan = ({ A: 'fase-a', AB: 'fase-a-b', COMPLETE: 'completo' })[planId] || planId;
+    if (!['fase-a-b', 'completo'].includes(normalizedPlan)) {
+      throw new ForbiddenError('Tu suscripción no incluye el Módulo B. Cambia al plan Fase A + B o Plan completo para habilitarlo.');
+    }
+  }
+
   /**
    * Module B: sends the macrocase to the candidates the company selected
    * after reading their Module A profile. The first time, one of the active
@@ -77,6 +87,7 @@ class InvitationService {
    */
   async sendModuleB(eventId, orgId, candidateIds) {
     this.requireFrontendUrl();
+    await this.requireModuleBSubscription(orgId);
     let event = await this.eventService.getEvent(eventId, orgId);
     if (!event.evaluationsPublishedAt && event.status !== 'PUBLISHED') {
       throw new ValidationError('El Módulo B se habilita cuando se publiquen los resultados del Módulo A.');
@@ -330,3 +341,4 @@ class InvitationService {
 }
 
 module.exports = InvitationService;
+

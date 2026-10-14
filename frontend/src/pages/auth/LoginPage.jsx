@@ -52,6 +52,11 @@ export function LoginPage() {
 
       <div className="flex flex-1 items-center justify-center bg-white p-8">
         <div className="w-full max-w-[420px]">
+          <div className="mb-6">
+            <Link to="/" className="inline-flex items-center gap-2 text-sm font-semibold text-[#0AADA8] hover:text-[#087D79] hover:underline">
+              <span aria-hidden="true">←</span> Volver a la página inicial
+            </Link>
+          </div>
           <h2 className="font-display text-3xl font-bold leading-9 text-[#101828]">Bienvenido</h2>
           <p className="mt-2 text-sm leading-5 text-[#6A7282]">
             Ingresa tus credenciales para acceder a la plataforma.
