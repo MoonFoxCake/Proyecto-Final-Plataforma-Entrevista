@@ -79,8 +79,8 @@ export function OnsiteOrganizeStage({ eventId, module, summary, loaded, onPrepar
         </section>
 
         <section aria-labelledby='cards-title' className='rounded-2xl border border-[#DDE5EC] bg-white p-5 shadow-sm'>
-          <h3 id='cards-title' className='font-display text-base font-bold text-[#101828]'>Tarjetas de acceso</h3>
-          <p className='mt-1 text-sm text-[#56677B]'>Se descargan al generar los accesos y no se guardan en el sistema. Si se pierde una tarjeta, reemite ese acceso.</p>
+          <h3 id='cards-title' className='font-display text-base font-bold text-[#101828]'>Hojas de acceso</h3>
+          <p className='mt-1 text-sm text-[#56677B]'>Una hoja por candidato, doblada con el código hacia adentro y el nombre visible. Se descargan al generar los accesos y no se guardan en el sistema. Si se pierde una hoja, reemite ese acceso.</p>
           <Button type='button' variant='outline' className='mt-4 h-11 px-4' onClick={onPrepare}>Ir a Preparar accesos</Button>
         </section>
       </div>

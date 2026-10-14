@@ -1,75 +1,139 @@
 const PDFDocument = require('pdfkit');
-const { PrintableService, cardLayout, PAPER_SIZES } = require('../../../src/services/PrintableService');
+const { PrintableService, sheetLayout, PAPER_SIZES, FOLD_TOLERANCE } = require('../../../src/services/PrintableService');
 
 const appointment = {
   venue: 'Campus Central', room: 'Edificio T2, aula 204', startsAt: new Date('2026-11-05T14:00:00.000Z'), endsAt: new Date('2026-11-05T16:00:00.000Z'),
 };
-const card = (nombreCompleto, code) => ({
-  nombreCompleto, module: 'A', code, expiresAt: new Date('2026-11-06T05:59:59.999Z'), appointment,
+const card = (nombreCompleto, code, module = 'A') => ({
+  nombreCompleto, module, code, expiresAt: new Date('2026-11-06T05:59:59.999Z'), appointment,
 });
 const pageCount = (pdf) => (pdf.toString('latin1').match(/\/Type \/Page\b/g) || []).length;
 
-/** Captures every text drawn on the PDF, with its position and page. */
+/** Captures every text drawn on the PDF, with its position, font, size and page. */
 function captureText() {
   const original = PDFDocument.prototype.text;
+  const originalAddPage = PDFDocument.prototype.addPage;
   const drawn = [];
+  const pages = jest.spyOn(PDFDocument.prototype, 'addPage').mockImplementation(function count(...args) {
+    this.capturedPages = (this.capturedPages || 0) + 1;
+    return originalAddPage.apply(this, args);
+  });
   const spy = jest.spyOn(PDFDocument.prototype, 'text').mockImplementation(function capture(text, x, y, options) {
-    if (typeof text === 'string') drawn.push({ text, x, y, options, page: this._pageBuffer?.length ?? 0 });
+    if (typeof text === 'string') {
+      drawn.push({ text, x, y, options, page: this.capturedPages, font: this._font?.name, size: this._fontSize });
+    }
     return original.call(this, text, x, y, options);
   });
-  return { drawn, restore: () => spy.mockRestore() };
+  return { drawn, restore: () => { spy.mockRestore(); pages.mockRestore(); } };
 }
 
-describe('access cards', () => {
-  test.each(Object.keys(PAPER_SIZES))('%s: 8 cards per page, every card fully inside its page', (paper) => {
-    const layout = cardLayout(paper, 20);
+const render = async (items, paper = 'CARTA') => {
+  const capture = captureText();
+  const pdf = await new PrintableService().accessCards({ eventName: 'Concurso Presencial', items, paper });
+  capture.restore();
+  return { pdf, drawn: capture.drawn };
+};
+
+describe('access sheets', () => {
+  describe.each(Object.keys(PAPER_SIZES))('%s', (paper) => {
+    const layout = sheetLayout(paper);
     const [pageWidth, pageHeight] = PAPER_SIZES[paper];
-    expect(layout).toMatchObject({ perPage: 8, pages: 3 });
-    for (const { x, y } of layout.positions) {
-      expect(x).toBeGreaterThanOrEqual(0);
-      expect(y).toBeGreaterThanOrEqual(0);
-      expect(x + layout.width).toBeLessThanOrEqual(pageWidth + 0.01);
-      expect(y + layout.height).toBeLessThanOrEqual(pageHeight + 0.01);
-    }
-    // No two cards overlap on the same page.
-    const keys = layout.positions.map(({ page, x, y }) => `${page}:${x}:${y}`);
-    expect(new Set(keys).size).toBe(20);
+
+    test('one fold at two thirds: the bottom third covers exactly the middle one', () => {
+      expect(layout.foldY).toBeCloseTo((pageHeight * 2) / 3);
+      expect(layout.coverTop).toBeCloseTo(pageHeight / 3);
+      expect(layout.code.bottom).toBeLessThanOrEqual(pageHeight);
+    });
+
+    test.each([-1, -0.5, 0, 0.5, 1])('folded %s × tolerance off the marks, the name shows and the code stays inside', (offset) => {
+      const fold = layout.foldY + offset * FOLD_TOLERANCE;
+      const visibleBottom = 2 * fold - pageHeight; // the flap edge
+      // The whole name band is above the flap edge...
+      expect(layout.name.bottom).toBeLessThanOrEqual(visibleBottom);
+      // ...and the whole code zone is on the flap, so it ends up face down on the middle third.
+      expect(layout.code.top).toBeGreaterThan(fold);
+      const landsFrom = 2 * fold - layout.code.bottom;
+      const landsTo = 2 * fold - layout.code.top;
+      expect(landsFrom).toBeGreaterThan(layout.name.bottom);
+      expect(landsTo).toBeLessThan(fold);
+    });
+
+    test('names in the top band, codes below the fold, nothing in the middle but the fold marks', async () => {
+      const items = [card('Ana López', 'K7M2P-9QX4R'), card('María José Rodríguez Velásquez de Castañeda Hernández', 'HT3NW-8BZ6E')];
+      const { pdf, drawn } = await render(items, paper);
+
+      expect(pageCount(pdf)).toBe(2);
+      for (const [index, item] of items.entries()) {
+        const page = drawn.filter((entry) => entry.page === index + 1);
+        const name = page.find((entry) => entry.text === item.nombreCompleto);
+        expect(name.y).toBe(layout.name.top);
+        expect(name.y + name.options.height).toBeLessThanOrEqual(layout.name.bottom);
+        const code = page.find((entry) => entry.text === item.code);
+        expect(code.y).toBeGreaterThanOrEqual(layout.code.top);
+        expect(code).toMatchObject({ font: 'Courier-Bold', size: 38 });
+        // The code is printed only once, and only on the flap.
+        expect(drawn.filter((entry) => entry.text.includes(item.code))).toHaveLength(1);
+        for (const entry of page.filter((other) => other.y > layout.name.bottom && other.y < layout.foldY)) {
+          expect(entry.text).toBe('doblar');
+          expect(entry.x < SHEET_SIDE || entry.x + entry.options.width > pageWidth - SHEET_SIDE).toBe(true);
+        }
+      }
+    });
   });
 
-  test('renders one card per code in the given order, with name, event, code and instructions', async () => {
-    const capture = captureText();
-    const items = [card('Ana López', 'K7M2P-9QX4R'), card('Bruno Díaz', 'HT3NW-8BZ6E')];
-    const pdf = await new PrintableService().accessCards({ eventName: 'Concurso Presencial', items });
-    capture.restore();
+  // Side margin of the sheet: the fold marks stay inside it.
+  const SHEET_SIDE = 54;
+
+  test('one page per participant, in the given order, with the steps and the expiry', async () => {
+    const items = Array.from({ length: 20 }, (_, index) => card(`Candidato ${String(index + 1).padStart(2, '0')}`, `AAAAA-${String(index).padStart(5, '2')}`));
+    const { pdf, drawn } = await render(items);
 
     expect(pdf.subarray(0, 5).toString()).toBe('%PDF-');
-    expect(pageCount(pdf)).toBe(1);
-    const texts = capture.drawn.map((item) => item.text);
-    expect(texts.indexOf('Ana López')).toBeLessThan(texts.indexOf('Bruno Díaz'));
-    expect(texts).toEqual(expect.arrayContaining(['K7M2P-9QX4R', 'HT3NW-8BZ6E', 'Concurso Presencial', 'Módulo A · Cuestionario', 'Campus Central · Edificio T2, aula 204']));
-    expect(texts.some((text) => text.startsWith('1. Entrega esta tarjeta'))).toBe(true);
-    // The code is printed in a clear monospaced type, large.
-    expect(capture.drawn.find((item) => item.text === 'K7M2P-9QX4R').options).toMatchObject({ align: 'center' });
+    expect(pageCount(pdf)).toBe(20);
+    const names = drawn.filter((entry) => entry.text.startsWith('Candidato '));
+    expect(names.map((entry) => [entry.text, entry.page])).toEqual(items.map((item, index) => [item.nombreCompleto, index + 1]));
+    const texts = drawn.filter((entry) => entry.page === 1).map((entry) => entry.text);
+    expect(texts).toEqual(expect.arrayContaining([
+      'NexoPerfil — Acceso a evaluación presencial',
+      'Código de acceso',
+      '1. Abre esta hoja cuando el aplicador te indique.',
+      '2. Introduce el código en la computadora asignada.',
+      '3. Este código es personal y de un solo uso.',
+    ]));
+    expect(texts.some((text) => text.startsWith('Vence el '))).toBe(true);
   });
 
-  test('a long name is kept whole on two lines, and no text can overflow the card', async () => {
-    const capture = captureText();
-    const longName = 'María José Rodríguez Velásquez de Castañeda Hernández';
-    await new PrintableService().accessCards({ eventName: 'Concurso Presencial', items: [card(longName, 'AAAAA-BBBBB')], paper: 'A4' });
-    capture.restore();
+  test('never shows the module, the event session or personal data', async () => {
+    const { drawn: moduleA } = await render([card('Ana López', 'K7M2P-9QX4R', 'A')]);
+    const { drawn: moduleB } = await render([card('Ana López', 'K7M2P-9QX4R', 'B')]);
 
-    const name = capture.drawn.find((item) => item.text === longName);
-    expect(name.options.lineBreak).not.toBe(false);
-    expect(name.options.height).toBeGreaterThan(20);
-    // Every other line is a single, clipped line.
-    for (const item of capture.drawn.filter((entry) => entry.text !== longName)) {
-      expect(item.options).toMatchObject({ lineBreak: false, ellipsis: true });
+    // Same sheet whichever module the code opens.
+    expect(moduleB.map((entry) => entry.text)).toEqual(moduleA.map((entry) => entry.text));
+    const all = moduleA.map((entry) => entry.text).join(' ');
+    expect(all).not.toMatch(/m[oó]dulo|cuestionario|macrocaso/i);
+    expect(all).not.toMatch(/Campus Central|aula 204/);
+  });
+
+  test('the PDF metadata does not name the module', async () => {
+    const pdf = await new PrintableService({ compress: false }).accessCards({ eventName: 'Concurso Presencial', items: [card('Ana López', 'K7M2P-9QX4R', 'B')] });
+    expect(pdf.toString('latin1')).not.toMatch(/M.?[oó].?d.?u.?l.?o|Macrocaso|Cuestionario/i);
+  });
+
+  test('a short name is large; a long one is smaller, whole and inside its band', async () => {
+    const longName = 'María Fernanda de los Ángeles Rodríguez Velásquez de Castañeda Hernández y Ordóñez';
+    const { drawn } = await render([card('Ana López', 'AAAAA-BBBBB'), card(longName, 'CCCCC-DDDDD')], 'A4');
+    const layout = sheetLayout('A4');
+
+    const short = drawn.find((entry) => entry.text === 'Ana López');
+    const long = drawn.find((entry) => entry.text === longName);
+    expect(short.size).toBe(32);
+    expect(long.size).toBeLessThanOrEqual(32);
+    expect(long.options.lineBreak).not.toBe(false);
+    expect(long.y + long.options.height).toBeLessThanOrEqual(layout.name.bottom);
+    // Every other text is a single, clipped line.
+    for (const entry of drawn.filter((item) => ![longName, 'Ana López'].includes(item.text))) {
+      expect(entry.options).toMatchObject({ lineBreak: false });
     }
-  });
-
-  test('20 candidates make 3 pages', async () => {
-    const items = Array.from({ length: 20 }, (_, index) => card(`Candidato ${String(index).padStart(2, '0')}`, 'AAAAA-BBBBB'));
-    expect(pageCount(await new PrintableService().accessCards({ eventName: 'Evento', items }))).toBe(3);
   });
 });
 

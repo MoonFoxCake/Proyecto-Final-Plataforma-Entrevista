@@ -2,7 +2,7 @@ const PDFDocument = require('pdfkit');
 
 /**
  * Printable documents for onsite evaluations, rendered in memory and never
- * stored: access cards (with codes, only at the moment they are issued) and
+ * stored: access sheets (with codes, only at the moment they are issued) and
  * the attendance list (no codes).
  *
  * Standard PDF fonts are used (Helvetica / Courier): they cover Spanish
@@ -10,48 +10,59 @@ const PDFDocument = require('pdfkit');
  */
 
 const POINTS_PER_INCH = 72;
+const POINTS_PER_MM = POINTS_PER_INCH / 25.4;
 // Sizes in points. "Carta" (US Letter) is the usual paper in Guatemala.
 const PAPER_SIZES = Object.freeze({
   CARTA: [8.5 * POINTS_PER_INCH, 11 * POINTS_PER_INCH],
   A4: [595.28, 841.89],
 });
 const PAGE_MARGIN = 36; // 0.5 in
-const CARD_COLUMNS = 2;
-const CARD_ROWS = 4;
-const CARD_PADDING = 14;
 
 const TIME_ZONE = 'America/Guatemala';
 const formatDate = (value) => new Intl.DateTimeFormat('es-GT', { dateStyle: 'full', timeZone: TIME_ZONE }).format(new Date(value));
 const formatShortDate = (value) => new Intl.DateTimeFormat('es-GT', { dateStyle: 'medium', timeZone: TIME_ZONE }).format(new Date(value));
 const formatTime = (value) => new Intl.DateTimeFormat('es-GT', { timeStyle: 'short', timeZone: TIME_ZONE }).format(new Date(value));
 
+// Only for the applicator's attendance list: candidate material never names the module.
 const MODULE_LABELS = { A: 'Módulo A · Cuestionario', B: 'Módulo B · Macrocaso' };
 
 const COLORS = { ink: '#10233A', muted: '#56677B', accent: '#0A8F8A', line: '#94A3B8', soft: '#F4F8FB' };
 
 const paperSize = (paper) => PAPER_SIZES[paper] || PAPER_SIZES.CARTA;
 
+const SHEET_MARGIN = 54; // 0.75 in
+// How far off the marks a hand fold may land and still hide the code and show the name.
+const FOLD_TOLERANCE = 6 * POINTS_PER_MM;
+const NAME_SIZES = [32, 28, 24, 20, 17, 15];
+const NAME_MAX_LINES = 3;
+
 /**
- * Card grid: a fixed number of cards per page, each fully inside the
- * printable area, so no card is ever split across pages.
+ * Geometry of the access sheet: one horizontal fold at two thirds of the
+ * height, the bottom third folded up over the middle one, printed side in.
  *
- * @returns {{ perPage: number, pages: number, width: number, height: number,
- *   positions: Array<{ page: number, x: number, y: number }> }}
+ * Folding at `foldY` maps a point `d` below the fold to `d` above it, so the
+ * flap covers [2·foldY − height, foldY] (`coverTop`..`foldY`) and only the
+ * band above `coverTop` stays visible. The code sits below the fold: it ends
+ * up face down on the blank middle third, wherever the fold lands. The name
+ * ends 2 × FOLD_TOLERANCE above `coverTop`, because folding `e` too high
+ * raises the flap edge by 2e.
+ *
+ * @returns {{ pageWidth: number, pageHeight: number, foldY: number, coverTop: number,
+ *   contentWidth: number, name: { top: number, bottom: number }, code: { top: number, bottom: number } }}
  */
-function cardLayout(paper, count) {
+function sheetLayout(paper) {
   const [pageWidth, pageHeight] = paperSize(paper);
-  const width = (pageWidth - 2 * PAGE_MARGIN) / CARD_COLUMNS;
-  const height = (pageHeight - 2 * PAGE_MARGIN) / CARD_ROWS;
-  const perPage = CARD_COLUMNS * CARD_ROWS;
-  const positions = Array.from({ length: count }, (_, index) => {
-    const slot = index % perPage;
-    return {
-      page: Math.floor(index / perPage),
-      x: PAGE_MARGIN + (slot % CARD_COLUMNS) * width,
-      y: PAGE_MARGIN + Math.floor(slot / CARD_COLUMNS) * height,
-    };
-  });
-  return { perPage, pages: Math.ceil(count / perPage), width, height, positions, pageWidth, pageHeight };
+  const foldY = (pageHeight * 2) / 3;
+  const coverTop = 2 * foldY - pageHeight;
+  return {
+    pageWidth,
+    pageHeight,
+    foldY,
+    coverTop,
+    contentWidth: pageWidth - 2 * SHEET_MARGIN,
+    name: { top: SHEET_MARGIN + 22, bottom: coverTop - 2 * FOLD_TOLERANCE },
+    code: { top: foldY + 36, bottom: pageHeight - SHEET_MARGIN },
+  };
 }
 
 /** Renders a PDFKit document into a Buffer. */
@@ -78,74 +89,83 @@ class PrintableService {
   }
 
   /**
-   * One card per issued credential, in the given order (alphabetical), with
-   * dashed cutting guides. Holds the candidate's name, the event, the code,
-   * the appointment and brief instructions — no ID number or other personal
-   * data.
+   * One foldable sheet per issued credential, in the given order
+   * (alphabetical): the name on the top third, the middle third blank and the
+   * code with brief instructions on the bottom third, which folds up over the
+   * middle one. Printed on one side, no cutting. It never shows the module,
+   * the ID number or other personal data.
    *
-   * @param {{ eventName: string, items: Array<{ nombreCompleto: string, module: 'A'|'B', code: string,
-   *   expiresAt: Date, appointment?: { venue?: string, room?: string, startsAt?: Date, endsAt?: Date } }>,
+   * @param {{ eventName: string, items: Array<{ nombreCompleto: string, code: string, expiresAt?: Date }>,
    *   paper?: 'CARTA'|'A4' }} params
    * @returns {Promise<Buffer>}
    */
   async accessCards({ eventName, items, paper = 'CARTA' }) {
-    const layout = cardLayout(paper, items.length);
-    return render({ size: paperSize(paper), margin: 0, compress: this.compress, info: { Title: `Tarjetas de acceso · ${eventName}` } }, (doc) => {
-      for (let page = 0; page < layout.pages; page += 1) {
+    const layout = sheetLayout(paper);
+    return render({ size: [layout.pageWidth, layout.pageHeight], margin: 0, compress: this.compress, info: { Title: `Credenciales de acceso · ${eventName}` } }, (doc) => {
+      for (const item of items) {
         doc.addPage();
-        layout.positions.forEach((position, index) => {
-          if (position.page !== page) return;
-          this.cuttingGuide(doc, position, layout);
-          this.card(doc, items[index], eventName, position, layout);
-        });
+        this.foldMarks(doc, layout);
+        this.sheetName(doc, item.nombreCompleto, layout);
+        this.sheetCode(doc, item, layout);
       }
     });
   }
 
-  /** Dashed outline to cut the card along (shared edges overlap exactly). */
-  cuttingGuide(doc, { x, y }, { width, height }) {
-    doc.save().lineWidth(0.6).dash(4, { space: 3 }).strokeColor(COLORS.line).rect(x, y, width, height).stroke().undash().restore();
+  /** Short marks on both side margins, never across the name or the code. */
+  foldMarks(doc, { pageWidth, foldY }) {
+    doc.save().lineWidth(0.8).strokeColor(COLORS.muted);
+    doc.moveTo(16, foldY).lineTo(38, foldY).stroke();
+    doc.moveTo(pageWidth - 38, foldY).lineTo(pageWidth - 16, foldY).stroke();
+    doc.restore();
+    doc.font('Helvetica').fontSize(6).fillColor(COLORS.muted);
+    doc.text('doblar', 16, foldY - 9, { width: 30, lineBreak: false });
+    doc.text('doblar', pageWidth - 46, foldY - 9, { width: 30, align: 'right', lineBreak: false });
   }
 
-  card(doc, item, eventName, { x, y }, { width, height }) {
-    const left = x + CARD_PADDING;
-    const inner = width - 2 * CARD_PADDING;
-    const line = (text, top, { font = 'Helvetica', size = 8, color = COLORS.muted, align = 'left' } = {}) => {
-      // One line, clipped with an ellipsis: nothing can overflow the card.
-      doc.font(font).fontSize(size).fillColor(color)
-        .text(text, left, top, { width: inner, height: size * 1.3, lineBreak: false, ellipsis: true, align });
+  /** The full name, as large as fits the visible band (up to three lines). */
+  sheetName(doc, name, { contentWidth, name: box }) {
+    const height = box.bottom - box.top;
+    const fits = (size) => {
+      doc.font('Helvetica-Bold').fontSize(size);
+      const maxLines = NAME_MAX_LINES * (doc.currentLineHeight(true) + 2) + 1;
+      return doc.heightOfString(name, { width: contentWidth, lineGap: 2 }) <= Math.min(height, maxLines);
     };
+    const size = NAME_SIZES.find(fits) ?? NAME_SIZES[NAME_SIZES.length - 1];
+    doc.save().rect(SHEET_MARGIN, SHEET_MARGIN, 32, 3).fill(COLORS.accent).restore();
+    doc.font('Helvetica-Bold').fontSize(size).fillColor(COLORS.ink)
+      .text(name, SHEET_MARGIN, box.top, { width: contentWidth, height, lineGap: 2, ellipsis: true });
+  }
 
-    line('NexoPerfil · Acceso a evaluación presencial', y + 12, { font: 'Helvetica-Bold', size: 7, color: COLORS.accent });
-    line(eventName, y + 23, { font: 'Helvetica-Bold', size: 9, color: COLORS.ink });
-    line(MODULE_LABELS[item.module] || `Módulo ${item.module}`, y + 35, { size: 7.5 });
-    // The full name matters (the applicator checks it against an ID): a long
-    // one goes on two smaller lines instead of being cut.
-    doc.font('Helvetica-Bold').fontSize(12);
-    const twoLines = doc.widthOfString(item.nombreCompleto) > inner;
-    if (twoLines) {
-      doc.fontSize(10).fillColor(COLORS.ink)
-        .text(item.nombreCompleto, left, y + 48, { width: inner, height: 25, ellipsis: true });
-    } else {
-      line(item.nombreCompleto, y + 50, { font: 'Helvetica-Bold', size: 12, color: COLORS.ink });
+  /** The private part: the code, three steps and the expiry. */
+  sheetCode(doc, item, { pageHeight, contentWidth, code: box }) {
+    const line = (text, top, { font = 'Helvetica', size = 10, color = COLORS.ink, ...options } = {}) => {
+      // One line, clipped with an ellipsis: nothing can overflow the sheet.
+      doc.font(font).fontSize(size).fillColor(color)
+        .text(text, SHEET_MARGIN, top, { width: contentWidth, height: size * 1.3, lineBreak: false, ellipsis: true, ...options });
+    };
+    let y = box.top;
+    line('NexoPerfil — Acceso a evaluación presencial', y, { font: 'Helvetica-Bold', size: 10, color: COLORS.accent });
+    y += 28;
+    line('Código de acceso', y, { size: 9, color: COLORS.muted });
+    y += 14;
+    line(item.code, y, { font: 'Courier-Bold', size: 38, characterSpacing: 1.5 });
+    y += 54;
+    [
+      '1. Abre esta hoja cuando el aplicador te indique.',
+      '2. Introduce el código en la computadora asignada.',
+      '3. Este código es personal y de un solo uso.',
+    ].forEach((step) => {
+      line(step, y);
+      y += 15;
+    });
+    if (item.expiresAt) {
+      y += 6;
+      line(`Vence el ${formatShortDate(item.expiresAt)} a las ${formatTime(item.expiresAt)}`, y, { size: 9, color: COLORS.muted });
+      y += 12;
     }
-
-    const boxTop = y + (twoLines ? 80 : 70);
-    doc.save().roundedRect(left, boxTop, inner, 38, 6).fill(COLORS.soft).restore();
-    line('Código de acceso', boxTop + 5, { size: 6.5, align: 'center' });
-    line(item.code, boxTop + 15, { font: 'Courier-Bold', size: 19, color: COLORS.ink, align: 'center' });
-
-    const appointment = item.appointment || {};
-    const place = [appointment.venue, appointment.room].filter(Boolean).join(' · ');
-    const when = appointment.startsAt
-      ? `${formatShortDate(appointment.startsAt)} · ${formatTime(appointment.startsAt)}${appointment.endsAt ? ` – ${formatTime(appointment.endsAt)}` : ''}`
-      : '';
-    line(when, boxTop + 44, { size: 7, color: COLORS.ink });
-    line(place, boxTop + 53, { size: 7, color: COLORS.ink });
-    line('1. Entrega esta tarjeta al aplicador para verificar tu identidad.', boxTop + 65, { size: 6.5 });
-    line('2. Cuando te habiliten, escribe el código en la pantalla de acceso.', boxTop + 74, { size: 6.5 });
-    line(`3. Es personal y de un solo uso. Vence el ${formatShortDate(item.expiresAt)} a las ${formatTime(item.expiresAt)}`, boxTop + 83, { size: 6.5 });
-    if (boxTop + 83 + 9 > y + height) throw new Error('La tarjeta no cabe en su espacio.');
+    if (y > box.bottom) throw new Error('El código no cabe en la zona privada de la hoja.');
+    // For whoever folds it; hidden inside the fold like the rest of this third.
+    line('Para entregar: dobla el tercio inferior hacia arriba por las marcas laterales, con el código hacia adentro.', pageHeight - 34, { size: 6.5, color: COLORS.muted });
   }
 
   /**
@@ -259,4 +279,4 @@ class PrintableService {
   }
 }
 
-module.exports = { PrintableService, cardLayout, PAPER_SIZES };
+module.exports = { PrintableService, sheetLayout, PAPER_SIZES, FOLD_TOLERANCE };

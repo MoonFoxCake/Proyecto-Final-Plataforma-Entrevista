@@ -25,7 +25,7 @@ const PREPARE_ROWS = [
   { candidateId: 'c4', nombreCompleto: 'Ya Evaluada', canIssue: false, blockedReason: 'ya completó el Módulo A', credential: null },
 ];
 const counts = { total: 4, prepared: 1, enabled: 0, used: 0, revoked: 0, expired: 0, pending: 3 };
-const issued = (items) => ({ module: 'A', issued: items.map((item) => ({ module: 'A', expiresAt: EXPIRES, appointment: SESSION, ...item })), skipped: [], rejected: [], cardsPdf: { fileName: 'tarjetas.pdf', contentType: 'application/pdf', base64: 'JVBERi0=' } });
+const issued = (items) => ({ module: 'A', issued: items.map((item) => ({ module: 'A', expiresAt: EXPIRES, appointment: SESSION, ...item })), skipped: [], rejected: [], cardsPdf: { fileName: 'credenciales-acceso.pdf', contentType: 'application/pdf', base64: 'JVBERi0=' } });
 
 const rosterRow = (overrides) => ({ appointmentAt: SESSION.startsAt, attendance: null, credential: { id: `cred-${overrides.candidateId}`, status: 'GENERATED', expiresAt: EXPIRES }, evaluation: 'PENDING', ...overrides });
 const ROSTER = [
@@ -38,7 +38,7 @@ const ROSTER = [
 beforeEach(() => {
   vi.clearAllMocks();
   window.confirm = vi.fn(() => true);
-  window.prompt = vi.fn(() => 'Tarjeta extraviada');
+  window.prompt = vi.fn(() => 'Hoja extraviada');
   window.print = vi.fn();
   eventService.getEvent.mockResolvedValue(ONSITE_EVENT);
   eventService.getEventCandidates.mockResolvedValue([]);
@@ -83,8 +83,8 @@ describe('1 · prepare accesses', () => {
     await waitFor(() => expect(credentialService.issueCredentials).toHaveBeenCalledWith('event-1', 'A', ['c1', 'c3'], 'A4'));
     const codes = within(await screen.findByRole('dialog', { name: /Accesos preparados/ }));
     expect(codes.getByText('K7M2P-9QX4R')).toBeTruthy();
-    fireEvent.click(codes.getByRole('button', { name: 'Descargar tarjetas (PDF)' }));
-    expect(saveFile).toHaveBeenCalledWith({ base64: 'JVBERi0=', type: 'application/pdf' }, 'tarjetas.pdf');
+    fireEvent.click(codes.getByRole('button', { name: 'Descargar hojas de acceso (PDF)' }));
+    expect(saveFile).toHaveBeenCalledWith({ base64: 'JVBERi0=', type: 'application/pdf' }, 'credenciales-acceso.pdf');
     expect(codes.getByRole('button', { name: 'Cerrar' }).disabled).toBe(true);
   });
 
@@ -94,7 +94,7 @@ describe('1 · prepare accesses', () => {
     renderEvent('/company/events/event-1/presencial');
 
     fireEvent.click(await screen.findByRole('button', { name: 'Revocar' }));
-    await waitFor(() => expect(credentialService.revokeCredential).toHaveBeenCalledWith('event-1', 'cred-2', 'Tarjeta extraviada'));
+    await waitFor(() => expect(credentialService.revokeCredential).toHaveBeenCalledWith('event-1', 'cred-2', 'Hoja extraviada'));
     expect(await screen.findByText('Se revocó el acceso de Bruno Díaz.')).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: 'Reemitir' }));
@@ -116,7 +116,7 @@ describe('2 · organize', () => {
     expect(credentialService.getAttendanceSheet).toHaveBeenCalledWith('event-1', 'A', 'A4');
 
     // Cards are only delivered when issued: no fake download here.
-    expect(screen.queryByRole('button', { name: /Descargar tarjetas/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Descargar hojas/ })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Ir a Preparar accesos' }));
     expect(screen.getByTestId('location').textContent).toBe('/company/events/event-1/presencial?modulo=A&etapa=preparar');
   });

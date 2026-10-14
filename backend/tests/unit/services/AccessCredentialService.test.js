@@ -191,14 +191,14 @@ describe('AccessCredentialService', () => {
   describe('printable documents', () => {
     beforeEach(() => { event = { ...event, name: 'Concurso Presencial 2026' }; });
 
-    test('the issuing response carries the cards PDF, built from the codes just issued', async () => {
+    test('the issuing response carries the access sheets PDF, built from the codes just issued, with no module in its name', async () => {
       const printable = jest.spyOn(service.printableService, 'accessCards');
       const result = await service.issueBatch('event-1', 'org-1', { module: 'A', candidateIds: [zoe.id, ana.id], paper: 'A4' }, 'user-1');
 
-      expect(result.cardsPdf).toMatchObject({ fileName: 'tarjetas-acceso-concurso-presencial-2026-modulo-a.pdf', contentType: 'application/pdf' });
+      expect(result.cardsPdf).toMatchObject({ fileName: 'credenciales-acceso-concurso-presencial-2026.pdf', contentType: 'application/pdf' });
       expect(Buffer.from(result.cardsPdf.base64, 'base64').subarray(0, 5).toString()).toBe('%PDF-');
       expect(printable).toHaveBeenCalledWith({ eventName: 'Concurso Presencial 2026', items: result.issued, paper: 'A4' });
-      // Alphabetical cards, with no ID number.
+      // Alphabetical sheets, with no ID number.
       expect(printable.mock.calls[0][0].items.map((item) => item.nombreCompleto)).toEqual(['Ána López', 'Zoe Ruiz']);
       expect(JSON.stringify(printable.mock.calls[0][0].items)).not.toContain('cedula');
     });
@@ -208,7 +208,7 @@ describe('AccessCredentialService', () => {
       expect(await issueA([zoe.id])).not.toHaveProperty('cardsPdf');
     });
 
-    test('a reissued card comes with its own one-card PDF', async () => {
+    test('a reissued credential comes with its own one-sheet PDF', async () => {
       const { issued: [old] } = await issueA([zoe.id]);
       const result = await service.reissue('event-1', 'org-1', old.credentialId, 'supervisor-1', 'Extraviada', 'CARTA');
       expect(result.cardsPdf.base64.length).toBeGreaterThan(100);

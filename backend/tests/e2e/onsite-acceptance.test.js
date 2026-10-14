@@ -149,7 +149,7 @@ describe('Phase 9 · onsite evaluation, end to end', () => {
 
     const pdf = Buffer.from(cardsPdf.base64, 'base64');
     expect(pdf.subarray(0, 5).toString()).toBe('%PDF-');
-    expect(pdfPages(pdf)).toBe(3); // 8 cards per page
+    expect(pdfPages(pdf)).toBe(20); // one foldable sheet per candidate
 
     // Codes are never stored or shown again.
     const stored = JSON.stringify(container.repos.accessCredentialRepo.data);

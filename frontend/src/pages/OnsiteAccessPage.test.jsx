@@ -68,6 +68,17 @@ test('asks only for the code, formats it while typing and runs the evaluation of
   expect(screen.queryByText(/María López/)).toBeNull();
 });
 
+test.each(['A', 'B'])('the welcome screen never tells the candidate the module (%s)', async (module) => {
+  loginWithCode.mockResolvedValue({ ...ACCESS, module });
+  render(<OnsiteAccessPage />);
+  typeCode('K7M2P9QX4R');
+  fireEvent.click(screen.getByRole('button', { name: 'Ingresar' }));
+
+  expect(await screen.findByRole('heading', { name: 'Hola, María López.' })).toBeTruthy();
+  expect(screen.getByText('Evaluación presencial')).toBeTruthy();
+  expect(document.body.textContent).not.toMatch(/m[oó]dulo|cuestionario|macrocaso/i);
+});
+
 test('after the submission the computer returns by itself to a neutral code screen', async () => {
   vi.useFakeTimers({ shouldAdvanceTime: true });
   loginWithCode.mockResolvedValue({ ...ACCESS, module: 'B' });

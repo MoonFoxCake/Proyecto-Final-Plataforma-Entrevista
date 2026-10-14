@@ -64,7 +64,7 @@ export function OnsitePrepareStage({ event, module, summary, loaded, reload, not
   });
 
   const reissue = (row) => run(async () => {
-    const reason = window.prompt(`Reemitir el acceso de ${row.nombreCompleto}: el código actual dejará de funcionar y se generará uno nuevo.\nMotivo (opcional):`, 'Tarjeta extraviada');
+    const reason = window.prompt(`Reemitir el acceso de ${row.nombreCompleto}: el código actual dejará de funcionar y se generará uno nuevo.\nMotivo (opcional):`, 'Hoja extraviada');
     if (reason === null) return;
     const result = await credentialService.reissueCredential(event.id, row.credential.id, reason.trim() || undefined, paper);
     setIssued(result);
@@ -92,10 +92,10 @@ export function OnsitePrepareStage({ event, module, summary, loaded, reload, not
       <details className='group rounded-xl border border-[#E8EDF2] bg-white px-4 py-3 text-sm text-[#56677B]'>
         <summary className='cursor-pointer font-semibold text-[#334E68] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0AADA8]/40'>Cómo funcionan los accesos</summary>
         <ul className='mt-3 list-disc space-y-1.5 pl-5 leading-6'>
-          <li>Los códigos y las tarjetas (PDF) solo se entregan al generarlos: no se guardan en el sistema.</li>
+          <li>Los códigos y las hojas de acceso (PDF) solo se entregan al generarlos: no se guardan en el sistema.</li>
           <li>Cada código sirve una sola vez y vence al terminar el día de la cita.</li>
           <li>No funciona hasta que el aplicador lo habilita en la sede, después de verificar la identidad del candidato.</li>
-          <li>Si se pierde una tarjeta, reemite ese acceso: el código anterior deja de funcionar.</li>
+          <li>Si se pierde una hoja, reemite ese acceso: el código anterior deja de funcionar.</li>
         </ul>
       </details>
 
@@ -157,7 +157,7 @@ export function OnsitePrepareStage({ event, module, summary, loaded, reload, not
       {confirming && (
         <Dialog
           title={`Generar ${selected.size} acceso(s) · Módulo ${module}`}
-          description='Los códigos y las tarjetas se mostrarán una sola vez para descargarlos e imprimirlos.'
+          description='Los códigos y las hojas de acceso se mostrarán una sola vez para descargarlos e imprimirlos.'
           busy={busy}
           onClose={() => setConfirming(false)}
           footer={(
@@ -168,7 +168,7 @@ export function OnsitePrepareStage({ event, module, summary, loaded, reload, not
           )}
         >
           <fieldset>
-            <legend className='text-sm font-medium text-[#364153]'>Formato de las tarjetas</legend>
+            <legend className='text-sm font-medium text-[#364153]'>Formato de las hojas</legend>
             <div className='mt-2 flex gap-3'>
               {PAPERS.map(([value, label]) => (
                 <label key={value} className={`flex cursor-pointer items-center gap-2 rounded-xl border px-4 py-2.5 text-sm ${paper === value ? 'border-[#0AADA8] bg-[#F0FFFE] text-[#087D79]' : 'border-[#DDE5EC] text-[#475569]'}`}>
@@ -177,7 +177,7 @@ export function OnsitePrepareStage({ event, module, summary, loaded, reload, not
                 </label>
               ))}
             </div>
-            <p className='mt-2 text-xs text-[#64748B]'>8 tarjetas por hoja, con líneas de corte.</p>
+            <p className='mt-2 text-xs text-[#64748B]'>Una hoja por candidato, sin recortes: se dobla por las marcas para ocultar el código.</p>
           </fieldset>
           {error && <p role='alert' className='mt-4 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700'>{error}</p>}
         </Dialog>

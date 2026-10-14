@@ -11,7 +11,7 @@ const RESET_AFTER_SECONDS = 10;
 const CODE_LENGTH = 10;
 
 const MESSAGES = {
-  INVALID: 'El código no es correcto. Revisa tu tarjeta e inténtalo de nuevo.',
+  INVALID: 'El código no es correcto. Revisa tu hoja de acceso e inténtalo de nuevo.',
   NOT_ENABLED: 'Tu acceso aún no ha sido habilitado. Acércate al aplicador para verificar tu identidad.',
   USED: 'Este código ya se utilizó. Si necesitas continuar tu evaluación, avisa al aplicador.',
   REVOKED: 'Este código fue anulado. Solicita uno nuevo al aplicador.',
@@ -20,8 +20,6 @@ const MESSAGES = {
   OTHER_COMPUTER: 'Debes continuar la evaluación en la misma computadora donde la comenzaste. Avisa al aplicador.',
   ERROR: 'No se pudo conectar con el servidor. Comprueba la conexión e inténtalo de nuevo.',
 };
-
-const MODULE_LABELS = { A: 'Módulo A · Cuestionario', B: 'Módulo B · Macrocaso' };
 
 /** "k7m2p9qx4r" → "K7M2P-9QX4R" while typing. */
 function formatCode(input) {
@@ -65,7 +63,7 @@ function CodeScreen({ onAccess }) {
       <form onSubmit={submit} className='rounded-2xl border border-[#D9E2EA] bg-white p-8 shadow-sm' noValidate>
         <span className='inline-flex rounded-md bg-[#FFF7E8] px-2.5 py-1 text-xs font-semibold text-[#9A651E]'>Evaluación presencial</span>
         <h1 className='mt-4 font-display text-2xl font-bold text-[#10233A]'>Ingresa tu código de acceso</h1>
-        <p className='mt-2 text-sm leading-6 text-[#56677B]'>Escribe el código impreso en tu tarjeta. El aplicador debe haberlo habilitado después de verificar tu identidad.</p>
+        <p className='mt-2 text-sm leading-6 text-[#56677B]'>Escribe el código impreso en tu hoja de acceso. El aplicador debe haberlo habilitado después de verificar tu identidad.</p>
 
         <label htmlFor='access-code' className='mt-6 block text-sm font-medium text-[#364153]'>Código de acceso</label>
         <input
@@ -95,7 +93,7 @@ function WelcomeScreen({ access, onStart }) {
   return (
     <main className='mx-auto max-w-xl px-5 py-12'>
       <section className='rounded-2xl border border-[#D9E2EA] bg-white p-7 shadow-sm sm:p-8'>
-        <span className='inline-flex rounded-md bg-[#E8F7F6] px-2.5 py-1 text-xs font-semibold text-[#087D79]'>{MODULE_LABELS[access.module] || `Módulo ${access.module}`}</span>
+        <span className='inline-flex rounded-md bg-[#E8F7F6] px-2.5 py-1 text-xs font-semibold text-[#087D79]'>Evaluación presencial</span>
         <h1 className='mt-4 font-display text-2xl font-bold text-[#10233A]'>Hola, {access.candidate.nombreCompleto}.</h1>
         <p className='mt-2 text-sm text-[#56677B]'>{access.organization.nombre} · {access.event.nombre}{access.event.puesto ? ` · ${access.event.puesto}` : ''}</p>
         <ul className='mt-6 space-y-3 text-sm text-[#56677B]'>

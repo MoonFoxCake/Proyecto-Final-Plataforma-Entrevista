@@ -38,7 +38,7 @@ export function IssuedCodesDialog({ result, eventName, onClose }) {
           <p className='mt-1 text-sm text-[#64748B]'>{eventName}</p>
           {hasCodes && (
             <p className='no-print mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm leading-6 text-amber-800' role='note'>
-              <strong>Estos códigos solo se muestran ahora.</strong> Descarga las tarjetas e imprímelas antes de cerrar esta ventana. No se guardan en el sistema: si se pierde una tarjeta, revoca ese acceso y reemítelo. Guarda el PDF en un lugar seguro o elimínalo después de imprimir.
+              <strong>Estos códigos solo se muestran ahora.</strong> Descarga las hojas de acceso e imprímelas antes de cerrar esta ventana. No se guardan en el sistema: si se pierde una hoja, revoca ese acceso y reemítelo. Guarda el PDF en un lugar seguro o elimínalo después de imprimir.
             </p>
           )}
         </div>
@@ -77,12 +77,12 @@ export function IssuedCodesDialog({ result, eventName, onClose }) {
           {hasCodes ? (
             <label className='flex items-center gap-2 text-sm text-[#334E68]'>
               <input type='checkbox' checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} className='h-4 w-4 accent-[#0AADA8]' />
-              Ya descargué o imprimí las tarjetas
+              Ya descargué o imprimí las hojas
             </label>
           ) : <span />}
           <div className='flex flex-wrap gap-3'>
             {hasCodes && <button type='button' onClick={() => window.print()} className='rounded-xl border border-[#D9E2EA] px-4 py-2.5 text-sm font-semibold text-[#334E68] hover:bg-[#F6F9FC]'>Imprimir lista</button>}
-            {hasCodes && cardsPdf && <button type='button' onClick={downloadCards} className='rounded-xl border border-[#0AADA8] px-4 py-2.5 text-sm font-semibold text-[#087D79] hover:bg-[#F0FFFE]'>Descargar tarjetas (PDF)</button>}
+            {hasCodes && cardsPdf && <button type='button' onClick={downloadCards} className='rounded-xl border border-[#0AADA8] px-4 py-2.5 text-sm font-semibold text-[#087D79] hover:bg-[#F0FFFE]'>Descargar hojas de acceso (PDF)</button>}
             <button type='button' onClick={onClose} disabled={hasCodes && !confirmed} className='rounded-xl bg-[#0AADA8] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#089490] disabled:cursor-not-allowed disabled:bg-[#B8C5CF]'>Cerrar</button>
           </div>
         </div>

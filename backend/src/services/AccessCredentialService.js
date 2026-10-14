@@ -159,7 +159,7 @@ class AccessCredentialService {
   }
 
   /**
-   * Adds the printable cards PDF (base64) to an issuing result. It is built
+   * Adds the printable access sheets PDF (base64) to an issuing result. It is built
    * in memory from the codes just issued and travels only in this response:
    * no copy is kept, and the codes never come back to the server to be
    * printed later.
@@ -170,7 +170,7 @@ class AccessCredentialService {
     return {
       ...result,
       cardsPdf: {
-        fileName: `tarjetas-acceso-${slug(event.name)}-modulo-${result.module.toLowerCase()}.pdf`,
+        fileName: `credenciales-acceso-${slug(event.name)}.pdf`, // never the module: the sheets go to the candidates
         contentType: 'application/pdf',
         base64: pdf.toString('base64'),
       },
