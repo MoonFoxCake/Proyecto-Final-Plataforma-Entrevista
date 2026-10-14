@@ -52,7 +52,7 @@ test('a Module B invitation runs the macrocase stage by stage through the backen
 
   render(<MemoryRouter initialEntries={[`/evaluation/access?token=${TOKEN}`]}><EvaluationAccessPage /></MemoryRouter>);
 
-  expect(await screen.findByText('Segunda etapa · Módulo B')).toBeTruthy();
+  expect(await screen.findByText('Segunda etapa')).toBeTruthy();
   expect(screen.queryByText('3–5 minutos · Demo')).toBeNull();
   fireEvent.click(screen.getByRole('button', { name: 'Continuar →' }));
 

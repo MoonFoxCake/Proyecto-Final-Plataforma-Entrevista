@@ -78,7 +78,7 @@ export function EvaluationAccessPage() {
       <EvaluationHeader />
       <main className='mx-auto max-w-xl px-5 py-12'>
         <section className='rounded-2xl border border-[#D9E2EA] bg-white p-7 shadow-sm sm:p-8'>
-          <span className='inline-flex rounded-md bg-[#E8F7F6] px-2.5 py-1 text-xs font-semibold text-[#087D79]'>{isModuleB ? 'Segunda etapa · Módulo B' : waiting ? 'Evaluación programada' : 'Evaluación disponible'}</span>
+          <span className='inline-flex rounded-md bg-[#E8F7F6] px-2.5 py-1 text-xs font-semibold text-[#087D79]'>{isModuleB ? 'Segunda etapa' : waiting ? 'Evaluación programada' : 'Evaluación disponible'}</span>
           <h1 className='mt-4 font-display text-2xl font-bold text-[#10233A]'>Hola, {access.candidate.nombreCompleto}.</h1>
           <p className='mt-2 text-sm text-[#56677B]'>{isModuleB ? `${access.organization.nombre} te invita a continuar con la segunda etapa del proceso: el análisis de un caso.` : `${access.organization.nombre} te ha invitado a completar una evaluación.`}</p>
 

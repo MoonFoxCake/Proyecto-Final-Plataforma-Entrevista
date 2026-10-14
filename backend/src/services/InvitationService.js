@@ -283,7 +283,7 @@ class InvitationService {
     const access = await this.resolveAccess(token);
     if (access.result.state !== 'VALID') return { closed: access.result };
     if (access.invitation.module !== MODULES.B) {
-      throw new ValidationError('Esta invitación no corresponde al Módulo B.');
+      throw new ValidationError('Esta invitación no corresponde a esta evaluación.');
     }
     return { ...access, macrocase: toSectionedMacrocase(access.event.moduleB.macrocase) };
   }
@@ -333,7 +333,7 @@ class InvitationService {
     const { invitation, candidate } = access;
 
     if (invitation.module === MODULES.B) {
-      if (finalize !== true) throw new ValidationError('Esta invitación corresponde al Módulo B: confirma el envío del macrocaso.');
+      if (finalize !== true) throw new ValidationError('Confirma el envío de tu evaluación.');
       if (candidate.moduleB?.status === MODULE_B_STATUSES.COMPLETED) {
         return { state: 'COMPLETED', submittedAt: candidate.moduleB.submittedAt, alreadySubmitted: true };
       }
@@ -352,7 +352,7 @@ class InvitationService {
       return result;
     }
 
-    if (!answers) throw new ValidationError('Esta invitación corresponde al Módulo A: envía las respuestas del cuestionario.');
+    if (!answers) throw new ValidationError('Envía las respuestas de tu evaluación.');
     const result = await this.invitationRepo.completeWithSubmission(tokenHash, {
       module: MODULES.A,
       instrumentVersion: 'DEMO_A_V1',

@@ -15,7 +15,7 @@ export function MacrocaseIntro({ macrocase, busy, onStart }) {
   return (
     <main className='mx-auto max-w-xl px-5 py-12'>
       <section className='rounded-2xl border border-[#D9E2EA] bg-white p-7 shadow-sm sm:p-8'>
-        <span className='inline-flex rounded-md bg-[#E8F7F6] px-2.5 py-1 text-xs font-semibold text-[#087D79]'>Módulo B · Macrocaso</span>
+        <span className='inline-flex rounded-md bg-[#E8F7F6] px-2.5 py-1 text-xs font-semibold text-[#087D79]'>Evaluación</span>
         <h1 className='mt-4 font-display text-2xl font-bold text-[#10233A]'>Análisis de un caso</h1>
         <p className='mt-2 text-sm leading-6 text-[#56677B]'>
           El caso tiene {totalSections} {totalSections === 1 ? 'sección' : 'secciones'} y {totalQuestions} {totalQuestions === 1 ? 'pregunta' : 'preguntas'} en total. No hay respuestas correctas o incorrectas: nos interesa cómo piensas.

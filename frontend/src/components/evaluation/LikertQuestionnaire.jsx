@@ -70,7 +70,7 @@ export function LikertQuestionnaire({ token, onCompleted, onClosed }) {
 
   return (
     <main className='mx-auto max-w-3xl px-5 py-10 sm:py-16'>
-      <QuestionProgress moduleLabel='Módulo A · Cuestionario' current={questionIndex + 1} total={QUESTIONS.length} />
+      <QuestionProgress moduleLabel='Evaluación' current={questionIndex + 1} total={QUESTIONS.length} />
 
       <section className='rounded-2xl border border-[#D9E2EA] bg-white p-6 shadow-sm sm:p-8'>
         <span className='inline-flex rounded-full bg-[#E8F7F6] px-3 py-1 text-[11px] font-bold uppercase tracking-wide text-[#0A8F8A]'>Contenido demostrativo</span>
@@ -108,7 +108,7 @@ export function LikertQuestionnaire({ token, onCompleted, onClosed }) {
       </section>
 
       <div className='mt-6 flex justify-end'>
-        <button type='button' onClick={continueForward} disabled={selected === null} className='rounded-xl bg-[#13A9A4] px-6 py-3 text-sm font-semibold text-white transition hover:bg-[#0F8F8B] disabled:cursor-not-allowed disabled:bg-[#BCC7D1]'>{questionIndex === QUESTIONS.length - 1 ? 'Finalizar cuestionario →' : 'Continuar →'}</button>
+        <button type='button' onClick={continueForward} disabled={selected === null} className='rounded-xl bg-[#13A9A4] px-6 py-3 text-sm font-semibold text-white transition hover:bg-[#0F8F8B] disabled:cursor-not-allowed disabled:bg-[#BCC7D1]'>{questionIndex === QUESTIONS.length - 1 ? 'Finalizar evaluación →' : 'Continuar →'}</button>
       </div>
       <p className='mt-8 text-center text-xs text-[#7C8AA0]'>Contenido demostrativo · Las respuestas no generan una puntuación</p>
     </main>

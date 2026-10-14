@@ -9,7 +9,7 @@ export function MacrocaseSummary({ stage, submitting, error, onSubmit }) {
   return (
     <main className='mx-auto max-w-xl px-5 py-16'>
       <section className='rounded-2xl border border-[#D9E2EA] bg-white p-8 shadow-sm'>
-        <span className='inline-flex rounded-md bg-[#E8F7F6] px-2.5 py-1 text-xs font-semibold text-[#087D79]'>Módulo B · Resumen</span>
+        <span className='inline-flex rounded-md bg-[#E8F7F6] px-2.5 py-1 text-xs font-semibold text-[#087D79]'>Resumen</span>
         <h1 className='mt-4 font-display text-2xl font-bold text-[#10233A]'>Finalizar evaluación</h1>
         <p className='mt-2 text-sm leading-6 text-[#56677B]'>Respondiste {progress.answered} de {progress.totalQuestions} preguntas. Revisa el resumen y confirma el envío.</p>
 

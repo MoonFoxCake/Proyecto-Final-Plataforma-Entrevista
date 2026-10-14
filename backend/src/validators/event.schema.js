@@ -58,7 +58,7 @@ const submissionSchema = z.object({
   finalize: z.literal(true).optional(),
 }).strict().superRefine((data, context) => {
   if (Boolean(data.answers) === Boolean(data.finalize)) {
-    context.addIssue({ code: z.ZodIssueCode.custom, path: ['answers'], message: 'Envía las respuestas de un solo módulo.' });
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['answers'], message: 'Envía las respuestas de una sola evaluación.' });
     return;
   }
   if (data.answers && new Set(data.answers.map((answer) => answer.questionId)).size !== DEMO_QUESTION_IDS.length) {

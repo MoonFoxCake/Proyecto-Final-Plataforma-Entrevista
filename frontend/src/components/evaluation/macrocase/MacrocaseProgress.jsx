@@ -7,7 +7,7 @@ export function MacrocaseProgress({ step, progress }) {
   return (
     <>
       <div className='mb-5 flex flex-wrap items-center justify-between gap-2 text-xs font-medium text-[#64748B]'>
-        <span>Módulo B · Macrocaso</span>
+        <span>Evaluación</span>
         <span>
           Sección <strong className='text-[#0A8F8A]'>{progress.sectionIndex + 1}</strong> de {progress.totalSections}
           {' · '}
@@ -19,7 +19,7 @@ export function MacrocaseProgress({ step, progress }) {
       <div
         className='mb-8 h-1.5 overflow-hidden rounded-full bg-[#E5EBF0]'
         role='progressbar'
-        aria-label='Progreso del macrocaso'
+        aria-label='Progreso de la evaluación'
         aria-valuemin={0}
         aria-valuemax={progress.totalQuestions}
         aria-valuenow={progress.answered}

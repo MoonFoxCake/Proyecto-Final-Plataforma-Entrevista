@@ -237,7 +237,7 @@ describe('InvitationService · Module B (second stage)', () => {
 
   test('stores the answers with their sections and questions and completes only the Module B stage', async () => {
     const token = await invite();
-    await expect(service.submitEvaluation(token, { answers: [] })).rejects.toThrow('Módulo B');
+    await expect(service.submitEvaluation(token, { answers: [] })).rejects.toThrow('Confirma el envío de tu evaluación');
     await expect(service.submitEvaluation(token, { finalize: true })).rejects.toThrow('todas las preguntas');
 
     const review = await answerEverything(token, (id) => ` Respuesta ${id} `);

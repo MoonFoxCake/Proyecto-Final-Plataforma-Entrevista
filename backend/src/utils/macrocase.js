@@ -210,7 +210,7 @@ function nextPosition(sections, { sectionIndex, questionIndex }) {
 function applyAction(macrocase, progress, action, now = new Date()) {
   const sections = orderedSections(macrocase);
   if (!sections.length || sections.some((section) => !section.questions.length)) {
-    throw new ValidationError('El macrocaso de este proceso no tiene preguntas.');
+    throw new ValidationError('Esta evaluación no tiene preguntas disponibles. Avisa a la organización.');
   }
   const current = progress || initialProgress();
   const section = sections[current.sectionIndex];
@@ -284,7 +284,7 @@ function finalAnswers(macrocase, progress) {
   const questions = allQuestions(macrocase);
   const byId = new Map((progress?.answers || []).map((answer) => [answer.questionId, answer]));
   if (progress?.step !== STEPS.REVIEW || questions.some((question) => !byId.has(question.id))) {
-    throw new ValidationError('Debes responder todas las preguntas del macrocaso antes de enviarlo.');
+    throw new ValidationError('Debes responder todas las preguntas antes de enviar la evaluación.');
   }
   return questions.map((question) => {
     const { text, timedOut } = byId.get(question.id);
