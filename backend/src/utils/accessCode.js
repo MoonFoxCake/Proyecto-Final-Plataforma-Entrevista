@@ -45,13 +45,18 @@ function hashAccessCode(code, pepper) {
   return crypto.createHmac('sha256', pepper).update(normalizeAccessCode(code)).digest('hex');
 }
 
+/** "2026-11-05": the calendar day of an instant in the appointment's time zone. */
+const appointmentDay = (instant) => new Intl.DateTimeFormat('en-CA', {
+  timeZone: APPOINTMENT_TIME_ZONE, year: 'numeric', month: '2-digit', day: '2-digit',
+}).format(new Date(instant));
+
 /** Last instant of the appointment's day, in the appointment's time zone. */
 function endOfAppointmentDay(startsAt) {
-  const day = new Intl.DateTimeFormat('en-CA', {
-    timeZone: APPOINTMENT_TIME_ZONE, year: 'numeric', month: '2-digit', day: '2-digit',
-  }).format(new Date(startsAt));
-  return new Date(`${day}T23:59:59.999${APPOINTMENT_UTC_OFFSET}`);
+  return new Date(`${appointmentDay(startsAt)}T23:59:59.999${APPOINTMENT_UTC_OFFSET}`);
 }
+
+/** Whether `now` falls on the appointment's day (appointment time zone). */
+const isAppointmentDay = (startsAt, now) => appointmentDay(startsAt) === appointmentDay(now);
 
 module.exports = {
   ALPHABET,
@@ -62,4 +67,5 @@ module.exports = {
   generateAccessCode,
   hashAccessCode,
   endOfAppointmentDay,
+  isAppointmentDay,
 };

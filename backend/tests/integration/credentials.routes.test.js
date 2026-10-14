@@ -87,6 +87,34 @@ describe('/api/v1/events/:eventId/credentials', () => {
     expect((await request(app).get(`${url()}/attendance.pdf?modulo=Z`).set(as('company-1'))).status).toBe(400);
   });
 
+  test('applicator panel: any company user of the organization, never another organization', async () => {
+    // The appointment is today, so attendance and enabling are allowed.
+    await container.repos.eventRepo.update(event.id, {
+      onsite: { ...event.onsite, startsAt: new Date(), endsAt: new Date(Date.now() + 3600000) },
+    });
+    await container.repos.userRepo.create({ uid: 'company-1b', role: 'company', orgId: 'org-1' });
+    await container.repos.candidateRepo.update(candidate.id, { citation: { status: 'SENT' } });
+    await request(app).post(url()).set(as('company-1')).send({ modulo: 'A', candidateIds: [candidate.id] });
+    const onsite = `/api/v1/events/${event.id}/onsite`;
+
+    expect((await request(app).get(`${onsite}?modulo=A`).set(as('company-2'))).status).toBe(404);
+    expect((await request(app).post(`${onsite}/attendance`).set(as('company-2')).send({ modulo: 'A', candidateId: candidate.id, presente: true })).status).toBe(404);
+    expect((await request(app).post(`${onsite}/enable`).set(as('admin-1')).send({ modulo: 'A', candidateIds: [candidate.id] })).status).toBe(403);
+    expect((await request(app).post(`${onsite}/attendance`).set(as('company-1')).send({ modulo: 'A', candidateId: candidate.id })).status).toBe(400);
+
+    // Another user of the same company acts as applicator.
+    const marked = await request(app).post(`${onsite}/attendance`).set(as('company-1b')).send({ modulo: 'A', candidateId: candidate.id, presente: true });
+    expect(marked.status).toBe(200);
+    expect(marked.body.data).toMatchObject({ status: 'PRESENT', markedBy: 'company-1b' });
+
+    const enabled = await request(app).post(`${onsite}/enable`).set(as('company-1b')).send({ modulo: 'A', candidateIds: [candidate.id] });
+    expect(enabled.body.data.enabled).toHaveLength(1);
+
+    const roster = await request(app).get(`${onsite}?modulo=A`).set(as('company-1'));
+    expect(roster.status).toBe(200);
+    expect(roster.body.data.rows[0]).toMatchObject({ attendance: { status: 'PRESENT' }, credential: { status: 'ENABLED', enabledBy: 'company-1b' } });
+  });
+
   test('revoke and reissue go through the same checks', async () => {
     const issued = await request(app).post(url()).set(as('company-1')).send({ modulo: 'A', candidateIds: [candidate.id] });
     const { credentialId } = issued.body.data.issued[0];

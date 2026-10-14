@@ -1,16 +1,8 @@
 const { Router } = require('express');
 const { checkPersistedRole } = require('../middleware/checkPersistedRole');
 const { validateInput } = require('../middleware/validateInput');
+const { validateQuery } = require('../middleware/validateQuery');
 const { credentialBatchSchema, credentialActionSchema, attendanceQuerySchema } = require('../validators/event.schema');
-const { ValidationError } = require('../utils/errors');
-
-/** Validates (and coerces) `req.query` like `validateInput` does with the body. */
-const validateQuery = (schema) => (req, res, next) => {
-  const result = schema.safeParse(req.query);
-  if (!result.success) return next(new ValidationError('Invalid query', result.error.flatten()));
-  req.query = result.data;
-  return next();
-};
 
 /**
  * `/events/:eventId/credentials` — onsite access credentials. Company users

@@ -68,6 +68,15 @@ const AUDIT_ACTIONS = Object.freeze({
   CREDENTIAL_ISSUED: 'CREDENTIAL_ISSUED',
   CREDENTIAL_REISSUED: 'CREDENTIAL_REISSUED',
   CREDENTIAL_REVOKED: 'CREDENTIAL_REVOKED',
+  CREDENTIAL_ENABLED: 'CREDENTIAL_ENABLED',
+  ATTENDANCE_MARKED: 'ATTENDANCE_MARKED',
+  ATTENDANCE_UNMARKED: 'ATTENDANCE_UNMARKED',
+});
+
+// candidate.attendance[module].status — set by the applicator after
+// checking the candidate's identity at the venue.
+const ATTENDANCE_STATUSES = Object.freeze({
+  PRESENT: 'PRESENT',
 });
 
 module.exports = {
@@ -80,4 +89,5 @@ module.exports = {
   CITATION_STATUSES,
   CREDENTIAL_STATUSES,
   AUDIT_ACTIONS,
+  ATTENDANCE_STATUSES,
 };

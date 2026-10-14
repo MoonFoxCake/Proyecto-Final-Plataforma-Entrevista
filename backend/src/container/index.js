@@ -30,6 +30,7 @@ const MacrocaseService = require('../services/MacrocaseService');
 const AzureSpeechService = require('../services/AzureSpeechService');
 const AccessCredentialService = require('../services/AccessCredentialService');
 const { PrintableService } = require('../services/PrintableService');
+const OnsiteApplicationService = require('../services/OnsiteApplicationService');
 
 // Supabase Storage for macrocase audio. Required lazily: the Supabase client
 // fails at import time without SUPABASE_URL / SUPABASE_SECRET_KEY.
@@ -127,9 +128,17 @@ function createContainer(type = 'firestore') {
     pepper: process.env.ACCESS_CODE_PEPPER,
   });
 
+  const onsiteApplicationService = new OnsiteApplicationService({
+    eventService,
+    candidateRepo: repos.candidateRepo,
+    credentialRepo: repos.accessCredentialRepo,
+    auditRepo: repos.auditLogRepo,
+  });
+
   return {
     repos,
     accessCredentialService,
+    onsiteApplicationService,
     authService: new AuthService(repos.userRepo, repos.organizationRepo),
     tenantService: new TenantService(repos.organizationRepo),
     eventService,

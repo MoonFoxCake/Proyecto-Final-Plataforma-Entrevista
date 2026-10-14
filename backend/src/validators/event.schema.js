@@ -92,7 +92,23 @@ const attendanceQuerySchema = z.object({
   papel: paperSize,
 }).strict();
 
-const macrocaseStageSchema =z.object({ token: accessToken }).strict();
+// Applicator panel.
+const onsiteRosterQuerySchema = z.object({
+  modulo: z.enum(['A', 'B']).optional().default('A'),
+}).strict();
+
+const attendanceSchema = z.object({
+  modulo: z.enum(['A', 'B']),
+  candidateId: z.string().min(1).max(120),
+  presente: z.boolean(),
+}).strict();
+
+const enableSchema = z.object({
+  modulo: z.enum(['A', 'B']),
+  candidateIds: z.array(z.string().min(1).max(120)).min(1, 'Selecciona al menos un candidato.').max(500),
+}).strict();
+
+const macrocaseStageSchema = z.object({ token: accessToken }).strict();
 
 const stageId = z.string().min(1).max(120);
 // `timedOut`: the question's time ran out and the answer goes as it was (it
@@ -122,4 +138,7 @@ module.exports = {
   credentialBatchSchema,
   credentialActionSchema,
   attendanceQuerySchema,
+  onsiteRosterQuerySchema,
+  attendanceSchema,
+  enableSchema,
 };

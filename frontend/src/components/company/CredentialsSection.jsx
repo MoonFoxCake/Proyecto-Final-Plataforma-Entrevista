@@ -16,7 +16,7 @@ const LIVE = ['GENERATED', 'ENABLED'];
 const formatDateTime = (value) => (value ? new Intl.DateTimeFormat('es-GT', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)) : '');
 const errorMessage = (error, fallback) => error.response?.data?.error?.message || fallback;
 
-function CredentialStatus({ credential }) {
+export function CredentialStatus({ credential }) {
   if (!credential) return <span className='inline-flex rounded-md bg-[#F1F5F9] px-2.5 py-1 text-xs font-medium text-[#475569]'>Sin preparar</span>;
   const [label, tone] = STATUS[credential.status] || [credential.status, 'bg-[#F1F5F9] text-[#475569]'];
   return <span className={`inline-flex rounded-md px-2.5 py-1 text-xs font-medium ${tone}`}>{label}</span>;

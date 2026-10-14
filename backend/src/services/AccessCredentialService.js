@@ -48,6 +48,16 @@ class AccessCredentialService {
     return credential.status;
   }
 
+  /** Each assignment's current (latest) credential, keyed `${candidateId}_${module}`. */
+  static latestByAssignment(credentials, orgId) {
+    const latest = new Map();
+    for (const credential of credentials.filter((item) => item.orgId === orgId)) {
+      const key = `${credential.candidateId}_${credential.module}`;
+      if (!latest.has(key) || new Date(credential.createdAt) > new Date(latest.get(key).createdAt)) latest.set(key, credential);
+    }
+    return latest;
+  }
+
   /** What the company may see of a credential: never the code or its hash. */
   static toPublic(credential, now) {
     const { codeHash, ...rest } = credential;
@@ -65,13 +75,9 @@ class AccessCredentialService {
       this.candidateRepo.findByEvent(eventId, orgId),
       this.credentialRepo.findByEvent(eventId),
     ]);
-    const latest = new Map();
-    for (const credential of credentials.filter((item) => item.orgId === orgId)) {
-      const key = `${credential.candidateId}_${credential.module}`;
-      if (!latest.has(key) || new Date(credential.createdAt) > new Date(latest.get(key).createdAt)) latest.set(key, credential);
-    }
+    const latest = AccessCredentialService.latestByAssignment(credentials, orgId);
 
-    const modules = modulesOf(event).map((module) => {
+    const modules =modulesOf(event).map((module) => {
       const rows = candidates
         .filter((candidate) => module === MODULES.A || candidate.moduleB?.citation || latest.has(`${candidate.id}_${module}`))
         .sort(byName)

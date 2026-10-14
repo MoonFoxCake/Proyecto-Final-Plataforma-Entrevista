@@ -71,6 +71,22 @@ describe('ReviewService', () => {
     ]);
   });
 
+  test('the ethical review stays anonymous for onsite candidates (no name, ID, attendance or access data)', async () => {
+    await candidateRepo.update(candidate.id, {
+      nombreCompleto: 'María Identificable',
+      cedula: '1234567890101',
+      correo: 'maria@example.com',
+      citation: { status: 'SENT', providerId: 'email-1', appointment: { venue: 'Campus' } },
+      attendance: { A: { status: 'PRESENT', markedBy: 'applicator-1' } },
+    });
+
+    const process = JSON.stringify(await service.getProcess(event.id));
+    const participant = JSON.stringify(await service.getParticipant(event.id, 'P-001'));
+    for (const output of [process, participant]) {
+      expect(output).not.toMatch(/María Identificable|1234567890101|maria@example\.com|applicator-1|attendance|citation|Campus/);
+    }
+  });
+
   test('groups the Module B answers by macrocase section', async () => {
     await eventRepo.update(event.id, { moduleB: { macrocase: { id: 'macro-1', name: 'Caperucita roja' } } });
     await candidateRepo.update(candidate.id, { moduleB: { status: 'COMPLETED', invitedAt: new Date() } });

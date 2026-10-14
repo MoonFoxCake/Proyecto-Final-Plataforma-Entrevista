@@ -12,6 +12,7 @@ import { CandidateDashboardPage } from '../pages/CandidateDashboardPage.jsx';
 import { CompanyDashboardPage } from '../pages/CompanyDashboardPage.jsx';
 import { EventDetailPage } from '../pages/EventDetailPage.jsx';
 import { NewEventPage } from '../pages/NewEventPage.jsx';
+import { OnsiteApplicationPage } from '../pages/OnsiteApplicationPage.jsx';
 import { EvaluationAccessPage } from '../pages/EvaluationAccessPage.jsx';
 import { AdminMacrocasePreviewPage } from '../pages/AdminMacrocasePreviewPage.jsx';
 import { CandidateResultPage } from '../pages/CandidateResultPage.jsx';
@@ -63,6 +64,7 @@ export function AppRouter() {
           <Route element={<RequireRole allowedRoles={[ROLES.COMPANY]} />}>
             <Route path='/company/events/new' element={<NewEventPage />} />
             <Route path='/company/events/:eventId' element={<EventDetailPage />} />
+            <Route path='/company/events/:eventId/onsite' element={<OnsiteApplicationPage />} />
             <Route path='/company/events/:eventId/candidates/:candidateId/result' element={<CandidateResultPage />} />
             <Route path="/company-dashboard" element={<CompanyDashboardPage />} />
           </Route>

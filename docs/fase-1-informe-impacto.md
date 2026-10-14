@@ -181,8 +181,8 @@ igualmente que la cliente las confirme.
 | D6 | ¿Cuánto tiempo permanecen habilitadas las credenciales? | ✅ Decidido (2026-10-12): válidas hasta que concluye la jornada de la cita (23:59:59, hora de Guatemala). | Fase 4 |
 | D7 | ¿Pueden cambiar de computadora? | Propuesta: solo mediante revocación y reemisión por el supervisor. | Fase 8 |
 | D8 | ¿El supervisor puede pausar una evaluación? | Propuesta: no en este incremento; la revocación y reemisión cubre los incidentes. | Fase 8 |
-| D9 | ¿Quién puede operar la aplicación presencial? | Hoy todos los usuarios `company` de la organización son equivalentes. Opciones: (a) cualquier usuario `company`; (b) nuevo permiso `onsiteOperator` por usuario. | Fase 6 |
-| D10 | ¿Cómo se manejan ausentes o reprogramados? | Propuesta: el ausente conserva su credencial `GENERATED` hasta que expire; la reprogramación revoca y reemite. | Fase 6 |
+| D9 | ¿Quién puede operar la aplicación presencial? | ✅ Decidido (2026-10-13): cualquier usuario `company` de la organización puede ser aplicador. | Fase 6 |
+| D10 | ¿Cómo se manejan ausentes o reprogramados? | ✅ Decidido (2026-10-13): el ausente conserva su credencial `GENERATED` hasta que expire; la reprogramación revoca y reemite. | Fase 6 |
 | D11 | ¿Los módulos A y B en citas presenciales separadas? | Afecta al modelo `modules` y a las citaciones. Hoy el B exige el A publicado y revisado. | Fase 3 |
 | D12 | ¿PDF generado en el servidor o en el navegador? | ✅ Implementado en el servidor con `pdfkit`: las tarjetas viajan en la misma respuesta de emisión (`no-store`) y no se guardan; la lista de asistencia (sin códigos) se descarga aparte. | Fase 5 |
 

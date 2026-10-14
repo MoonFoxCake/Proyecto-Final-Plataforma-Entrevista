@@ -250,6 +250,11 @@ export function EventDetailPage() {
                   {!onsite && <p className='mt-2 inline-flex rounded-lg bg-[#EEF6FF] px-3 py-2 text-xs font-medium text-[#315B88]'>Evaluación habilitada para todos desde: {formatAvailability(event)}</p>}
                 </div>
                 <div className='flex flex-wrap gap-3'>
+                  {onsite && (
+                    <Button type='button' variant='accent' className='h-11 px-5' onClick={() => navigate(`/company/events/${eventId}/onsite`)}>
+                      Aplicación presencial →
+                    </Button>
+                  )}
                   {onsite && hasCitations && (
                     <Button type='button' variant='outline' className='h-11 px-5' onClick={refreshCitations} disabled={refreshing}>
                       {refreshing ? 'Consultando...' : 'Actualizar estado de envío'}

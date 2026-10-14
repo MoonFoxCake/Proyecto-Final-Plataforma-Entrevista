@@ -5,12 +5,14 @@ const EventController = require('../controllers/event.controller');
 const AdminReviewController = require('../controllers/admin-review.controller');
 const MacrocaseController = require('../controllers/macrocase.controller');
 const AccessCredentialController = require('../controllers/access-credential.controller');
+const OnsiteApplicationController = require('../controllers/onsite-application.controller');
 
 const { createAuthRoutes } = require('./auth.routes');
 const { createEventRoutes } = require('./event.routes');
 const { createAdminReviewRoutes } = require('./admin-review.routes');
 const { createMacrocaseRoutes } = require('./macrocase.routes');
 const { createAccessCredentialRoutes } = require('./access-credential.routes');
+const { createOnsiteApplicationRoutes } = require('./onsite-application.routes');
 
 /**
  * Builds the `/api/v1` router tree, wiring each sub-router's controller
@@ -35,11 +37,16 @@ function createApiRouter(container) {
 );
 
   const accessCredentialController = new AccessCredentialController(container.accessCredentialService);
+  const onsiteApplicationController = new OnsiteApplicationController(container.onsiteApplicationService);
 
   router.use('/auth', createAuthRoutes(authController, container.authService));
   router.use(
     '/events/:eventId/credentials',
     createAccessCredentialRoutes(accessCredentialController, container.authService)
+  );
+  router.use(
+    '/events/:eventId/onsite',
+    createOnsiteApplicationRoutes(onsiteApplicationController, container.authService)
   );
   router.use('/events', createEventRoutes(eventController, container.authService));
   router.use('/admin', createAdminReviewRoutes(adminReviewController, container.authService));
