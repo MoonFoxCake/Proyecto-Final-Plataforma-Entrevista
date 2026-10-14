@@ -149,19 +149,19 @@ class PrintableService {
   }
 
   /**
-   * Attendance sheet: who was cited, alphabetical, with an internal id, the
-   * appointment time and blank columns to mark attendance and sign. No
-   * access codes.
+   * Attendance sheet: who was cited, alphabetical, with the cédula, the
+   * appointment time and blank cells to mark attendance and sign. Fully
+   * gridded so it can be filled in by hand. No access codes.
    *
    * @param {{ eventName: string, module: 'A'|'B', session?: object, rows: Array<{ nombreCompleto: string,
-   *   internalId: string, appointmentAt?: Date }>, paper?: 'CARTA'|'A4', generatedAt?: Date }} params
+   *   cedula: string, appointmentAt?: Date }>, paper?: 'CARTA'|'A4', generatedAt?: Date }} params
    * @returns {Promise<Buffer>}
    */
   async attendanceList({ eventName, module, session, rows, paper = 'CARTA', generatedAt = new Date() }) {
     const [pageWidth, pageHeight] = paperSize(paper);
     const tableWidth = pageWidth - 2 * PAGE_MARGIN;
     const columns = [
-      ['N.º', 26], ['Nombre', 0], ['Identificador interno', 118], ['Hora de cita', 74], ['Asistencia', 56], ['Firma', 94],
+      ['N.º', 26], ['Nombre', 0], ['Cédula', 92], ['Hora de cita', 70], ['Asistencia', 66], ['Firma', 112],
     ];
     // Module B candidates may be cited to different days: then show the day too.
     const multipleDays = new Set(rows.filter((row) => row.appointmentAt).map((row) => formatShortDate(row.appointmentAt))).size > 1;
@@ -175,6 +175,17 @@ class PrintableService {
     columns[1][1] = tableWidth - fixed;
     const rowHeight = 24;
     const headerHeight = 20;
+    // Every cell bordered: outer box plus one vertical line per column edge.
+    const grid = (doc, top, height) => {
+      doc.save().lineWidth(0.6).strokeColor(COLORS.line);
+      doc.rect(PAGE_MARGIN, top, tableWidth, height).stroke();
+      let edge = PAGE_MARGIN;
+      for (const [, width] of columns.slice(0, -1)) {
+        edge += width;
+        doc.moveTo(edge, top).lineTo(edge, top + height).stroke();
+      }
+      doc.restore();
+    };
 
     return render({ size: [pageWidth, pageHeight], margin: 0, compress: this.compress, bufferPages: true, info: { Title: `Lista de asistencia · ${eventName}` } }, (doc) => {
       let y;
@@ -198,6 +209,7 @@ class PrintableService {
           doc.font('Helvetica-Bold').fontSize(7.5).fillColor(COLORS.ink).text(title, x + 4, y + 6, { width: width - 8, lineBreak: false, ellipsis: true });
           x += width;
         }
+        grid(doc, y, headerHeight);
         y += headerHeight;
       };
 
@@ -210,7 +222,7 @@ class PrintableService {
         const cells = [
           String(index + 1),
           row.nombreCompleto,
-          row.internalId,
+          row.cedula,
           appointmentLabel(row.appointmentAt),
         ];
         let x = PAGE_MARGIN;
@@ -218,19 +230,18 @@ class PrintableService {
           const cellWidth = width - 8;
           const fitsOneLine = doc.font('Helvetica').fontSize(9).widthOfString(cells[column] ?? '') <= cellWidth;
           if (column === 1 && !fitsOneLine) {
-            // A long name: two smaller lines inside the row, never over the next one.
-            doc.font('Helvetica').fontSize(7.5).fillColor(COLORS.ink)
-              .text(cells[column], x + 4, y + 3, { width: cellWidth, height: rowHeight - 4, ellipsis: true });
+            // A long name: smaller type, in two lines if needed, never over the next row.
+            const oneSmallLine = doc.font('Helvetica').fontSize(7.5).widthOfString(cells[column]) <= cellWidth;
+            doc.fillColor(COLORS.ink)
+              .text(cells[column], x + 4, oneSmallLine ? y + 9 : y + 3, { width: cellWidth, height: rowHeight - 4, ellipsis: true });
           } else if (column < cells.length) {
-            const size = column === 2 ? 7.5 : 9;
-            doc.font(column === 2 ? 'Courier' : 'Helvetica').fontSize(size).fillColor(COLORS.ink)
-              .text(cells[column], x + 4, y + 8, { width: cellWidth, height: size * 1.3, lineBreak: false, ellipsis: true });
-          } else if (column === 4) {
-            doc.save().lineWidth(0.8).strokeColor(COLORS.ink).rect(x + width / 2 - 5, y + 7, 10, 10).stroke().restore();
+            doc.font('Helvetica').fontSize(9).fillColor(COLORS.ink)
+              .text(cells[column] ?? '', x + 4, y + 8, { width: cellWidth, height: 9 * 1.3, lineBreak: false, ellipsis: true });
           }
+          // Asistencia and Firma stay blank: they are filled in by hand.
           x += width;
         });
-        doc.save().lineWidth(0.5).strokeColor(COLORS.line).moveTo(PAGE_MARGIN, y + rowHeight).lineTo(PAGE_MARGIN + tableWidth, y + rowHeight).stroke().restore();
+        grid(doc, y, rowHeight);
         y += rowHeight;
       });
 

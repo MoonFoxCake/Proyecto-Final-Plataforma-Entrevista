@@ -75,17 +75,17 @@ describe('access cards', () => {
 
 describe('attendance list', () => {
   const rows = (count) => Array.from({ length: count }, (_, index) => ({
-    nombreCompleto: `Candidato ${String(index + 1).padStart(2, '0')}`, internalId: `id-${index + 1}`, appointmentAt: appointment.startsAt,
+    nombreCompleto: `Candidato ${String(index + 1).padStart(2, '0')}`, cedula: `10000000${index + 1}`, appointmentAt: appointment.startsAt,
   }));
 
-  test('lists name, internal id and appointment time with a box to mark attendance, and never codes', async () => {
+  test('lists name, cédula and appointment time with blank cells to mark attendance, and never codes', async () => {
     const capture = captureText();
     const pdf = await new PrintableService().attendanceList({ eventName: 'Concurso Presencial', module: 'A', session: appointment, rows: rows(3) });
     capture.restore();
 
     expect(pageCount(pdf)).toBe(1);
     const texts = capture.drawn.map((item) => item.text);
-    expect(texts).toEqual(expect.arrayContaining(['Lista de asistencia', 'Nombre', 'Identificador interno', 'Hora de cita', 'Asistencia', 'Firma', 'Candidato 01', 'id-1', '8:00 a. m.']));
+    expect(texts).toEqual(expect.arrayContaining(['Lista de asistencia', 'Nombre', 'Cédula', 'Hora de cita', 'Asistencia', 'Firma', 'Candidato 01', '100000001', '8:00 a. m.']));
     expect(texts.join(' ')).not.toMatch(/[A-Z2-9]{5}-[A-Z2-9]{5}/);
   });
 
@@ -104,8 +104,8 @@ describe('attendance list', () => {
     const capture = captureText();
     await new PrintableService().attendanceList({
       eventName: 'Evento', module: 'B', rows: [
-        { nombreCompleto: 'Ana', internalId: 'a', appointmentAt: new Date('2026-11-20T15:00:00.000Z') },
-        { nombreCompleto: 'Bruno', internalId: 'b', appointmentAt: new Date('2026-11-21T15:00:00.000Z') },
+        { nombreCompleto: 'Ana', cedula: '1', appointmentAt: new Date('2026-11-20T15:00:00.000Z') },
+        { nombreCompleto: 'Bruno', cedula: '2', appointmentAt: new Date('2026-11-21T15:00:00.000Z') },
       ],
     });
     capture.restore();

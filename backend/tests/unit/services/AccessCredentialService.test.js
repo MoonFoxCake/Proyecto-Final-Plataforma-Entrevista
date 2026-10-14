@@ -214,7 +214,7 @@ describe('AccessCredentialService', () => {
       expect(result.cardsPdf.base64.length).toBeGreaterThan(100);
     });
 
-    test('the attendance sheet lists the cited candidates alphabetically, without codes', async () => {
+    test('the attendance sheet lists the cited candidates alphabetically with their cédula, without codes', async () => {
       await candidateRepo.update(zoe.id, { citation: { status: 'SENT' } });
       await candidateRepo.update(ana.id, { citation: { status: 'SENT' } });
       await candidateRepo.update(bruno.id, { citation: { status: 'FAILED' } });
@@ -225,10 +225,10 @@ describe('AccessCredentialService', () => {
       expect(fileName).toBe('lista-asistencia-concurso-presencial-2026-modulo-a.pdf');
       expect(pdf.subarray(0, 5).toString()).toBe('%PDF-');
       const { rows, session } = printable.mock.calls[0][0];
-      expect(rows.map((row) => [row.nombreCompleto, row.internalId])).toEqual([['Ána López', ana.id], ['Zoe Ruiz', zoe.id]]);
+      expect(rows.map((row) => [row.nombreCompleto, row.cedula])).toEqual([['Ána López', ana.cedula], ['Zoe Ruiz', zoe.cedula]]);
       expect(rows[0].appointmentAt).toEqual(SESSION.startsAt);
       expect(session).toBe(SESSION);
-      expect(JSON.stringify(rows)).not.toMatch(/code|cedula/i);
+      expect(JSON.stringify(rows)).not.toMatch(/code/i);
     });
 
     test('the Module B sheet uses each candidate Module B session', async () => {
@@ -237,7 +237,7 @@ describe('AccessCredentialService', () => {
       const printable = jest.spyOn(service.printableService, 'attendanceList');
 
       await service.attendanceSheet('event-1', 'org-1', 'B', 'CARTA');
-      expect(printable.mock.calls[0][0]).toMatchObject({ module: 'B', session: sessionB, rows: [expect.objectContaining({ internalId: zoe.id, appointmentAt: sessionB.startsAt })] });
+      expect(printable.mock.calls[0][0]).toMatchObject({ module: 'B', session: sessionB, rows: [expect.objectContaining({ cedula: zoe.cedula, appointmentAt: sessionB.startsAt })] });
 
       event = { ...event, modules: ['A'] };
       await expect(service.attendanceSheet('event-1', 'org-1', 'B', 'CARTA')).rejects.toThrow('no incluye el Módulo B');

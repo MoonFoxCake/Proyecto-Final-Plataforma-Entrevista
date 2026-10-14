@@ -193,7 +193,7 @@ class AccessCredentialService {
         const citation = module === MODULES.A ? candidate.citation : candidate.moduleB?.citation;
         if (citation?.status !== CITATION_STATUSES.SENT) return null;
         const appointment = module === MODULES.A ? event.onsite : citation.appointment;
-        return { nombreCompleto: candidate.nombreCompleto, internalId: candidate.id, appointmentAt: appointment?.startsAt, appointment };
+        return { nombreCompleto: candidate.nombreCompleto, cedula: candidate.cedula, appointmentAt: appointment?.startsAt, appointment };
       })
       .filter(Boolean)
       .sort(byName);
