@@ -65,7 +65,7 @@ class ResendEmailService {
       row('Evento', eventName),
       event.position ? row('Puesto', event.position) : '',
       row('Fecha', formatDate(appointment.startsAt)),
-      row('Horario', `${formatTime(appointment.startsAt)} a ${formatTime(appointment.endsAt)} (hora de Guatemala)`),
+      row('Horario', `${formatTime(appointment.startsAt)} a ${formatTime(appointment.endsAt)}`),
       row('Sede', appointment.venue),
       row('Ubicación', appointment.room),
     ].join('');
