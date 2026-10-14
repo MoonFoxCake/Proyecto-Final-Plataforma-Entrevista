@@ -48,3 +48,7 @@ services:
         sync: false
       - key: AZURE_SPEECH_VOICE
         value: es-GT-MartaNeural
+      # Onsite access codes: HMAC secret (32+ random characters). Changing
+      # it invalidates every code already issued.
+      - key: ACCESS_CODE_PEPPER
+        generateValue: true

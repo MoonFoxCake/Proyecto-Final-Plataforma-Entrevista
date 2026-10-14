@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { CompanySidebar } from '../components/company/CompanySidebar.jsx';
 import { CandidateForm } from '../components/company/CandidateForm.jsx';
 import { CandidateList, canReceiveModuleB } from '../components/company/CandidateList.jsx';
+import { CredentialsSection } from '../components/company/CredentialsSection.jsx';
 import { EMPTY_SESSION, SessionFields, sessionProblem, toCitationPayload } from '../components/company/SessionFields.jsx';
 import { Button } from '../components/ui';
 import * as eventService from '../services/eventService.js';
@@ -127,6 +128,7 @@ export function EventDetailPage() {
   const moduleBCompleted = candidates.filter((candidate) => candidate.moduleB?.status === 'COMPLETED').length;
   const moduleBSent = candidates.filter((candidate) => candidate.moduleB).length;
   const hasCitations = candidates.some((candidate) => candidate.citation?.providerId || candidate.moduleB?.citation?.providerId);
+  const candidatesVersion = candidates.map((candidate) => `${candidate.id}:${candidate.status}:${candidate.moduleB?.status ?? ''}`).join('|');
 
   const toggleModuleB = (candidateId) => {
     setSelectedForModuleB((current) => {
@@ -320,6 +322,8 @@ export function EventDetailPage() {
                   selection={published && hasModuleB ? { selectedIds: selectedForModuleB, onToggle: toggleModuleB } : null}
                 />
               </section>
+
+              {onsite && <CredentialsSection event={event} candidatesVersion={candidatesVersion} />}
             </>
           )}
         </div>

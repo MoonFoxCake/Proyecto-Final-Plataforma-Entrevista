@@ -5,6 +5,8 @@ const FirestoreEventRepository = require('../repositories/firestore/FirestoreEve
 const FirestoreCandidateRepository = require('../repositories/firestore/FirestoreCandidateRepository');
 const FirestoreInvitationRepository = require('../repositories/firestore/FirestoreInvitationRepository');
 const FirestoreMacrocaseRepository = require('../repositories/firestore/FirestoreMacrocaseRepository');
+const FirestoreAccessCredentialRepository = require('../repositories/firestore/FirestoreAccessCredentialRepository');
+const FirestoreAuditLogRepository = require('../repositories/firestore/FirestoreAuditLogRepository');
 
 // In-memory repositories (tests)
 const InMemoryUserRepository = require('../repositories/in-memory/InMemoryUserRepository');
@@ -13,6 +15,8 @@ const InMemoryEventRepository = require('../repositories/in-memory/InMemoryEvent
 const InMemoryCandidateRepository = require('../repositories/in-memory/InMemoryCandidateRepository');
 const InMemoryInvitationRepository = require('../repositories/in-memory/InMemoryInvitationRepository');
 const InMemoryMacrocaseRepository = require('../repositories/in-memory/InMemoryMacrocaseRepository');
+const InMemoryAccessCredentialRepository = require('../repositories/in-memory/InMemoryAccessCredentialRepository');
+const InMemoryAuditLogRepository = require('../repositories/in-memory/InMemoryAuditLogRepository');
 
 // Services
 const AuthService = require('../services/AuthService');
@@ -24,6 +28,8 @@ const ReviewService = require('../services/ReviewService');
 const ResendEmailService = require('../services/ResendEmailService');
 const MacrocaseService = require('../services/MacrocaseService');
 const AzureSpeechService = require('../services/AzureSpeechService');
+const AccessCredentialService = require('../services/AccessCredentialService');
+const { PrintableService } = require('../services/PrintableService');
 
 // Supabase Storage for macrocase audio. Required lazily: the Supabase client
 // fails at import time without SUPABASE_URL / SUPABASE_SECRET_KEY.
@@ -47,6 +53,8 @@ function buildRepositories(type) {
       candidateRepo: new InMemoryCandidateRepository(),
       invitationRepo: new InMemoryInvitationRepository(),
       macrocaseRepo: new InMemoryMacrocaseRepository(),
+      accessCredentialRepo: new InMemoryAccessCredentialRepository(),
+      auditLogRepo: new InMemoryAuditLogRepository(),
     };
   }
 
@@ -57,6 +65,8 @@ function buildRepositories(type) {
     candidateRepo: new FirestoreCandidateRepository(),
     invitationRepo: new FirestoreInvitationRepository(),
     macrocaseRepo: new FirestoreMacrocaseRepository(),
+    accessCredentialRepo: new FirestoreAccessCredentialRepository(),
+    auditLogRepo: new FirestoreAuditLogRepository(),
   };
 }
 
@@ -108,8 +118,18 @@ function createContainer(type = 'firestore') {
     organizationRepo: repos.organizationRepo,
   });
 
+  const accessCredentialService = new AccessCredentialService({
+    credentialRepo: repos.accessCredentialRepo,
+    auditRepo: repos.auditLogRepo,
+    candidateRepo: repos.candidateRepo,
+    eventService,
+    printableService: new PrintableService(),
+    pepper: process.env.ACCESS_CODE_PEPPER,
+  });
+
   return {
     repos,
+    accessCredentialService,
     authService: new AuthService(repos.userRepo, repos.organizationRepo),
     tenantService: new TenantService(repos.organizationRepo),
     eventService,

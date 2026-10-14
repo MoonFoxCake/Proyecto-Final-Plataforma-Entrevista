@@ -51,6 +51,33 @@ const INVITATION_STATUSES = Object.freeze({
   CANCELLED: 'CANCELLED',
 });
 
+// accessCredentials.status. GENERATED (printed, not usable yet) → ENABLED
+// (the applicator verified the candidate) → USED (a session was opened).
+// REVOKED at any point before use. EXPIRED is not stored: a GENERATED or
+// ENABLED credential past `expiresAt` reads as expired.
+const CREDENTIAL_STATUSES = Object.freeze({
+  GENERATED: 'GENERATED',
+  ENABLED: 'ENABLED',
+  USED: 'USED',
+  REVOKED: 'REVOKED',
+  EXPIRED: 'EXPIRED',
+});
+
+// auditLog.action
+const AUDIT_ACTIONS = Object.freeze({
+  CREDENTIAL_ISSUED: 'CREDENTIAL_ISSUED',
+  CREDENTIAL_REISSUED: 'CREDENTIAL_REISSUED',
+  CREDENTIAL_REVOKED: 'CREDENTIAL_REVOKED',
+});
+
 module.exports = {
-  ROLES, CANDIDATE_STATUSES, INVITATION_STATUSES, MODULES, MODULE_B_STATUSES, MODALITIES, CITATION_STATUSES,
+  ROLES,
+  CANDIDATE_STATUSES,
+  INVITATION_STATUSES,
+  MODULES,
+  MODULE_B_STATUSES,
+  MODALITIES,
+  CITATION_STATUSES,
+  CREDENTIAL_STATUSES,
+  AUDIT_ACTIONS,
 };

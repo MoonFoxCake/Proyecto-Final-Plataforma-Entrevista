@@ -72,7 +72,27 @@ const moduleBInvitationSchema = z.object({
   citacion: citationSchema.optional(),
 }).strict();
 
-const macrocaseStageSchema = z.object({ token: accessToken }).strict();
+// Onsite access credentials: issue codes for a module, revoke / reissue one.
+// `papel`: paper size of the printable cards PDF.
+const paperSize = z.enum(['CARTA', 'A4']).optional().default('CARTA');
+
+const credentialBatchSchema = z.object({
+  modulo: z.enum(['A', 'B']),
+  candidateIds: z.array(z.string().min(1).max(120)).min(1, 'Selecciona al menos un candidato.').max(500),
+  papel: paperSize,
+}).strict();
+
+const credentialActionSchema = z.object({
+  motivo: z.string().trim().max(300).optional(),
+  papel: paperSize,
+}).strict();
+
+const attendanceQuerySchema = z.object({
+  modulo: z.enum(['A', 'B']).optional().default('A'),
+  papel: paperSize,
+}).strict();
+
+const macrocaseStageSchema =z.object({ token: accessToken }).strict();
 
 const stageId = z.string().min(1).max(120);
 // `timedOut`: the question's time ran out and the answer goes as it was (it
@@ -99,4 +119,7 @@ module.exports = {
   moduleBInvitationSchema,
   macrocaseStageSchema,
   macrocaseActionSchema,
+  credentialBatchSchema,
+  credentialActionSchema,
+  attendanceQuerySchema,
 };

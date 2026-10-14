@@ -176,15 +176,15 @@ igualmente que la cliente las confirme.
 | D1 | ¿Una o varias preguntas por sección? | ✅ La 2.1 pide "una o varias". El modelo admite N. | No |
 | D2 | ¿Retroceder y modificar respuestas? | ✅ La 2.2 pide "impedir retroceder o corregir". | No |
 | D3 | ¿Narración obligatoria u opcional? | ✅ La 2.3 pide poder leer sin escuchar toda la narración, así que es opcional. | No |
-| D4 | ¿La narrativa de la sección sigue visible mientras se responden sus preguntas? | Hoy el caso se oculta al pasar a las preguntas. **Hay que confirmarlo.** | **Fase 2** |
-| D5 | ¿Se mantiene el límite de tiempo por pregunta (`defaultTimeLimit`) en el modelo por secciones? | Recomiendo mantenerlo por pregunta. | **Fase 2** |
-| D6 | ¿Cuánto tiempo permanecen habilitadas las credenciales? | Propuesta: válidas hasta el fin de la jornada de la cita; habilitación con duración configurable. | Fase 4 |
+| D4 | ¿La narrativa de la sección sigue visible mientras se responden sus preguntas? | ✅ Decidido: el texto de la sección se oculta al pasar a sus preguntas. | Fase 2 |
+| D5 | ¿Se mantiene el límite de tiempo por pregunta (`defaultTimeLimit`) en el modelo por secciones? | ✅ Decidido: se mantiene por pregunta. | Fase 2 |
+| D6 | ¿Cuánto tiempo permanecen habilitadas las credenciales? | ✅ Decidido (2026-10-12): válidas hasta que concluye la jornada de la cita (23:59:59, hora de Guatemala). | Fase 4 |
 | D7 | ¿Pueden cambiar de computadora? | Propuesta: solo mediante revocación y reemisión por el supervisor. | Fase 8 |
 | D8 | ¿El supervisor puede pausar una evaluación? | Propuesta: no en este incremento; la revocación y reemisión cubre los incidentes. | Fase 8 |
 | D9 | ¿Quién puede operar la aplicación presencial? | Hoy todos los usuarios `company` de la organización son equivalentes. Opciones: (a) cualquier usuario `company`; (b) nuevo permiso `onsiteOperator` por usuario. | Fase 6 |
 | D10 | ¿Cómo se manejan ausentes o reprogramados? | Propuesta: el ausente conserva su credencial `GENERATED` hasta que expire; la reprogramación revoca y reemite. | Fase 6 |
 | D11 | ¿Los módulos A y B en citas presenciales separadas? | Afecta al modelo `modules` y a las citaciones. Hoy el B exige el A publicado y revisado. | Fase 3 |
-| D12 | ¿PDF generado en el servidor o en el navegador? | Recomiendo el servidor (por ejemplo `pdfkit`), en la misma respuesta de emisión y sin persistirlo. | Fase 5 |
+| D12 | ¿PDF generado en el servidor o en el navegador? | ✅ Implementado en el servidor con `pdfkit`: las tarjetas viajan en la misma respuesta de emisión (`no-store`) y no se guardan; la lista de asistencia (sin códigos) se descarga aparte. | Fase 5 |
 
 ## 11. Pruebas previstas por fase
 

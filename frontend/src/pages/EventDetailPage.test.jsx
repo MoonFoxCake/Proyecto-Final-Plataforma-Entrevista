@@ -12,6 +12,7 @@ vi.mock('../services/eventService.js', () => ({
   createEventCandidate: vi.fn(),
 }));
 vi.mock('../components/company/CompanySidebar.jsx', () => ({ CompanySidebar: () => <nav /> }));
+vi.mock('../services/credentialService.js', () => ({ getCredentials: vi.fn(async () => ({ modules: [] })) }));
 
 const ONSITE_EVENT = {
   id: 'event-1',
