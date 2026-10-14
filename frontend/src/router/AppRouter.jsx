@@ -10,9 +10,12 @@ import { AdminProcessDetailPage } from '../pages/AdminProcessDetailPage.jsx';
 import { AdminParticipantReviewPage } from '../pages/AdminParticipantReviewPage.jsx';
 import { CandidateDashboardPage } from '../pages/CandidateDashboardPage.jsx';
 import { CompanyDashboardPage } from '../pages/CompanyDashboardPage.jsx';
-import { EventDetailPage } from '../pages/EventDetailPage.jsx';
+import { EventLayout } from '../pages/event/EventLayout.jsx';
+import { EventSummaryTab } from '../pages/event/EventSummaryTab.jsx';
+import { EventCandidatesTab } from '../pages/event/EventCandidatesTab.jsx';
+import { EventOnsiteTab } from '../pages/event/EventOnsiteTab.jsx';
+import { EventResultsTab } from '../pages/event/EventResultsTab.jsx';
 import { NewEventPage } from '../pages/NewEventPage.jsx';
-import { OnsiteApplicationPage } from '../pages/OnsiteApplicationPage.jsx';
 import { OnsiteAccessPage } from '../pages/OnsiteAccessPage.jsx';
 import { EvaluationAccessPage } from '../pages/EvaluationAccessPage.jsx';
 import { AdminMacrocasePreviewPage } from '../pages/AdminMacrocasePreviewPage.jsx';
@@ -65,8 +68,14 @@ export function AppRouter() {
 
           <Route element={<RequireRole allowedRoles={[ROLES.COMPANY]} />}>
             <Route path='/company/events/new' element={<NewEventPage />} />
-            <Route path='/company/events/:eventId' element={<EventDetailPage />} />
-            <Route path='/company/events/:eventId/onsite' element={<OnsiteApplicationPage />} />
+            <Route path='/company/events/:eventId' element={<EventLayout />}>
+              <Route index element={<EventSummaryTab />} />
+              <Route path='candidatos' element={<EventCandidatesTab />} />
+              <Route path='presencial' element={<EventOnsiteTab />} />
+              <Route path='resultados' element={<EventResultsTab />} />
+              {/* Former applicator page: now the "Aplicar" stage. */}
+              <Route path='onsite' element={<Navigate to='../presencial?etapa=aplicar' replace />} />
+            </Route>
             <Route path='/company/events/:eventId/candidates/:candidateId/result' element={<CandidateResultPage />} />
             <Route path="/company-dashboard" element={<CompanyDashboardPage />} />
           </Route>

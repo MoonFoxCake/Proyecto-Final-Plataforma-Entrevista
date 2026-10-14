@@ -70,7 +70,7 @@ export function CandidateResultPage() {
     return () => { active = false; };
   }, [candidateId, eventId]);
 
-  const goBack = () => navigate(`/company/events/${eventId}`);
+  const goBack = () => navigate(`/company/events/${eventId}/resultados`);
 
   return (
     <div className='min-h-screen bg-[#F7F9FC] lg:flex'>

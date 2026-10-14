@@ -1,24 +1,5 @@
-import { Link } from 'react-router-dom';
-import { citationState, formatSession } from '../../utils/eventModality.js';
-
-const TONES = {
-  muted: ['bg-[#F1F5F9] text-[#475569]', 'bg-[#94A3B8]'],
-  info: ['bg-[#EEF6FF] text-[#315B88]', 'bg-[#4F8CC9]'],
-  ok: ['bg-[#E8F8F5] text-[#087D79]', 'bg-[#0AADA8]'],
-  warning: ['bg-[#FFF7E8] text-[#9A651E]', 'bg-[#D99A2B]'],
-  error: ['bg-red-50 text-red-700', 'bg-red-500'],
-};
-
-function Badge({ tone, title, children }) {
-  const [box, dot] = TONES[tone];
-  return <span title={title} className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium ${box}`}><span className={`h-1.5 w-1.5 rounded-full ${dot}`} /> {children}</span>;
-}
-
-/** Onsite: whether the citation e-mail went out and its last known delivery status. */
-function CitationStatus({ citation }) {
-  const { label, tone, detail } = citationState(citation);
-  return <Badge tone={tone} title={detail}>{label}</Badge>;
-}
+import { StatusBadge } from '../ui';
+import { citationState } from '../../utils/eventModality.js';
 
 function initials(name = '') {
   return name.split(' ').filter(Boolean).map((part) => part[0]).join('').toUpperCase().slice(0, 2) || 'CA';
@@ -32,112 +13,62 @@ function formatAppointment(value) {
   return new Intl.DateTimeFormat('es-GT', { dateStyle: 'medium', timeStyle: 'short' }).format(date);
 }
 
-/** Module B can go to candidates with a published Module A profile who have not answered it yet. */
-export function canReceiveModuleB(candidate) {
-  return Boolean(candidate.profileAvailable) && candidate.moduleB?.status !== 'COMPLETED';
+/** General status of the candidate's evaluation (onsite: the citation has its own column). */
+export function EvaluationStatus({ status, profileAvailable, onsite }) {
+  if (profileAvailable) return <StatusBadge tone='ok'>Perfil disponible</StatusBadge>;
+  if (status === 'EVALUATION_COMPLETED') return <StatusBadge tone='warning'>En revisión</StatusBadge>;
+  if (onsite) return <StatusBadge tone='muted'>Por evaluar</StatusBadge>;
+  if (status === 'INVITATION_SENT') return <StatusBadge tone='info'>Invitación enviada</StatusBadge>;
+  return <StatusBadge tone='muted'>Pendiente de envío</StatusBadge>;
 }
 
-function CandidateStatus({ status, profileAvailable, onsite }) {
-  // Onsite: this column is only about the evaluation; the citation has its own.
-  if (onsite && !profileAvailable && status !== 'EVALUATION_COMPLETED') {
-    return <Badge tone='muted'>Por evaluar</Badge>;
-  }
-  if (profileAvailable) {
-    return <span className='inline-flex items-center gap-1.5 rounded-md bg-[#E8F8F5] px-2.5 py-1 text-xs font-medium text-[#087D79]'><span className='h-1.5 w-1.5 rounded-full bg-[#0AADA8]' /> Perfil disponible</span>;
-  }
-  if (status === 'EVALUATION_COMPLETED') {
-    return <span className='inline-flex items-center gap-1.5 rounded-md bg-[#FFF7E8] px-2.5 py-1 text-xs font-medium text-[#9A651E]'><span className='h-1.5 w-1.5 rounded-full bg-[#D99A2B]' /> En revisión</span>;
-  }
-  if (status === 'INVITATION_SENT') {
-    return <span className='inline-flex items-center gap-1.5 rounded-md bg-[#EEF6FF] px-2.5 py-1 text-xs font-medium text-[#315B88]'><span className='h-1.5 w-1.5 rounded-full bg-[#4F8CC9]' /> Invitación enviada</span>;
-  }
-  return <span className='inline-flex items-center gap-1.5 rounded-md bg-[#F1F5F9] px-2.5 py-1 text-xs font-medium text-[#475569]'><span className='h-1.5 w-1.5 rounded-full bg-[#94A3B8]' /> Pendiente de envío</span>;
-}
-
-function ModuleBStatus({ moduleB }) {
-  if (moduleB?.status === 'COMPLETED') {
-    return <span className='inline-flex items-center gap-1.5 rounded-md bg-[#E8F8F5] px-2.5 py-1 text-xs font-medium text-[#087D79]'><span className='h-1.5 w-1.5 rounded-full bg-[#0AADA8]' /> Respondido</span>;
-  }
-  if (moduleB?.status === 'CITED') {
-    const { label, tone, detail } = citationState(moduleB.citation);
-    const session = moduleB.citation?.appointment;
-    return (
-      <span className='flex flex-col items-start gap-1'>
-        <Badge tone={tone === 'error' ? 'error' : 'info'} title={detail}>Citado · {label.toLowerCase()}</Badge>
-        {session && <span className='text-[11px] text-[#64748B]'>{formatSession(session)}</span>}
-      </span>
-    );
-  }
-  if (moduleB?.status === 'INVITATION_SENT') {
-    return <span className='inline-flex items-center gap-1.5 rounded-md bg-[#EEF6FF] px-2.5 py-1 text-xs font-medium text-[#315B88]'><span className='h-1.5 w-1.5 rounded-full bg-[#4F8CC9]' /> Enviado</span>;
-  }
-  return <span className='text-xs text-[#A0AEC0]'>No enviado</span>;
+/** Onsite: whether the citation e-mail went out and its last known delivery status. */
+function CitationStatus({ citation }) {
+  const { label, tone, detail } = citationState(citation);
+  return <StatusBadge tone={tone} title={detail}>{label}</StatusBadge>;
 }
 
 /**
- * Candidates of an event. With `showModuleB` it adds the Module B column;
- * with `selection` ({ selectedIds: Set, onToggle(id) }) the candidates who
- * can receive Module B get a checkbox. With `onsite` it adds the citation
- * column, kept apart from the evaluation status.
+ * Candidates of an event: identity, citation (onsite), appointment and
+ * general evaluation status. `citationAction` is rendered next to the
+ * citation column title (e.g. refresh the delivery status).
  */
-export function CandidateList({ candidates, loading, showModuleB = false, selection = null, onsite = false }) {
-  if (loading) {
-    return <div className='flex min-h-52 items-center justify-center text-sm text-[#64748B]'>Cargando candidatos...</div>;
-  }
-  if (candidates.length === 0) {
-    return (
-      <div className='m-5 flex min-h-44 items-center justify-center rounded-xl border border-dashed border-[#CBD5E1] text-center'>
-        <div><p className='font-semibold text-[#334155]'>Aún no hay candidatos</p><p className='mt-1 text-sm text-[#94A3B8]'>Agrega el primero para comenzar.</p></div>
-      </div>
-    );
-  }
+export function CandidateList({ candidates, onsite = false, citationAction = null }) {
   return (
-    <div className='overflow-x-auto'>
-      <table className='w-full min-w-[860px] text-left'>
-        <thead className='border-y border-[#E8EDF2] bg-[#FAFBFC] text-[11px] font-semibold uppercase tracking-wide text-[#718096]'>
-          <tr>
-            {selection && <th className='w-12 px-5 py-3'><span className='sr-only'>Seleccionar</span></th>}
-            <th className='px-5 py-3'>Candidato</th><th className='px-5 py-3'>Cédula</th>
-            {onsite && <th className='px-5 py-3'>Citación</th>}
-            <th className='px-5 py-3'>{showModuleB ? 'Módulo A' : onsite ? 'Evaluación' : 'Estado'}</th>
-            {showModuleB && <th className='px-5 py-3'>Módulo B</th>}
-            <th className='px-5 py-3'>Cita</th><th className='px-5 py-3 text-right'>Acciones</th>
+    <table className='w-full text-left'>
+      <thead className='border-y border-[#E8EDF2] bg-[#FAFBFC] text-[11px] font-semibold uppercase tracking-wide text-[#718096]'>
+        <tr>
+          <th scope='col' className='px-5 py-3'>Candidato</th>
+          <th scope='col' className='hidden px-5 py-3 xl:table-cell'>Cédula</th>
+          {onsite && (
+            <th scope='col' className='px-5 py-3'>
+              <span className='inline-flex items-center gap-2'>Citación {citationAction}</span>
+            </th>
+          )}
+          <th scope='col' className='px-5 py-3'>{onsite ? 'Evaluación' : 'Estado'}</th>
+          <th scope='col' className='hidden px-5 py-3 xl:table-cell'>Cita</th>
+        </tr>
+      </thead>
+      <tbody className='divide-y divide-[#E8EDF2]'>
+        {candidates.map((candidate) => (
+          <tr key={candidate.id} className='bg-white'>
+            <td className='max-w-[18rem] px-5 py-4'>
+              <div className='flex items-center gap-3'>
+                <span aria-hidden='true' className='hidden h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#E7F7F6] text-xs font-bold text-[#087D79] sm:flex'>{initials(candidate.nombreCompleto)}</span>
+                <div className='min-w-0'>
+                  <p className='text-sm font-semibold text-[#101828]'>{candidate.nombreCompleto}</p>
+                  <p className='truncate text-xs text-[#64748B]' title={candidate.correo}>{candidate.correo}</p>
+                  <p className='text-xs text-[#64748B] xl:hidden'>Cédula {candidate.cedula} · {formatAppointment(candidate.fechaHoraCita)}</p>
+                </div>
+              </div>
+            </td>
+            <td className='hidden px-5 py-4 text-sm text-[#475569] xl:table-cell'>{candidate.cedula}</td>
+            {onsite && <td className='px-5 py-4'><CitationStatus citation={candidate.citation} /></td>}
+            <td className='px-5 py-4'><EvaluationStatus status={candidate.status} profileAvailable={candidate.profileAvailable} onsite={onsite} /></td>
+            <td className='hidden whitespace-nowrap px-5 py-4 text-sm text-[#475569] xl:table-cell'>{formatAppointment(candidate.fechaHoraCita)}</td>
           </tr>
-        </thead>
-        <tbody className='divide-y divide-[#E8EDF2]'>
-          {candidates.map((candidate) => (
-            <tr key={candidate.id} className={selection?.selectedIds.has(candidate.id) ? 'bg-[#F4FBFB]' : 'bg-white'}>
-              {selection && (
-                <td className='px-5 py-4'>
-                  {canReceiveModuleB(candidate) && (
-                    <input
-                      type='checkbox'
-                      checked={selection.selectedIds.has(candidate.id)}
-                      onChange={() => selection.onToggle(candidate.id)}
-                      aria-label={`Seleccionar a ${candidate.nombreCompleto} para el Módulo B`}
-                      className='h-4 w-4 cursor-pointer accent-[#0AADA8]'
-                    />
-                  )}
-                </td>
-              )}
-              <td className='px-5 py-4'><div className='flex items-center gap-3'>
-                <span className='flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#E7F7F6] text-xs font-bold text-[#087D79]'>{initials(candidate.nombreCompleto)}</span>
-                <div className='min-w-0'><p className='truncate text-sm font-semibold text-[#101828]'>{candidate.nombreCompleto}</p><p className='truncate text-xs text-[#64748B]'>{candidate.correo}</p></div>
-              </div></td>
-              <td className='px-5 py-4 text-sm text-[#475569]'>{candidate.cedula}</td>
-              {onsite && <td className='px-5 py-4'><CitationStatus citation={candidate.citation} /></td>}
-              <td className='px-5 py-4'><CandidateStatus status={candidate.status} profileAvailable={candidate.profileAvailable} onsite={onsite} /></td>
-              {showModuleB && <td className='px-5 py-4'><ModuleBStatus moduleB={candidate.moduleB} /></td>}
-              <td className='px-5 py-4 text-sm text-[#475569]'>{formatAppointment(candidate.fechaHoraCita)}</td>
-              <td className='px-5 py-4 text-right'>
-                {candidate.profileAvailable ? (
-                  <Link to={`/company/events/${candidate.eventId}/candidates/${candidate.id}/result`} className='inline-flex rounded-lg border border-[#D9E2EA] px-3.5 py-2 text-xs font-semibold text-[#334E68] transition hover:border-[#13A9A4] hover:text-[#087D79]'>Ver perfil</Link>
-                ) : <span className='text-xs text-[#A0AEC0]'>No disponible</span>}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+        ))}
+      </tbody>
+    </table>
   );
 }
