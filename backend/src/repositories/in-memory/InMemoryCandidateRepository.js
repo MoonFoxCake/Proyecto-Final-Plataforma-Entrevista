@@ -7,6 +7,10 @@ class InMemoryCandidateRepository extends ICandidateRepository {
     this.data = [];
   }
 
+  async findAll() {
+    return [...this.data];
+  }
+
   async findById(id) {
     return this.data.find((item) => item.id === id) || null;
   }

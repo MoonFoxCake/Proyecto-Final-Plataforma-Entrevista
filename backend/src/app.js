@@ -36,6 +36,29 @@ function createApp(container = createContainer('firestore')) {
 
   app.get('/health', (req, res) => res.json({ status: 'ok' }));
 
+  // Public aggregate metrics for the landing page; no personal data is exposed.
+  app.get('/api/v1/public/stats', async (req, res, next) => {
+    try {
+      const [organizations, candidates] = await Promise.all([
+        container.repos.organizationRepo.findAll(),
+        container.repos.candidateRepo.findAll(),
+      ]);
+      const evaluatedCandidateIds = new Set(
+        candidates
+          .filter((candidate) => candidate.submittedAt || candidate.status === 'EVALUATION_COMPLETED')
+          .map((candidate) => candidate.id)
+      );
+      res.json({
+        data: {
+          organizations: organizations.length,
+          evaluatedCandidates: evaluatedCandidateIds.size,
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
   // Public: account creation happens before the caller has a token to
   // verify, so this can't sit behind verifyToken like everything else.
   const authController = new AuthController(container.authService);

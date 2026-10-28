@@ -40,7 +40,7 @@ export function AppRouter() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<RootRedirect />} />
+        <Route path="/" element={<LandingPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/planes" element={<PlanSelectionPage />} />
         <Route path="/register" element={<RegisterPage />} />

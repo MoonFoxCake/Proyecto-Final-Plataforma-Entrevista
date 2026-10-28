@@ -248,12 +248,19 @@ class AuthService {
     throw new NotFoundError('No se encontró la organización de esta cuenta.');
   }
 
+  const previousSubscription = organization.subscription || {};
+  const now = new Date();
+  const planHistory = [...(previousSubscription.planHistory || [])];
+  if (previousSubscription.planId && previousSubscription.planId !== planId) {
+    planHistory.push({ fromPlan: previousSubscription.planId, toPlan: planId, changedAt: now });
+  }
   const subscription = {
-    ...(organization.subscription || {}),
+    ...previousSubscription,
     planId,
+    planHistory,
     status: 'active',
     paymentMode: 'simulation',
-    updatedAt: new Date(),
+    updatedAt: now,
   };
 
   await this.organizationRepo.update(orgId, { subscription });

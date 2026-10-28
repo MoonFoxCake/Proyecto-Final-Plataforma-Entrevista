@@ -21,6 +21,11 @@ class FirestoreCandidateRepository extends ICandidateRepository {
     this.collection = db.collection('candidates');
   }
 
+  async findAll() {
+    const snapshot = await this.collection.get();
+    return snapshot.docs.map(serializeCandidate);
+  }
+
   async findById(id) {
     const doc = await this.collection.doc(id).get();
     return doc.exists ? serializeCandidate(doc) : null;
