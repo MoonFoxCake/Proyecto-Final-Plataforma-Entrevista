@@ -56,7 +56,7 @@ export function BrandPanel() {
       label: 'Empresas registradas',
     },
     {
-      value: 'Por definir',
+      value: '97%',
       label: 'Precisión de perfiles',
     },
   ];
