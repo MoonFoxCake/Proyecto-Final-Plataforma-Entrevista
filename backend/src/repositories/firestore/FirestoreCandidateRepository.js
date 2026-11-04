@@ -29,6 +29,8 @@ function serializeCandidate(doc) {
   const data = doc.data();
   const moduleB = data.moduleB && withDates(data.moduleB, ['invitedAt', 'submittedAt']);
   if (moduleB?.citation) moduleB.citation = serializeCitation(moduleB.citation);
+  const moduleC = data.moduleC && withDates(data.moduleC, ['invitedAt', 'submittedAt']);
+  if (moduleC?.citation) moduleC.citation = serializeCitation(moduleC.citation);
   // Onsite attendance per module: { A: { status, markedAt, markedBy }, B: … }
   const attendance = data.attendance && Object.fromEntries(
     Object.entries(data.attendance).map(([module, record]) => [module, withDates(record, ['markedAt'])])
@@ -38,6 +40,7 @@ function serializeCandidate(doc) {
     ...data,
     ...(data.citation ? { citation: serializeCitation(data.citation) } : {}),
     ...(moduleB ? { moduleB } : {}),
+    ...(moduleC ? { moduleC } : {}),
     ...(attendance ? { attendance } : {}),
     fechaHoraCita: data.fechaHoraCita?.toDate?.() ?? data.fechaHoraCita,
     createdAt: data.createdAt?.toDate?.() ?? data.createdAt,

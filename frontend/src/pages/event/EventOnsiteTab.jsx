@@ -21,7 +21,7 @@ const errorMessage = (error, fallback) => error.response?.data?.error?.message |
 export function EventOnsiteTab() {
   const { eventId, event, candidates, notify, state } = useOutletContext();
   const [searchParams, setSearchParams] = useSearchParams();
-  const modules = state.hasModuleB ? ['A', 'B'] : ['A'];
+  const modules = ['A', ...(state.hasModuleB ? ['B'] : []), ...(event?.modules?.includes('C') ? ['C'] : [])];
   const module = modules.includes(searchParams.get('modulo')) ? searchParams.get('modulo') : 'A';
   const stage = STAGES.some(([id]) => id === searchParams.get('etapa')) ? searchParams.get('etapa') : 'preparar';
   const [summary, setSummary] = useState(null);
@@ -79,7 +79,7 @@ export function EventOnsiteTab() {
                   onClick={() => go({ modulo: item })}
                   className={`whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-semibold focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0AADA8]/40 ${module === item ? 'bg-[#10233A] text-white' : 'text-[#475569] hover:bg-[#F6F9FC]'}`}
                 >
-                  {item === 'A' ? 'A · Cuestionario' : 'B · Macrocaso'}
+                  {item === 'A' ? 'A · Cuestionario' : item === 'B' ? 'B · Macrocaso' : 'C · Microcaso'}
                 </button>
               ))}
             </div>

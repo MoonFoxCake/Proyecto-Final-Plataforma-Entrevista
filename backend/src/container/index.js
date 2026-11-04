@@ -5,6 +5,7 @@ const FirestoreEventRepository = require('../repositories/firestore/FirestoreEve
 const FirestoreCandidateRepository = require('../repositories/firestore/FirestoreCandidateRepository');
 const FirestoreInvitationRepository = require('../repositories/firestore/FirestoreInvitationRepository');
 const FirestoreMacrocaseRepository = require('../repositories/firestore/FirestoreMacrocaseRepository');
+const FirestoreMicrocaseRepository = require('../repositories/firestore/FirestoreMicrocaseRepository');
 const FirestoreAccessCredentialRepository = require('../repositories/firestore/FirestoreAccessCredentialRepository');
 const FirestoreAuditLogRepository = require('../repositories/firestore/FirestoreAuditLogRepository');
 
@@ -15,6 +16,7 @@ const InMemoryEventRepository = require('../repositories/in-memory/InMemoryEvent
 const InMemoryCandidateRepository = require('../repositories/in-memory/InMemoryCandidateRepository');
 const InMemoryInvitationRepository = require('../repositories/in-memory/InMemoryInvitationRepository');
 const InMemoryMacrocaseRepository = require('../repositories/in-memory/InMemoryMacrocaseRepository');
+const InMemoryMicrocaseRepository = require('../repositories/in-memory/InMemoryMicrocaseRepository');
 const InMemoryAccessCredentialRepository = require('../repositories/in-memory/InMemoryAccessCredentialRepository');
 const InMemoryAuditLogRepository = require('../repositories/in-memory/InMemoryAuditLogRepository');
 
@@ -25,8 +27,10 @@ const EventService = require('../services/EventService');
 const CandidateService = require('../services/CandidateService');
 const InvitationService = require('../services/InvitationService');
 const ReviewService = require('../services/ReviewService');
+const ResultDeliveryService = require('../services/ResultDeliveryService');
 const ResendEmailService = require('../services/ResendEmailService');
 const MacrocaseService = require('../services/MacrocaseService');
+const MicrocaseService = require('../services/MicrocaseService');
 const AzureSpeechService = require('../services/AzureSpeechService');
 const AccessCredentialService = require('../services/AccessCredentialService');
 const { PrintableService } = require('../services/PrintableService');
@@ -65,6 +69,7 @@ function buildRepositories(type) {
       candidateRepo: new InMemoryCandidateRepository(),
       invitationRepo: new InMemoryInvitationRepository(),
       macrocaseRepo: new InMemoryMacrocaseRepository(),
+      microcaseRepo: new InMemoryMicrocaseRepository(),
       accessCredentialRepo: new InMemoryAccessCredentialRepository(),
       auditLogRepo: new InMemoryAuditLogRepository(),
     };
@@ -77,6 +82,7 @@ function buildRepositories(type) {
     candidateRepo: new FirestoreCandidateRepository(),
     invitationRepo: new FirestoreInvitationRepository(),
     macrocaseRepo: new FirestoreMacrocaseRepository(),
+    microcaseRepo: new FirestoreMicrocaseRepository(),
     accessCredentialRepo: new FirestoreAccessCredentialRepository(),
     auditLogRepo: new FirestoreAuditLogRepository(),
   };
@@ -98,12 +104,13 @@ function buildRepositories(type) {
  */
 function createContainer(type = 'firestore') {
   const repos = buildRepositories(type);
-  const eventService = new EventService(repos.eventRepo);
+  const eventService = new EventService(repos.eventRepo, repos.organizationRepo);
   const candidateService = new CandidateService(repos.candidateRepo, eventService);
   const emailService = new ResendEmailService({
     apiKey: process.env.RESEND_API_KEY,
     from: process.env.RESEND_FROM,
   });
+  const microcaseService = new MicrocaseService(repos.microcaseRepo);
   const macrocaseService = new MacrocaseService(repos.macrocaseRepo, {
     speechService: new AzureSpeechService({
       key: process.env.AZURE_SPEECH_KEY,
@@ -122,6 +129,7 @@ function createContainer(type = 'firestore') {
     emailService,
     frontendUrl: process.env.FRONTEND_URL || process.env.CORS_ORIGIN,
     macrocaseService,
+    microcaseService,
   });
   const reviewService = new ReviewService({
     eventRepo: repos.eventRepo,
@@ -169,8 +177,11 @@ function createContainer(type = 'firestore') {
     candidateService,
     invitationService,
     reviewService,
+    resultDeliveryService: new ResultDeliveryService({ eventRepo: repos.eventRepo, candidateRepo: repos.candidateRepo, organizationRepo: repos.organizationRepo, emailService, frontendUrl: process.env.FRONTEND_URL || process.env.CORS_ORIGIN }),
     macrocaseService,
+    microcaseService,
   };
 }
 
 module.exports = { createContainer };
+

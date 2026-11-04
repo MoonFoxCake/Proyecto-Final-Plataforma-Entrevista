@@ -2,8 +2,10 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { NewEventPage } from './NewEventPage.jsx';
 import { createEvent } from '../services/eventService.js';
+import { getSubscription } from '../services/subscriptionService.js';
 
 vi.mock('../services/eventService.js', () => ({ createEvent: vi.fn() }));
+vi.mock('../services/subscriptionService.js', () => ({ getSubscription: vi.fn() }));
 vi.mock('../components/company/CompanySidebar.jsx', () => ({ CompanySidebar: () => <nav /> }));
 
 const fill = (label, value) => fireEvent.change(screen.getByLabelText(label), { target: { value } });
@@ -17,6 +19,7 @@ function renderPage() {
 beforeEach(() => {
   createEvent.mockReset();
   createEvent.mockResolvedValue({ id: 'event-1' });
+  getSubscription.mockResolvedValue({ subscription: { planId: 'fase-a-b' } });
 });
 
 test('creates an onsite event with venue, session and only Module A', async () => {

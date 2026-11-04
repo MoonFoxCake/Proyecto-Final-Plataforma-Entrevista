@@ -32,6 +32,7 @@ const eventBase = {
   // Module A always applies; Module B is optional (it still requires
   // Module A to be reviewed and published first).
   incluirModuloB: z.boolean().optional().default(true),
+  incluirModuloC: z.boolean().optional().default(false),
 };
 
 // `virtual`: candidates get a personal link by e-mail (the original flow,
@@ -59,16 +60,16 @@ const accessToken = z.string().regex(/^[A-Za-z0-9_-]{43}$/);
 const submissionSchema = z.object({
   token: accessToken,
   answers: z.array(z.object({
-    questionId: z.enum(DEMO_QUESTION_IDS),
+    questionId: z.string().trim().min(1).max(120),
     value: z.number().int().min(1).max(5),
-  }).strict()).length(DEMO_QUESTION_IDS.length).optional(),
+  }).strict()).min(0).max(20).optional(),
   finalize: z.literal(true).optional(),
 }).strict().superRefine((data, context) => {
   if (Boolean(data.answers) === Boolean(data.finalize)) {
     context.addIssue({ code: z.ZodIssueCode.custom, path: ['answers'], message: 'Envía las respuestas de una sola evaluación.' });
     return;
   }
-  if (data.answers && new Set(data.answers.map((answer) => answer.questionId)).size !== DEMO_QUESTION_IDS.length) {
+  if (data.answers && new Set(data.answers.map((answer) => answer.questionId)).size !== data.answers.length) {
     context.addIssue({ code: z.ZodIssueCode.custom, path: ['answers'], message: 'Cada pregunta debe responderse una sola vez.' });
   }
 });

@@ -1,6 +1,6 @@
 const crypto = require('crypto');
 const {
-  ACCESS_CHANNELS, AUDIT_ACTIONS, CANDIDATE_STATUSES, CREDENTIAL_STATUSES, INVITATION_STATUSES, MODULE_B_STATUSES, MODULES,
+  ACCESS_CHANNELS, AUDIT_ACTIONS, CANDIDATE_STATUSES, CREDENTIAL_STATUSES, INVITATION_STATUSES, MODULE_B_STATUSES, MODULE_C_STATUSES, MODULES,
 } = require('../utils/constants');
 const { ExternalServiceError, ValidationError } = require('../utils/errors');
 const { isOnsite } = require('../utils/eventModality');
@@ -98,7 +98,7 @@ class OnsiteAccessService {
     }
     if (!credential.recovery) {
       // The current appointment, so a rescheduled session moves its window too.
-      const appointment = credential.module === MODULES.A ? event.onsite : candidate.moduleB?.citation?.appointment;
+      const appointment = credential.module === MODULES.A ? event.onsite : credential.module === MODULES.B ? candidate.moduleB?.citation?.appointment : candidate.moduleC?.citation?.appointment;
       if (!appointment?.startsAt) return { state: 'INVALID' };
       const windowState = entryWindowState(appointment, now);
       if (windowState !== 'OPEN') return { state: STATE_BY_WINDOW[windowState] };
@@ -134,14 +134,14 @@ class OnsiteAccessService {
       return {};
     }
     const valid = candidate && candidate.eventId === event.id && candidate.orgId === credential.orgId && isOnsite(event)
-      && (credential.module !== MODULES.B || event.moduleB?.macrocase);
+      && (credential.module !== MODULES.B || event.moduleB?.macrocase) && (credential.module !== MODULES.C || event.moduleC?.microcase);
     return valid ? { candidate, event } : {};
   }
 
   completed(candidate, module) {
     return module === MODULES.A
       ? candidate.status === CANDIDATE_STATUSES.EVALUATION_COMPLETED || Boolean(candidate.submittedAt)
-      : candidate.moduleB?.status === MODULE_B_STATUSES.COMPLETED;
+      : module === MODULES.B ? candidate.moduleB?.status === MODULE_B_STATUSES.COMPLETED : candidate.moduleC?.status === MODULE_C_STATUSES.COMPLETED;
   }
 
   /**

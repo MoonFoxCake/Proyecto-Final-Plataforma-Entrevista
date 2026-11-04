@@ -1,5 +1,5 @@
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useOutletContext } from 'react-router-dom';
 
 import { EvaluationStatus } from '../../components/company/CandidateList.jsx';
@@ -13,6 +13,7 @@ import {
 import { Button, Dialog, StatusBadge } from '../../components/ui';
 
 import * as eventService from '../../services/eventService.js';
+import * as microcaseApi from '../../services/microcaseApi.js';
 
 import {
   citationState,
@@ -79,6 +80,7 @@ export function EventResultsTab() {
     notify,
     state,
     hasModuleB,
+    hasModuleC,
     currentPlan,
     subscriptionLoading,
     subscriptionError,
@@ -100,12 +102,22 @@ export function EventResultsTab() {
   }));
 
   const [sessionError, setSessionError] = useState('');
+  const [microcases, setMicrocases] = useState([]);
+  const [microcaseId, setMicrocaseId] = useState('');
+  const [sectionIds, setSectionIds] = useState([]);
+  const [selectedC, setSelectedC] = useState(() => new Set());
+  const [sendingC, setSendingC] = useState(false);
+  const [downloading, setDownloading] = useState('');
 
   const eligible = candidates.filter(canReceiveModuleB);
+  const eligibleC = candidates.filter((candidate) => candidate.moduleB?.status === 'COMPLETED' && candidate.moduleC?.status !== 'COMPLETED');
+  // Active templates are exposed through a company-only read endpoint.
+  useEffect(() => { microcaseApi.listAvailableMicrocases().then((items) => setMicrocases(items?.data || items || [])).catch(() => {}); }, []);
 
   // Mientras se carga la suscripción, o si no se pudo verificar,
   // no se permite realizar operaciones del Módulo B.
   const moduleBAvailable = canAccessModuleB && !subscriptionLoading;
+  const moduleCAvailable = hasModuleC && !subscriptionLoading;
 
   if (!state.published) {
     return (
@@ -221,6 +233,21 @@ export function EventResultsTab() {
     }
   };
 
+  const toggleC = (id) => setSelectedC((prev) => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; });
+  const sendModuleC = async () => {
+    if (!microcaseId || !sectionIds.length || !selectedC.size) { setError('Selecciona un microcaso, al menos una habilidad y candidatos.'); return; }
+    if (state.onsite && sessionProblem(session)) { setError(sessionProblem(session)); return; }
+    if (!window.confirm(`${state.onsite ? 'Se enviará la citación presencial' : 'Se enviará el enlace'} de Fase C a ${selectedC.size} participante(s). ¿Deseas continuar?`)) return;
+    setSendingC(true); setError('');
+    try {
+      await eventService.configureModuleC(eventId, microcaseId, sectionIds);
+      const result = await eventService.sendModuleCInvitations(eventId, [...selectedC], sectionIds, state.onsite ? toCitationPayload(session) : null);
+      await reload(); setSelectedC(new Set());
+      notify(`Fase C procesada: ${result.sent || 0} de ${result.total || 0} participantes.`);
+    } catch (e) { setError(errorMessage(e, 'No se pudo configurar o enviar la Fase C.')); }
+    finally { setSendingC(false); }
+  };
+
   const confirmCitation = () => {
     const problem = sessionProblem(session);
 
@@ -234,6 +261,13 @@ export function EventResultsTab() {
 
   return (
     <section aria-labelledby="results-title" className="space-y-5">
+
+      {event?.moduleResults && Object.entries(event.moduleResults).filter(([, result]) => result?.deliveredAt && result?.status === 'DELIVERED').length > 0 && (
+        <section className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
+          <h3 className="font-semibold text-emerald-900">Resultados recibidos</h3>
+          <div className="mt-3 flex flex-wrap gap-3">{Object.entries(event.moduleResults).filter(([, result]) => result?.deliveredAt && result?.status === 'DELIVERED').map(([module]) => <button key={module} type="button" disabled={Boolean(downloading)} onClick={async () => { setDownloading(module); try { const result = await eventService.getResultDownloadUrl(eventId, module); window.location.assign(result.url); } catch (e) { setError(errorMessage(e, 'No se pudo descargar el resultado.')); } finally { setDownloading(''); } }} className="rounded-lg border border-emerald-200 bg-white px-4 py-2 text-sm font-semibold text-emerald-800 hover:bg-emerald-100 disabled:opacity-50">{downloading === module ? 'Preparando…' : `Descargar resultado · Fase ${module} ↗`}</button>)}</div>
+        </section>
+      )}
 
       {/* Encabezado y acciones */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
@@ -453,6 +487,17 @@ export function EventResultsTab() {
           </tbody>
         </table>
       </div>
+
+      <section className="mt-8 rounded-2xl border border-[#DDE5EC] bg-white p-5 sm:p-6">
+        <div><h3 className="font-display text-lg font-bold text-[#10233A]">Fase C · Microcaso</h3><p className="mt-1 text-sm text-[#64748B]">Selecciona una plantilla activa, las habilidades que deseas evaluar y los participantes que completaron la Fase B. Cada persona recibirá una pregunta aleatoria por habilidad.</p></div>
+        {!moduleCAvailable && !subscriptionLoading && <p className="mt-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">Tu suscripción actual no incluye el Módulo C. Se requiere el Plan completo.</p>}
+        {subscriptionLoading && <p className="mt-4 text-sm text-slate-500">Verificando suscripción…</p>}
+        {!event?.moduleResults?.B?.deliveredAt && <p className="mt-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">La Fase C se habilitará cuando administración entregue el PDF de resultados de la Fase B.</p>}
+        <div className="mt-4 grid gap-4 md:grid-cols-2"><label className="text-sm font-medium text-[#334E68]">Microcaso activo<select value={microcaseId} onChange={(e) => { setMicrocaseId(e.target.value); setSectionIds([]); }} className="mt-2 w-full rounded-lg border border-[#DDE5EC] bg-white p-3"><option value="">Seleccionar microcaso…</option>{microcases.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><div className="text-sm text-[#334E68]"><p className="font-medium">Habilidades a evaluar</p>{(microcases.find((item) => item.id === microcaseId)?.sections || []).map((section) => <label key={section.id} className="mt-2 flex items-center gap-2"><input type="checkbox" checked={sectionIds.includes(section.id)} onChange={(e) => setSectionIds((old) => e.target.checked ? [...old, section.id] : old.filter((id) => id !== section.id))}/>{section.title} <span className="text-xs text-slate-400">({section.questionCount} preguntas)</span></label>)}</div></div>
+        <div className="mt-5"><p className="text-sm font-semibold text-[#334E68]">Participantes elegibles ({eligibleC.length})</p><div className="mt-2 grid gap-2 sm:grid-cols-2">{eligibleC.map((candidate) => <label key={candidate.id} className="flex items-center gap-2 rounded-lg border border-[#E5EAF0] p-2 text-sm"><input type="checkbox" checked={selectedC.has(candidate.id)} onChange={() => toggleC(candidate.id)}/>{candidate.nombreCompleto}</label>)}{eligibleC.length === 0 && <p className="text-sm text-slate-500">No hay participantes que hayan completado la Fase B.</p>}</div></div>
+        {state.onsite && <div className="mt-5"><p className="mb-2 text-sm font-semibold text-[#334E68]">Sesión presencial de la Fase C</p><SessionFields value={session} onChange={setSession} idPrefix="modulo-c"/></div>}
+        <div className="mt-5 flex flex-wrap items-center justify-between gap-3"><p className="text-xs text-[#64748B]">El microcaso y las habilidades quedan congelados en este proceso.</p><Button type="button" variant="accent" disabled={sendingC || !eligibleC.length || !moduleCAvailable || !event?.moduleResults?.B?.deliveredAt} onClick={sendModuleC}>{sendingC ? 'Procesando…' : state.onsite ? `Citar a Fase C (${selectedC.size})` : `Enviar Fase C (${selectedC.size})`}</Button></div>
+      </section>
 
       {/* Diálogo para citaciones presenciales */}
       {citing && (

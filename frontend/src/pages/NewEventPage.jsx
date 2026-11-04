@@ -6,7 +6,7 @@ import { Button, FormField, Input } from '../components/ui';
 import { BriefcaseIcon, SpinnerIcon } from '../components/auth/icons.jsx';
 import * as eventService from '../services/eventService.js';
 import * as subscriptionService from '../services/subscriptionService.js';
-import { normalizePlanId, SUBSCRIPTION_PLANS } from '../utils/subscriptionPlans.js';
+import { canUseModule, normalizePlanId, SUBSCRIPTION_PLANS } from '../utils/subscriptionPlans.js';
 
 const EMPTY_FORM = {
   nombre: '',
@@ -15,6 +15,7 @@ const EMPTY_FORM = {
   fechaHoraHabilitacion: '',
   presencial: EMPTY_SESSION,
   incluirModuloB: true,
+  incluirModuloC: false,
   descripcion: '',
 };
 
@@ -38,16 +39,20 @@ export function NewEventPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
  const [subscription, setSubscription] = useState(null);
+const [subscriptionLoading, setSubscriptionLoading] = useState(true);
 
 useEffect(() => {
   subscriptionService
     .getSubscription()
-    .then(setSubscription)
-    .catch(() => setSubscription(null));
+    .then((value) => setSubscription(value))
+    .catch(() => setSubscription(null))
+    .finally(() => setSubscriptionLoading(false));
 }, []);
 
-const planId = normalizePlanId(subscription?.subscription?.planId);
+const planId = normalizePlanId(subscription?.subscription?.planId ?? subscription?.planId);
 const plan = SUBSCRIPTION_PLANS[planId] || SUBSCRIPTION_PLANS['fase-a'];
+const hasModuleB = canUseModule(planId, 'B');
+const hasModuleC = canUseModule(planId, 'C');
 
 const onsite = form.modalidad === 'presencial';
   const set = (changes) => {
@@ -78,7 +83,8 @@ const onsite = form.modalidad === 'presencial';
         nombre: form.nombre.trim(),
         puesto: form.puesto.trim(),
         descripcion: form.descripcion.trim() || undefined,
-        incluirModuloB: form.incluirModuloB,
+        incluirModuloB: hasModuleB && (form.incluirModuloB || form.incluirModuloC),
+        incluirModuloC: hasModuleC && form.incluirModuloC,
       };
       const created = await eventService.createEvent(onsite
         ? { ...base, modalidad: 'presencial', presencial: toCitationPayload(form.presencial) }
@@ -198,12 +204,13 @@ const onsite = form.modalidad === 'presencial';
                   </span>
                 </label>
 
-                <label className='flex cursor-pointer gap-3 rounded-xl border border-[#E5E7EB] p-4 hover:border-[#9ED9D5]'>
+                <label className={`flex gap-3 rounded-xl border border-[#E5E7EB] p-4 ${hasModuleB ? 'cursor-pointer hover:border-[#9ED9D5]' : 'cursor-not-allowed bg-[#FAFBFC] opacity-60'}`}>
                   <input
                     type='checkbox'
-                    checked={form.incluirModuloB}
+                    checked={hasModuleB && (form.incluirModuloB || form.incluirModuloC)}
+                    disabled={!hasModuleB || subscriptionLoading || form.incluirModuloC}
                     onChange={(event) => set({ incluirModuloB: event.target.checked })}
-                    className='mt-1 h-4 w-4 accent-[#0AADA8]'
+                    className='mt-1 h-4 w-4 accent-[#0AADA8] disabled:cursor-not-allowed disabled:opacity-50'
                   />
 
                   <span>
@@ -219,10 +226,25 @@ const onsite = form.modalidad === 'presencial';
                     </span>
                   </span>
                 </label>
+
+                <label className={`flex gap-3 rounded-xl border border-[#E5E7EB] p-4 ${hasModuleC ? 'cursor-pointer hover:border-[#9ED9D5]' : 'cursor-not-allowed bg-[#FAFBFC] opacity-60'}`}>
+                  <input
+                    type='checkbox'
+                    checked={hasModuleC && form.incluirModuloC}
+                    disabled={!hasModuleC || subscriptionLoading}
+                    onChange={(event) => set({ incluirModuloC: event.target.checked, incluirModuloB: event.target.checked ? true : form.incluirModuloB })}
+                    className='mt-1 h-4 w-4 accent-[#0AADA8] disabled:cursor-not-allowed'
+                  />
+                  <span>
+                    <span className='block text-sm font-semibold text-[#101828]'>Módulo C · Microcasos</span>
+                    <span className='mt-1 block text-xs leading-5 text-[#64748B]'>Tercera etapa para evaluar habilidades específicas mediante microcasos. Requiere que el evento incluya el Módulo B.</span>
+                    {!hasModuleC && <span className='mt-1 block text-xs font-medium text-[#94A3B8]'>Disponible únicamente con el Plan completo.</span>}
+                  </span>
+                </label>
               </div>
 
               <p className='mt-2 text-xs text-[#94A3B8]'>
-                Plan A · único plan disponible para esta demo.
+                {subscriptionLoading ? 'Consultando tu suscripción…' : `Tu plan permite: ${plan.modules.map((module) => `Módulo ${module}`).join(', ')}.`}
               </p>
             </fieldset>
 
@@ -230,7 +252,7 @@ const onsite = form.modalidad === 'presencial';
  
             <div className='flex justify-end gap-3 border-t border-[#EEF2F6] pt-5'>
               <Button type='button' variant='outline' className='h-11 px-5' onClick={() => navigate('/company-dashboard')} disabled={saving}>Cancelar</Button>
-              <Button type='submit' variant='accent' className='h-11 px-6' disabled={saving}>
+              <Button type='submit' variant='accent' className='h-11 px-6' disabled={saving || subscriptionLoading}>
                 {saving ? <><SpinnerIcon className='h-4 w-4 animate-spin' /> Creando...</> : 'Crear evento'}
               </Button>
             </div>

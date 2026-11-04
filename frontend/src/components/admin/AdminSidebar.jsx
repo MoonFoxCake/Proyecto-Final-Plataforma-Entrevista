@@ -36,6 +36,12 @@ export const ADMIN_SECTIONS = [
     '◇',
   ],
   [
+    'microcasos',
+    'Banco de Microcasos',
+    'Historias y habilidades para la Fase 3',
+    '◈',
+  ],
+  [
     'results',
     'Resultados',
     'Resultados y métricas',

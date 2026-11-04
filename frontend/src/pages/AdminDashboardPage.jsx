@@ -27,6 +27,8 @@ import {
 import * as authService from '../services/authService';
 import { AdminProcessesView } from './AdminProcessesPage.jsx';
 import { AdminMacrocasesPage } from './AdminMacrocasesPage.jsx';
+import { AdminMicrocasesPage } from './AdminMicrocasesPage.jsx';
+import { AdminResultsPage } from './AdminResultsPage.jsx';
 import * as adminReviewService from '../services/adminReviewService.js';
 
 const INITIAL_FORM = {
@@ -535,6 +537,10 @@ export function AdminDashboardPage() {
       ? 'processes'
       : initialSection === 'macrocasos'
         ? 'macrocasos'
+        : initialSection === 'microcasos'
+          ? 'microcasos'
+        : initialSection === 'results'
+          ? 'results'
         : 'companies'
   );
 
@@ -545,7 +551,7 @@ export function AdminDashboardPage() {
   const selectSection = (id) => {
     setActiveSection(id);
 
-    if (['dashboard', 'processes', 'macrocasos'].includes(id)) {
+    if (['dashboard', 'processes', 'macrocasos', 'microcasos', 'results'].includes(id)) {
       setSearchParams({ section: id });
     } else {
       setSearchParams({});
@@ -576,10 +582,18 @@ export function AdminDashboardPage() {
           <AdminMacrocasesPage />
         )}
 
+        {activeSection === 'microcasos' && (
+          <AdminMicrocasesPage />
+        )}
+
+        {activeSection === 'results' && <AdminResultsPage />}
+
         {activeSection !== 'dashboard' &&
           activeSection !== 'companies' &&
           activeSection !== 'processes' &&
-          activeSection !== 'macrocasos' && (
+          activeSection !== 'macrocasos' &&
+          activeSection !== 'microcasos' &&
+          activeSection !== 'results' && (
             <AdminPlaceholderView section={section} />
           )}
 

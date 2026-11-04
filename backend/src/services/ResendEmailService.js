@@ -31,21 +31,22 @@ class ResendEmailService {
     const company = companyName(organization);
     const eventName = eventNameOf(event);
     const isModuleB = module === 'B';
-    const label = isModuleB ? 'SEGUNDA ETAPA' : 'EVALUACIÓN DISPONIBLE';
-    const intro = isModuleB
-      ? `${esc(company)} te invita a continuar con la segunda etapa de:`
+    const isModuleC = module === 'C';
+    const label = isModuleC ? 'TERCERA ETAPA' : isModuleB ? 'SEGUNDA ETAPA' : 'EVALUACIÓN DISPONIBLE';
+    const intro = isModuleB || isModuleC
+      ? `${esc(company)} te invita a continuar con la ${isModuleC ? 'tercera' : 'segunda'} etapa de:`
       : `${esc(company)} te ha invitado a participar en:`;
-    const dateLine = isModuleB
+    const dateLine = isModuleB || isModuleC
       ? `Disponible hasta: ${esc(formatDateTime(expiresAt))}`
       : `Fecha y hora: ${esc(formatDateTime(candidate.fechaHoraCita || event.availableFrom))}`;
     const stageNote = isModuleB
       ? "<p>En esta etapa leerás un caso y responderás por escrito las preguntas que te hará un asistente virtual. Activa el sonido de tu dispositivo.</p>"
-      : '';
+      : isModuleC ? '<p>Leerás una historia y responderás preguntas de escala Likert sobre las habilidades seleccionadas.</p>' : '';
     const html = layout(label, `<h1>Hola, ${esc(candidate.nombreCompleto)}.</h1><p>${intro}</p><div style='background:#f4f8fb;border-radius:12px;padding:18px;margin:18px 0'><strong>${esc(eventName)}</strong><p>${dateLine}</p></div>${stageNote}<a href='${esc(accessUrl)}' style='display:inline-block;background:#0aada8;color:white;text-decoration:none;padding:13px 20px;border-radius:10px;font-weight:bold'>Acceder a la evaluación</a><p style='margin-top:24px;color:#718096;font-size:13px'>Este enlace es personal y temporal.</p>`);
 
     return this.send({
       to: candidate.correo,
-      subject: isModuleB ? `Segunda etapa · ${eventName}` : `Invitación a evaluación · ${eventName}`,
+      subject: isModuleC ? `Tercera etapa · ${eventName}` : isModuleB ? `Segunda etapa · ${eventName}` : `Invitación a evaluación · ${eventName}`,
       html,
     });
   }
@@ -61,6 +62,7 @@ class ResendEmailService {
     const company = companyName(organization);
     const eventName = eventNameOf(event);
     const isModuleB = module === 'B';
+    const isModuleC = module === 'C';
     const row = (label, value) => `<tr><td style='padding:6px 12px 6px 0;color:#64748b;vertical-align:top;white-space:nowrap'>${label}</td><td style='padding:6px 0;font-weight:bold'>${esc(value)}</td></tr>`;
     const details = [
       row('Evento', eventName),
@@ -74,14 +76,14 @@ class ResendEmailService {
     const instructions = appointment.instructions
       ? `<p style='margin-top:18px'><strong>Indicaciones</strong></p><p style='white-space:pre-line'>${esc(appointment.instructions)}</p>`
       : '';
-    const intro = isModuleB
-      ? `${esc(company)} te cita a la segunda etapa presencial del proceso:`
+    const intro = isModuleB || isModuleC
+      ? `${esc(company)} te cita a la ${isModuleC ? 'tercera' : 'segunda'} etapa presencial del proceso:`
       : `${esc(company)} te cita a una evaluación presencial:`;
-    const html = layout(isModuleB ? 'CITACIÓN · SEGUNDA ETAPA' : 'CITACIÓN PRESENCIAL', `<h1>Hola, ${esc(candidate.nombreCompleto)}.</h1><p>${intro}</p><div style='background:#f4f8fb;border-radius:12px;padding:18px;margin:18px 0'><table style='border-collapse:collapse;font-size:14px'>${details}</table></div>${instructions}<p style='margin-top:18px'>Llega con anticipación y lleva un documento de identidad. Solo podrás iniciar la evaluación dentro del horario de inicio indicado. Tus datos de acceso a la evaluación se te entregarán en la sede.</p><p style='margin-top:24px;color:#718096;font-size:13px'>Este correo es solo una citación: no contiene enlaces, contraseñas ni códigos de acceso.</p>`);
+    const html = layout(isModuleC ? 'CITACIÓN · TERCERA ETAPA' : isModuleB ? 'CITACIÓN · SEGUNDA ETAPA' : 'CITACIÓN PRESENCIAL', `<h1>Hola, ${esc(candidate.nombreCompleto)}.</h1><p>${intro}</p><div style='background:#f4f8fb;border-radius:12px;padding:18px;margin:18px 0'><table style='border-collapse:collapse;font-size:14px'>${details}</table></div>${instructions}<p style='margin-top:18px'>Llega con anticipación y lleva un documento de identidad. Solo podrás iniciar la evaluación dentro del horario de inicio indicado. Tus datos de acceso a la evaluación se te entregarán en la sede.</p><p style='margin-top:24px;color:#718096;font-size:13px'>Este correo es solo una citación: no contiene enlaces, contraseñas ni códigos de acceso.</p>`);
 
     return this.send({
       to: candidate.correo,
-      subject: isModuleB ? `Citación presencial · Segunda etapa · ${eventName}` : `Citación presencial · ${eventName}`,
+      subject: isModuleC ? `Citación presencial · Tercera etapa · ${eventName}` : isModuleB ? `Citación presencial · Segunda etapa · ${eventName}` : `Citación presencial · ${eventName}`,
       html,
     });
   }
@@ -92,6 +94,11 @@ class ResendEmailService {
    *
    * @returns {Promise<{ lastEvent: string | null }>}
    */
+  async sendResultNotification({ email, company, eventName, module, url }) {
+    const html = layout('RESULTADOS DISPONIBLES', `<h1>Hola, ${esc(company)}.</h1><p>Ya está disponible el resultado correspondiente a la Fase ${esc(module)} del proceso <strong>${esc(eventName)}</strong>.</p><p><a href='${esc(url)}' style='display:inline-block;background:#0aada8;color:white;text-decoration:none;padding:13px 20px;border-radius:10px;font-weight:bold'>Descargar resultado PDF</a></p>`);
+    return this.send({ to: email, subject: `Resultado de Fase ${module} · ${eventName}`, html });
+  }
+
   async getEmailStatus(emailId) {
     this.requireApiKey();
     const response = await fetch(`https://api.resend.com/emails/${encodeURIComponent(emailId)}`, {

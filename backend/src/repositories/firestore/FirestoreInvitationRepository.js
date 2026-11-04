@@ -91,7 +91,7 @@ class FirestoreInvitationRepository extends IInvitationRepository {
       // same candidate and stage was used meanwhile.
       const candidateRef = db.collection('candidates').doc(invitation.candidateId);
       const candidate = (await transaction.get(candidateRef)).data() || {};
-      const stageDone = module === 'B' ? candidate.moduleB?.status === 'COMPLETED' : candidate.status === 'EVALUATION_COMPLETED';
+      const stageDone = module === 'B' ? candidate.moduleB?.status === 'COMPLETED' : module === 'C' ? candidate.moduleC?.status === 'COMPLETED' : candidate.status === 'EVALUATION_COMPLETED';
       if (stageDone) {
         const previous = module === 'B' ? candidate.moduleB?.submittedAt : candidate.submittedAt;
         return { state: 'COMPLETED', submittedAt: previous?.toDate?.() ?? previous, alreadySubmitted: true };
@@ -118,9 +118,7 @@ class FirestoreInvitationRepository extends IInvitationRepository {
       transaction.update(invitationDoc.ref, { status: 'COMPLETED', submittedAt: now });
       transaction.update(
         candidateRef,
-        module === 'B'
-          ? { 'moduleB.status': 'COMPLETED', 'moduleB.submittedAt': now }
-          : { status: 'EVALUATION_COMPLETED', submittedAt: now },
+        module === 'B' ? { 'moduleB.status': 'COMPLETED', 'moduleB.submittedAt': now } : module === 'C' ? { 'moduleC.status': 'COMPLETED', 'moduleC.submittedAt': now } : { status: 'EVALUATION_COMPLETED', submittedAt: now },
       );
       return { state: 'COMPLETED', submittedAt: now, alreadySubmitted: false };
     });

@@ -89,7 +89,7 @@ class AccessCredentialService {
 
   /** Module A: the event's session; Module B: the candidate's own citation. */
   appointmentOf(event, candidate, module) {
-    return module === MODULES.A ? event.onsite : candidate.moduleB?.citation?.appointment;
+    return module === MODULES.A ? event.onsite : module === MODULES.B ? candidate.moduleB?.citation?.appointment : candidate.moduleC?.citation?.appointment;
   }
 
   /**
@@ -107,7 +107,7 @@ class AccessCredentialService {
 
     const modules =modulesOf(event).map((module) => {
       const rows = candidates
-        .filter((candidate) => module === MODULES.A || candidate.moduleB?.citation || latest.has(`${candidate.id}_${module}`))
+        .filter((candidate) => module === MODULES.A || (module === MODULES.B ? candidate.moduleB?.citation : candidate.moduleC?.citation) || latest.has(`${candidate.id}_${module}`))
         .sort(byName)
         .map((candidate) => {
           const credential = latest.get(`${candidate.id}_${module}`);
@@ -206,7 +206,7 @@ class AccessCredentialService {
     const candidates = await this.candidateRepo.findByEvent(eventId, orgId);
     const rows = candidates
       .map((candidate) => {
-        const citation = module === MODULES.A ? candidate.citation : candidate.moduleB?.citation;
+        const citation = module === MODULES.A ? candidate.citation : module === MODULES.B ? candidate.moduleB?.citation : candidate.moduleC?.citation;
         if (citation?.status !== CITATION_STATUSES.SENT) return null;
         const appointment = module === MODULES.A ? event.onsite : citation.appointment;
         return { nombreCompleto: candidate.nombreCompleto, cedula: candidate.cedula, appointmentAt: appointment?.startsAt, appointment };
@@ -393,12 +393,14 @@ class AccessCredentialService {
     if (module === MODULES.A) {
       if (candidate.status === CANDIDATE_STATUSES.EVALUATION_COMPLETED || candidate.submittedAt) return { problem: 'ya completó el Módulo A' };
       appointment = event.onsite;
-    } else {
+    } else if (module === MODULES.B) {
       if (candidate.moduleB?.status === MODULE_B_STATUSES.COMPLETED) return { problem: 'ya completó el Módulo B' };
-      if (candidate.moduleB?.status !== MODULE_B_STATUSES.CITED || !candidate.moduleB.citation?.appointment) {
-        return { problem: 'no tiene citación al Módulo B' };
-      }
+      if (candidate.moduleB?.status !== MODULE_B_STATUSES.CITED || !candidate.moduleB.citation?.appointment) return { problem: 'no tiene citación al Módulo B' };
       appointment = candidate.moduleB.citation.appointment;
+    } else {
+      if (candidate.moduleC?.status === 'COMPLETED') return { problem: 'ya completó el Módulo C' };
+      if (candidate.moduleC?.status !== 'CITED' || !candidate.moduleC.citation?.appointment) return { problem: 'no tiene citación al Módulo C' };
+      appointment = candidate.moduleC.citation.appointment;
     }
     if (!appointment?.startsAt) return { problem: 'la cita no tiene fecha' };
     const expiresAt = endOfAppointmentDay(appointment.startsAt);

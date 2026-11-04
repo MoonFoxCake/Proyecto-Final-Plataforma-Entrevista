@@ -49,7 +49,7 @@ class OnsiteApplicationService {
     const rows = candidates
       .map((candidate) => {
         const credential = latest.get(`${candidate.id}_${module}`);
-        const citation = module === MODULES.A ? candidate.citation : candidate.moduleB?.citation;
+        const citation = module === MODULES.A ? candidate.citation : module === MODULES.B ? candidate.moduleB?.citation : candidate.moduleC?.citation;
         if (citation?.status !== CITATION_STATUSES.SENT && !credential) return null;
         const publicCredential = credential ? AccessCredentialService.toPublic(credential, now) : null;
         const appointment = this.appointmentOf(event, candidate, module);
@@ -72,7 +72,7 @@ class OnsiteApplicationService {
     return {
       eventId,
       module,
-      session: module === MODULES.A ? event.onsite : null,
+      session: module === MODULES.A ? event.onsite : (rows[0]?.appointmentAt ? { startsAt: rows[0].appointmentAt } : null),
       accessWindow: module === MODULES.A ? AccessCredentialService.accessWindow(event.onsite, now) : null,
       isAppointmentDay: module === MODULES.A ? isAppointmentDay(event.onsite.startsAt, now) : null,
       rows,
@@ -120,13 +120,13 @@ class OnsiteApplicationService {
   evaluationStatus(candidate, module, credential) {
     const completed = module === MODULES.A
       ? candidate.status === CANDIDATE_STATUSES.EVALUATION_COMPLETED || Boolean(candidate.submittedAt)
-      : candidate.moduleB?.status === MODULE_B_STATUSES.COMPLETED;
+      : module === MODULES.B ? candidate.moduleB?.status === MODULE_B_STATUSES.COMPLETED : candidate.moduleC?.status === 'COMPLETED';
     if (completed) return 'COMPLETED';
     return credential?.status === CREDENTIAL_STATUSES.USED ? 'IN_PROGRESS' : 'PENDING';
   }
 
   appointmentOf(event, candidate, module) {
-    return module === MODULES.A ? event.onsite : candidate.moduleB?.citation?.appointment;
+    return module === MODULES.A ? event.onsite : module === MODULES.B ? candidate.moduleB?.citation?.appointment : candidate.moduleC?.citation?.appointment;
   }
 
   requireAppointmentDay(event, candidate, module, now) {

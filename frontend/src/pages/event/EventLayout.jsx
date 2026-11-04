@@ -3,6 +3,8 @@ import { NavLink, Outlet, useNavigate, useParams } from 'react-router-dom';
 import { CompanySidebar } from '../../components/company/CompanySidebar.jsx';
 import { StatusBadge, useToast } from '../../components/ui';
 import * as eventService from '../../services/eventService.js';
+import * as subscriptionService from '../../services/subscriptionService.js';
+import { canUseModule, normalizePlanId, SUBSCRIPTION_PLANS } from '../../utils/subscriptionPlans.js';
 import { formatSession } from '../../utils/eventModality.js';
 import { eventName, eventPosition, formatDateTime, summarize } from './eventState.js';
 
@@ -23,6 +25,9 @@ export function EventLayout() {
   const [candidates, setCandidates] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [subscription, setSubscription] = useState(null);
+  const [subscriptionLoading, setSubscriptionLoading] = useState(true);
+  const [subscriptionError, setSubscriptionError] = useState('');
 
   const reload = useCallback(async () => {
     try {
@@ -54,10 +59,23 @@ export function EventLayout() {
     };
   }, [reload]);
 
+  useEffect(() => {
+    let active = true;
+    subscriptionService.getSubscription().then((value) => { if (active) setSubscription(value); })
+      .catch((requestError) => { if (active) setSubscriptionError(requestError.response?.data?.error?.message || 'No se pudo verificar la suscripción.'); })
+      .finally(() => { if (active) setSubscriptionLoading(false); });
+    return () => { active = false; };
+  }, []);
+
+  const planId = normalizePlanId(subscription?.subscription?.planId ?? subscription?.planId);
+  const currentPlan = SUBSCRIPTION_PLANS[planId] || null;
+  const hasModuleB = canUseModule(planId, 'B');
+  const hasModuleC = canUseModule(planId, 'C');
   const state = useMemo(() => summarize(event, candidates), [event, candidates]);
   const context = useMemo(() => ({
     eventId, event, candidates, setCandidates, reload, notify, state,
-  }), [eventId, event, candidates, reload, notify, state]);
+    subscription, subscriptionLoading, subscriptionError, planId, currentPlan, hasModuleB, hasModuleC,
+  }), [eventId, event, candidates, reload, notify, state, subscription, subscriptionLoading, subscriptionError, planId, currentPlan, hasModuleB, hasModuleC]);
 
   const when = state.onsite ? formatSession(event?.onsite) : `Disponible desde ${formatDateTime(event?.availableFrom || event?.date)}`;
 
@@ -81,7 +99,7 @@ export function EventLayout() {
                   <StatusBadge tone={state.onsite ? 'warning' : 'muted'}>{state.onsite ? 'Presencial' : 'Virtual'}</StatusBadge>
                   {eventPosition(event) && <span>{eventPosition(event)}</span>}
                   <span aria-hidden='true'>·</span>
-                  <span>{state.hasModuleB ? 'Módulos A y B' : 'Módulo A'}</span>
+                  <span>{event?.modules?.includes('C') ? 'Módulos A, B y C' : state.hasModuleB ? 'Módulos A y B' : 'Módulo A'}</span>
                   <span aria-hidden='true'>·</span>
                   <span>{when}</span>
                 </div>

@@ -5,6 +5,7 @@ const {
   INVITATION_STATUSES,
   MODULES,
   MODULE_B_STATUSES,
+  MODULE_C_STATUSES,
   CITATION_STATUSES,
   ACCESS_CHANNELS,
 } = require('../utils/constants');
@@ -66,6 +67,7 @@ class InvitationService {
     emailService,
     frontendUrl,
     macrocaseService,
+    microcaseService,
     sleep = wait,
     now = () => new Date(),
   }) {
@@ -78,6 +80,7 @@ class InvitationService {
     this.emailService = emailService;
     this.frontendUrl = frontendUrl;
     this.macrocaseService = macrocaseService;
+    this.microcaseService = microcaseService;
     this.sleep = sleep;
   }
 
@@ -258,6 +261,49 @@ class InvitationService {
    * candidate.moduleB.citation. No invitation or token is created, so
    * nothing in the e-mail can open the evaluation.
    */
+  async requireModuleCSubscription(orgId) {
+    const organization = await this.organizationRepo.findById(orgId);
+    const planId = organization?.subscription?.planId || organization?.subscriptionPlan || 'fase-a';
+    const normalized = ({ A: 'fase-a', AB: 'fase-a-b', COMPLETE: 'completo' })[planId] || planId;
+    if (normalized !== 'completo') throw new ForbiddenError('Tu suscripción no incluye el Módulo C. Necesitas el Plan completo.');
+  }
+
+  async sendModuleC(eventId, orgId, candidateIds, sectionIds, citation) {
+    await this.requireModuleCSubscription(orgId);
+    let event = await this.eventService.getEvent(eventId, orgId);
+    if (!modulesOf(event).includes(MODULES.C)) throw new ValidationError('Este proceso no incluye el Módulo C.');
+    if (!event.moduleC?.microcase) throw new ValidationError('Selecciona y guarda un microcaso antes de invitar.');
+    if (!event.moduleResults?.B?.deliveredAt) throw new ValidationError('La empresa debe recibir primero el PDF de resultados de la Fase B para abrir la Fase C.');
+    const onsite = isOnsite(event);
+    if (onsite && !citation) throw new ValidationError('Indica la sede, ubicación y horario de la Fase C.');
+    if (!onsite && citation) throw new ValidationError('Las citaciones solo aplican a procesos presenciales.');
+    if (!onsite) this.requireFrontendUrl();
+    const candidates = await this.candidateRepo.findByEvent(eventId, orgId);
+    const byId = new Map(candidates.map((candidate) => [candidate.id, candidate]));
+    const selected = [...new Set(candidateIds || [])].map((id) => byId.get(id));
+    if (!selected.length || selected.some((candidate) => !candidate)) throw new ValidationError('Selecciona candidatos válidos de este proceso.');
+    const invalid = selected.filter((candidate) => candidate.moduleB?.status !== MODULE_B_STATUSES.COMPLETED || candidate.moduleC?.status === MODULE_C_STATUSES.COMPLETED);
+    if (invalid.length) throw new ValidationError(`Solo pueden continuar quienes completaron la Fase B: ${invalid.map((c) => c.nombreCompleto).join(', ')}.`);
+    const org = await this.organizationRepo.findById(orgId);
+    const appointment = onsite ? toAppointment(citation) : null;
+    const results = [];
+    for (const candidate of selected) {
+      const assignedQuestions = event.moduleC.microcase.sections.map((section) => {
+        const pool = section.questions || [];
+        if (!pool.length) throw new ValidationError(`La habilidad ${section.title} no tiene preguntas.`);
+        const question = pool[Math.floor(Math.random() * pool.length)];
+        return { sectionId: section.id, sectionTitle: section.title, questionId: question.id, question: question.text };
+      });
+      const moduleC = { status: onsite ? 'PENDING_CITATION' : MODULE_C_STATUSES.INVITATION_SENT, invitedAt: new Date(), citation: null, ...(onsite ? { appointment } : {}), assignedQuestions, microcaseId: event.moduleC.microcase.id };
+      await this.candidateRepo.update(candidate.id, { moduleC });
+      const updatedCandidate = { ...candidate, moduleC };
+      results.push(onsite
+        ? await this.citeOne({ candidate: updatedCandidate, event, organization: org, module: MODULES.C, appointment })
+        : await this.publishOne({ candidate: updatedCandidate, event, organization: org, orgId, module: MODULES.C }));
+    }
+    return this.summarize(results);
+  }
+
   async citeOne({ candidate, event, organization, module, appointment }) {
     const now = new Date();
 
@@ -277,34 +323,16 @@ class InvitationService {
         appointment,
       };
 
-      await this.candidateRepo.update(
-        candidate.id,
-        module === MODULES.B
-          ? {
-              moduleB: {
-                status: MODULE_B_STATUSES.CITED,
-                invitedAt: now,
-                citation,
-              },
-            }
-          : {
-              status: CANDIDATE_STATUSES.CITED,
-              citation,
-            }
-      );
+      await this.candidateRepo.update(candidate.id, module === MODULES.B ? { moduleB: { ...(candidate.moduleB || {}), status: MODULE_B_STATUSES.CITED, invitedAt: now, citation } } : module === MODULES.C ? { moduleC: { ...(candidate.moduleC || {}), status: MODULE_C_STATUSES.CITED, invitedAt: now, citation } } : { status: CANDIDATE_STATUSES.CITED, citation });
 
       return { candidateId: candidate.id, sent: true };
     } catch (error) {
       // Module A keeps the failure visible (the candidate stays pending, so
       // the next send retries it); Module B keeps whatever it had.
       if (module === MODULES.A) {
-        await this.candidateRepo.update(candidate.id, {
-          citation: {
-            status: CITATION_STATUSES.FAILED,
-            failedAt: now,
-            error: error.message,
-          },
-        }).catch(() => {});
+        await this.candidateRepo.update(candidate.id, { citation: { status: CITATION_STATUSES.FAILED, failedAt: now, error: error.message } }).catch(() => {});
+      } else if (module === MODULES.C) {
+        await this.candidateRepo.update(candidate.id, { moduleC: { ...(candidate.moduleC || {}), status: 'INVITATION_FAILED', citation: { status: CITATION_STATUSES.FAILED, failedAt: now, error: error.message, appointment } } }).catch(() => {});
       }
 
       return {
@@ -464,14 +492,13 @@ class InvitationService {
 
     const module = invitation.module || MODULES.A;
 
-    if (module === MODULES.B && !event.moduleB?.macrocase) {
-      return closed({ state: 'INVALID' });
-    }
+    if (module === MODULES.B && !event.moduleB?.macrocase) return closed({ state: 'INVALID' });
+    if (module === MODULES.C && (!event.moduleC?.microcase || !candidate.moduleC?.assignedQuestions?.length)) return closed({ state: 'INVALID' });
 
     // An onsite session is available as soon as it opens: the applicator
     // already decided when by enabling the code.
     const availableFrom = new Date(
-      module === MODULES.B || onsiteSession
+      module === MODULES.B || module === MODULES.C || onsiteSession
         ? invitation.availableAt || invitation.createdAt
         : candidate.fechaHoraCita || event.availableFrom
     );
@@ -516,7 +543,9 @@ class InvitationService {
 
     // Module B: only the overview here; the content arrives one stage at a
     // time through getMacrocaseStage / advanceMacrocase.
-    const result = module === MODULES.B
+    const result = module === MODULES.C
+      ? { state: 'VALID', ...context, microcase: { name: event.moduleC.microcase.name, story: event.moduleC.microcase.story, timeLimitMinutes: event.moduleC.microcase.timeLimitMinutes || 15, questions: candidate.moduleC?.assignedQuestions || [] } }
+      : module === MODULES.B
       ? {
           state: 'VALID',
           ...context,
@@ -625,6 +654,23 @@ class InvitationService {
     const tokenHash = hashToken(token);
     const { invitation, candidate } = access;
 
+    if (invitation.module === MODULES.C) {
+      const questions = candidate.moduleC?.assignedQuestions || [];
+      if (!Array.isArray(answers) || answers.some((a) => !questions.some((q) => q.questionId === a.questionId) || !Number.isInteger(Number(a.value)) || Number(a.value) < 1 || Number(a.value) > 5) || new Set(answers.map((a) => a.questionId)).size !== answers.length) throw new ValidationError('Las respuestas del microcaso no son válidas.');
+      const normalized = questions.filter((q) => answers.some((a) => a.questionId === q.questionId)).map((q) => ({ ...q, value: Number(answers.find((a) => a.questionId === q.questionId).value) }));
+      const result = await this.invitationRepo.completeWithSubmission(tokenHash, { module: MODULES.C, instrumentVersion: `MICROCASE:${candidate.moduleC.microcaseId}`, answers: normalized });
+      if (result.state === 'COMPLETED' && !result.alreadySubmitted) {
+        await this.candidateRepo.update(candidate.id, { moduleC: { ...candidate.moduleC, status: MODULE_C_STATUSES.COMPLETED, submittedAt: result.submittedAt } });
+        const all = await this.candidateRepo.findByEvent(invitation.eventId, invitation.orgId);
+        const assigned = all.filter((item) => item.moduleC?.assignedQuestions?.length);
+        if (assigned.length && assigned.every((item) => item.moduleC?.status === MODULE_C_STATUSES.COMPLETED)) {
+          const currentEvent = await this.eventService.getEvent(invitation.eventId, invitation.orgId);
+          await this.eventService.eventRepo.update(invitation.eventId, { moduleC: { ...currentEvent.moduleC, status: 'COMPLETED', completedAt: result.submittedAt } });
+        }
+      }
+      return result;
+    }
+
     if (invitation.module === MODULES.B) {
       if (finalize !== true) {
         throw new ValidationError(
@@ -671,9 +717,11 @@ class InvitationService {
     }
 
     if (!answers) {
-      throw new ValidationError(
-        'Envía las respuestas de tu evaluación.'
-      );
+      throw new ValidationError('Envía las respuestas de tu evaluación.');
+    }
+    const demoIds = ['demo-a-1', 'demo-a-2', 'demo-a-3', 'demo-a-4'];
+    if (answers.length !== demoIds.length || demoIds.some((id) => !answers.some((answer) => answer.questionId === id))) {
+      throw new ValidationError('La Fase A requiere responder sus cuatro preguntas.');
     }
 
     const result = await this.invitationRepo.completeWithSubmission(
@@ -715,14 +763,14 @@ class InvitationService {
       const token = crypto.randomBytes(32).toString('base64url');
       const now = Date.now();
 
-      const availableAt = module === MODULES.B
+      const availableAt = module === MODULES.B || module === MODULES.C
         ? now
         : new Date(
             candidate.fechaHoraCita || event.availableFrom
           ).getTime();
 
       const expiresAt = new Date(
-        module === MODULES.B
+        module === MODULES.B || module === MODULES.C
           ? now + MODULE_B_VALIDITY_MS
           : Math.max(now, availableAt) + DAY_MS
       );
@@ -757,20 +805,10 @@ class InvitationService {
       await this.candidateRepo.update(
         candidate.id,
         module === MODULES.B
-          ? {
-              moduleB: {
-                status: MODULE_B_STATUSES.INVITATION_SENT,
-                invitationId: invitation.id,
-                invitedAt: new Date(),
-                emailProviderId: delivery.id,
-              },
-            }
-          : {
-              status: CANDIDATE_STATUSES.INVITATION_SENT,
-              invitationId: invitation.id,
-              invitedAt: new Date(),
-              emailProviderId: delivery.id,
-            }
+          ? { moduleB: { status: MODULE_B_STATUSES.INVITATION_SENT, invitationId: invitation.id, invitedAt: new Date(), emailProviderId: delivery.id } }
+          : module === MODULES.C
+            ? { moduleC: { ...(candidate.moduleC || {}), status: MODULE_C_STATUSES.INVITATION_SENT, invitationId: invitation.id, invitedAt: new Date(), emailProviderId: delivery.id } }
+            : { status: CANDIDATE_STATUSES.INVITATION_SENT, invitationId: invitation.id, invitedAt: new Date(), emailProviderId: delivery.id }
       );
 
       return {
@@ -779,11 +817,9 @@ class InvitationService {
       };
     } catch (error) {
       if (invitation) {
-        await this.invitationRepo.update(invitation.id, {
-          status: INVITATION_STATUSES.CANCELLED,
-          cancelledAt: new Date(),
-        }).catch(() => {});
+        await this.invitationRepo.update(invitation.id, { status: INVITATION_STATUSES.CANCELLED, cancelledAt: new Date() }).catch(() => {});
       }
+      if (module === MODULES.C) await this.candidateRepo.update(candidate.id, { moduleC: { ...(candidate.moduleC || {}), status: 'INVITATION_FAILED' } }).catch(() => {});
 
       return {
         candidateId: candidate.id,
@@ -817,4 +853,5 @@ class InvitationService {
 }
 
 module.exports = InvitationService;
+
 

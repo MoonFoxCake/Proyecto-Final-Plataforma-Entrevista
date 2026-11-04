@@ -35,9 +35,12 @@ const CITATION_STATUSES = Object.freeze({
 const MODULES = Object.freeze({
   A: 'A',
   B: 'B',
+  C: 'C',
 });
 
 // candidate.moduleB.status
+const MODULE_C_STATUSES = Object.freeze({ INVITATION_SENT: 'INVITATION_SENT', CITED: 'CITED', COMPLETED: 'COMPLETED' });
+
 const MODULE_B_STATUSES = Object.freeze({
   INVITATION_SENT: 'INVITATION_SENT',
   CITED: 'CITED',
@@ -95,6 +98,7 @@ module.exports = {
   INVITATION_STATUSES,
   MODULES,
   MODULE_B_STATUSES,
+  MODULE_C_STATUSES,
   MODALITIES,
   CITATION_STATUSES,
   CREDENTIAL_STATUSES,
