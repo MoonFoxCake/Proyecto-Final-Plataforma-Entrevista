@@ -5,6 +5,8 @@ const FirestoreEventRepository = require('../repositories/firestore/FirestoreEve
 const FirestoreCandidateRepository = require('../repositories/firestore/FirestoreCandidateRepository');
 const FirestoreInvitationRepository = require('../repositories/firestore/FirestoreInvitationRepository');
 const FirestoreMacrocaseRepository = require('../repositories/firestore/FirestoreMacrocaseRepository');
+const FirestoreAccessCredentialRepository = require('../repositories/firestore/FirestoreAccessCredentialRepository');
+const FirestoreAuditLogRepository = require('../repositories/firestore/FirestoreAuditLogRepository');
 
 // In-memory repositories (tests)
 const InMemoryUserRepository = require('../repositories/in-memory/InMemoryUserRepository');
@@ -13,6 +15,8 @@ const InMemoryEventRepository = require('../repositories/in-memory/InMemoryEvent
 const InMemoryCandidateRepository = require('../repositories/in-memory/InMemoryCandidateRepository');
 const InMemoryInvitationRepository = require('../repositories/in-memory/InMemoryInvitationRepository');
 const InMemoryMacrocaseRepository = require('../repositories/in-memory/InMemoryMacrocaseRepository');
+const InMemoryAccessCredentialRepository = require('../repositories/in-memory/InMemoryAccessCredentialRepository');
+const InMemoryAuditLogRepository = require('../repositories/in-memory/InMemoryAuditLogRepository');
 
 // Services
 const AuthService = require('../services/AuthService');
@@ -24,6 +28,20 @@ const ReviewService = require('../services/ReviewService');
 const ResendEmailService = require('../services/ResendEmailService');
 const MacrocaseService = require('../services/MacrocaseService');
 const AzureSpeechService = require('../services/AzureSpeechService');
+const AccessCredentialService = require('../services/AccessCredentialService');
+const { PrintableService } = require('../services/PrintableService');
+const OnsiteApplicationService = require('../services/OnsiteApplicationService');
+const OnsiteAccessService = require('../services/OnsiteAccessService');
+const AttemptLimiter = require('../utils/AttemptLimiter');
+
+const MINUTE_MS = 60 * 1000;
+// Failed onsite logins (unknown or malformed codes). Per browser: a candidate
+// who mistypes a few times. Per IP: generous, because a whole room usually
+// shares one public address; the 49-bit codes make guessing hopeless anyway.
+const ONSITE_LOGIN_LIMITS = {
+  client: { max: 5, windowMs: 5 * MINUTE_MS },
+  ip: { max: 40, windowMs: 10 * MINUTE_MS },
+};
 
 // Supabase Storage for macrocase audio. Required lazily: the Supabase client
 // fails at import time without SUPABASE_URL / SUPABASE_SECRET_KEY.
@@ -47,6 +65,8 @@ function buildRepositories(type) {
       candidateRepo: new InMemoryCandidateRepository(),
       invitationRepo: new InMemoryInvitationRepository(),
       macrocaseRepo: new InMemoryMacrocaseRepository(),
+      accessCredentialRepo: new InMemoryAccessCredentialRepository(),
+      auditLogRepo: new InMemoryAuditLogRepository(),
     };
   }
 
@@ -57,6 +77,8 @@ function buildRepositories(type) {
     candidateRepo: new FirestoreCandidateRepository(),
     invitationRepo: new FirestoreInvitationRepository(),
     macrocaseRepo: new FirestoreMacrocaseRepository(),
+    accessCredentialRepo: new FirestoreAccessCredentialRepository(),
+    auditLogRepo: new FirestoreAuditLogRepository(),
   };
 }
 
@@ -108,8 +130,39 @@ function createContainer(type = 'firestore') {
     organizationRepo: repos.organizationRepo,
   });
 
+  const accessCredentialService = new AccessCredentialService({
+    credentialRepo: repos.accessCredentialRepo,
+    auditRepo: repos.auditLogRepo,
+    candidateRepo: repos.candidateRepo,
+    eventService,
+    printableService: new PrintableService(),
+    invitationRepo: repos.invitationRepo,
+    pepper: process.env.ACCESS_CODE_PEPPER,
+  });
+
+  const onsiteApplicationService = new OnsiteApplicationService({
+    eventService,
+    candidateRepo: repos.candidateRepo,
+    credentialRepo: repos.accessCredentialRepo,
+    auditRepo: repos.auditLogRepo,
+  });
+
+  const onsiteAccessService = new OnsiteAccessService({
+    credentialRepo: repos.accessCredentialRepo,
+    invitationRepo: repos.invitationRepo,
+    candidateRepo: repos.candidateRepo,
+    eventService,
+    invitationService,
+    auditRepo: repos.auditLogRepo,
+    limiter: new AttemptLimiter({ rules: ONSITE_LOGIN_LIMITS }),
+    pepper: process.env.ACCESS_CODE_PEPPER,
+  });
+
   return {
     repos,
+    accessCredentialService,
+    onsiteApplicationService,
+    onsiteAccessService,
     authService: new AuthService(repos.userRepo, repos.organizationRepo),
     tenantService: new TenantService(repos.organizationRepo),
     eventService,

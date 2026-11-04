@@ -89,6 +89,7 @@ class ReviewService {
       invitedAt: candidate.moduleB.invitedAt || null,
       submittedAt: submission?.submittedAt || candidate.moduleB.submittedAt || null,
       macrocaseName: event.moduleB?.macrocase?.name || 'Macrocaso',
+      instrumentVersion: submission?.instrumentVersion || null,
       answers: (submission?.answers || []).map((answer, index) => ({
         questionId: answer.questionId,
         number: index + 1,
@@ -96,7 +97,33 @@ class ReviewService {
         text: answer.text,
         timedOut: Boolean(answer.timedOut),
       })),
+      sections: this.answersBySection(submission?.answers || []),
     };
+  }
+
+  /**
+   * Module B answers grouped by macrocase section, in the order they were
+   * answered. Submissions made before sections existed have no `sectionId`
+   * and come out as a single untitled section.
+   */
+  answersBySection(answers) {
+    const sections = [];
+    answers.forEach((answer, index) => {
+      const sectionId = answer.sectionId || 'section-1';
+      let section = sections.find((item) => item.sectionId === sectionId);
+      if (!section) {
+        section = { sectionId, number: sections.length + 1, title: answer.sectionTitle || '', answers: [] };
+        sections.push(section);
+      }
+      section.answers.push({
+        questionId: answer.questionId,
+        number: index + 1,
+        question: answer.question,
+        text: answer.text,
+        timedOut: Boolean(answer.timedOut),
+      });
+    });
+    return sections;
   }
 
   async saveReview(eventId, anonymousId, data, adminUid) {

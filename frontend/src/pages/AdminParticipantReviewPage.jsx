@@ -26,18 +26,30 @@ function ProvisionalProfile() {
   </section>;
 }
 
-const MODULE_B_STATUS = { INVITATION_SENT: 'Invitación enviada · sin respuesta', COMPLETED: 'Respondido' };
+const MODULE_B_STATUS = { INVITATION_SENT: 'Invitación enviada · sin respuesta', CITED: 'Citado (presencial) · sin respuesta', COMPLETED: 'Respondido' };
 
-/** Second stage: the candidate's written answers to the macrocase questions. */
+function ModuleBAnswer({ answer }) {
+  return <article className='p-5'><span className='text-xs font-bold uppercase tracking-wide text-[#0A8F8A]'>Pregunta {String(answer.number).padStart(2, '0')}</span><p className='mt-3 text-sm leading-6 text-[#10233A]'>“{answer.question}”</p><div className='mt-4 rounded-xl bg-[#F6F9FC] p-4'><div className='flex flex-wrap items-center justify-between gap-2'><p className='text-[11px] uppercase tracking-wide text-[#7C8AA0]'>Respuesta del candidato</p>{answer.timedOut && <span className='rounded bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700'>Enviada al agotarse el tiempo</span>}</div><p className={`mt-1 whitespace-pre-line text-sm leading-6 ${answer.text ? 'text-[#334E68]' : 'italic text-[#94A3B8]'}`}>{answer.text || 'Sin respuesta: el tiempo se agotó.'}</p></div></article>;
+}
+
+/**
+ * Second stage: the candidate's written answers to the macrocase questions,
+ * grouped by section when the macrocase has more than one.
+ */
 function ModuleBAnswers({ moduleB }) {
   if (!moduleB) return null;
   const answered = moduleB.status === 'COMPLETED' && moduleB.answers.length > 0;
+  const sections = moduleB.sections?.length ? moduleB.sections : [{ sectionId: 'section-1', number: 1, title: '', answers: moduleB.answers }];
+  const grouped = sections.length > 1 || Boolean(sections[0]?.title);
   return <section className='rounded-2xl border border-[#DDE5EC] bg-white shadow-sm'>
     <div className='border-b border-[#E8EDF2] p-5'>
       <div className='flex flex-wrap items-center justify-between gap-3'><h2 className='font-display text-lg font-bold text-[#10233A]'>Módulo B · {moduleB.macrocaseName}</h2><span className={`rounded-full px-3 py-1 text-xs font-semibold ${answered ? 'bg-[#E8F8F5] text-[#087D79]' : 'bg-[#EEF6FF] text-[#315B88]'}`}>{MODULE_B_STATUS[moduleB.status] || moduleB.status}</span></div>
       <p className='mt-1 text-sm text-[#64748B]'>{answered ? `Respuestas escritas · enviadas el ${formatDate(moduleB.submittedAt)}` : `Enviado el ${formatDate(moduleB.invitedAt)}`}</p>
     </div>
-    {answered && <div className='divide-y divide-[#E8EDF2]'>{moduleB.answers.map((answer) => <article key={answer.questionId} className='p-5'><span className='text-xs font-bold uppercase tracking-wide text-[#0A8F8A]'>Pregunta {String(answer.number).padStart(2, '0')}</span><p className='mt-3 text-sm leading-6 text-[#10233A]'>“{answer.question}”</p><div className='mt-4 rounded-xl bg-[#F6F9FC] p-4'><div className='flex flex-wrap items-center justify-between gap-2'><p className='text-[11px] uppercase tracking-wide text-[#7C8AA0]'>Respuesta del candidato</p>{answer.timedOut && <span className='rounded bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700'>Enviada al agotarse el tiempo</span>}</div><p className={`mt-1 whitespace-pre-line text-sm leading-6 ${answer.text ? 'text-[#334E68]' : 'italic text-[#94A3B8]'}`}>{answer.text || 'Sin respuesta: el tiempo se agotó.'}</p></div></article>)}</div>}
+    {answered && sections.map((section) => <div key={section.sectionId} className='border-b border-[#E8EDF2] last:border-b-0'>
+      {grouped && <h3 className='bg-[#F8FAFC] px-5 py-3 text-sm font-semibold text-[#334E68]'>Sección {section.number}{section.title ? ` · ${section.title}` : ''}</h3>}
+      <div className='divide-y divide-[#E8EDF2]'>{section.answers.map((answer) => <ModuleBAnswer key={answer.questionId} answer={answer} />)}</div>
+    </div>)}
   </section>;
 }
 

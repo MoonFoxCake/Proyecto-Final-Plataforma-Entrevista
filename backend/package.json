@@ -19,6 +19,7 @@
     "lint": "^1.2.2",
     "microsoft-cognitiveservices-speech-sdk": "^1.52.0",
     "multer": "^2.4.0",
+    "pdfkit": "^0.17.2",
     "ws": "^8.22.0",
     "zod": "^3.23.8"
   },

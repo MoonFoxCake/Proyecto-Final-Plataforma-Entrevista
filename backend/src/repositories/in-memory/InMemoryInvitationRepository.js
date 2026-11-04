@@ -6,6 +6,17 @@ class InMemoryInvitationRepository extends IInvitationRepository {
     super();
     this.data = [];
     this.submissions = [];
+    this.progress = new Map();
+  }
+
+  async findProgress(progressId) {
+    return this.progress.get(progressId) ?? null;
+  }
+
+  async updateProgress(progressId, mutate) {
+    const next = mutate(this.progress.get(progressId) ?? null);
+    this.progress.set(progressId, next);
+    return next;
   }
 
   async findByTokenHash(tokenHash) {

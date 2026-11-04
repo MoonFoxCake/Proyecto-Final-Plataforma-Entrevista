@@ -64,6 +64,28 @@ function findSpanishVoice() {
   return voicePromise;
 }
 
+// Chrome stops long utterances after about 15 seconds, so section
+// narratives are spoken as a queue of short chunks (paragraphs, split at
+// sentence ends when they are long).
+const MAX_CHUNK_LENGTH = 220;
+
+/** Splits `text` into chunks of about MAX_CHUNK_LENGTH characters at most, cutting at sentence ends. */
+export function splitForSpeech(text) {
+  const chunks = [];
+  for (const paragraph of text.split(/\r?\n/).map((item) => item.trim()).filter(Boolean)) {
+    let current = '';
+    for (const sentence of paragraph.match(/[^.!?…]+[.!?…]+["»”)]*\s*|[^.!?…]+$/g) || [paragraph]) {
+      if (current && (current + sentence).length > MAX_CHUNK_LENGTH) {
+        chunks.push(current.trim());
+        current = '';
+      }
+      current += sentence;
+    }
+    if (current.trim()) chunks.push(current.trim());
+  }
+  return chunks;
+}
+
 /** Starts looking up the Spanish voice ahead of time, so the first question is not delayed. */
 export function prepareSpeech() {
   if (isSpeechSynthesisSupported()) findSpanishVoice();
@@ -82,8 +104,9 @@ export function speakText(text, { onStart } = {}) {
   let cancelled = false;
   let resolveDone;
   const done = new Promise((resolve) => { resolveDone = resolve; });
+  const chunks = text ? splitForSpeech(text) : [];
 
-  if (!isSpeechSynthesisSupported() || !text) {
+  if (!isSpeechSynthesisSupported() || !chunks.length) {
     resolveDone({ completed: false, reason: NO_SPANISH_VOICE });
     return { done, cancel: () => {} };
   }
@@ -94,15 +117,17 @@ export function speakText(text, { onStart } = {}) {
       resolveDone({ completed: false, reason: NO_SPANISH_VOICE });
       return;
     }
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.voice = voice;
-    utterance.lang = voice.lang;
-    utterance.rate = 0.95;
-    utterance.onstart = () => onStart?.();
-    utterance.onend = () => resolveDone({ completed: !cancelled });
-    utterance.onerror = () => resolveDone({ completed: false });
     window.speechSynthesis.cancel();
-    window.speechSynthesis.speak(utterance);
+    chunks.forEach((chunk, index) => {
+      const utterance = new SpeechSynthesisUtterance(chunk);
+      utterance.voice = voice;
+      utterance.lang = voice.lang;
+      utterance.rate = 0.95;
+      if (index === 0) utterance.onstart = () => onStart?.();
+      if (index === chunks.length - 1) utterance.onend = () => resolveDone({ completed: !cancelled });
+      utterance.onerror = () => resolveDone({ completed: false });
+      window.speechSynthesis.speak(utterance);
+    });
   });
 
   return {

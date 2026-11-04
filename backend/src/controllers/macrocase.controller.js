@@ -88,16 +88,17 @@ class MacrocaseController {
         });
       }
 
-      if (!req.body.questionId) {
+      // `questionId` for a question's voice, `sectionId` for a narrative's.
+      if (!req.body.questionId && !req.body.sectionId) {
         return res.status(400).json({
-          message: 'Debes indicar la pregunta.',
+          message: 'Debes indicar la pregunta o la sección.',
         });
       }
 
       res.json(
-        await this.macrocaseService.uploadQuestionAudio(
+        await this.macrocaseService.uploadAudio(
           req.params.macrocaseId,
-          req.body.questionId,
+          { questionId: req.body.questionId, sectionId: req.body.sectionId },
           req.file
         )
       );

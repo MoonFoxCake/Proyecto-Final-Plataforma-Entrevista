@@ -25,9 +25,18 @@ export async function createEventCandidate(eventId, candidate) {
   return data?.data ?? null;
 }
 
-/** Module B (second stage): sends the macrocase to the selected candidates. */
-export async function sendModuleBInvitations(eventId, candidateIds) {
-  const { data } = await api.post(`/events/${eventId}/module-b/invitations`, { candidateIds });
+/**
+ * Module B (second stage): sends the macrocase link to the selected
+ * candidates, or — onsite events — cites them to the `citacion` session.
+ */
+export async function sendModuleBInvitations(eventId, candidateIds, citacion) {
+  const { data } = await api.post(`/events/${eventId}/module-b/invitations`, { candidateIds, ...(citacion ? { citacion } : {}) });
+  return data?.data ?? null;
+}
+
+/** Onsite events: asks the e-mail provider for the delivery status of the citations. */
+export async function refreshCitationStatus(eventId) {
+  const { data } = await api.post(`/events/${eventId}/citations/status`);
   return data?.data ?? null;
 }
 

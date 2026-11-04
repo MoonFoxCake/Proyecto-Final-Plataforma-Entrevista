@@ -15,7 +15,7 @@ describe('LikertQuestionnaire', () => {
     for (let question = 1; question <= 4; question += 1) {
       expect(screen.getByText(String(question), { selector: 'strong' })).toBeTruthy();
       fireEvent.click(screen.getByRole('radio', { name: 'De acuerdo' }));
-      const buttonName = question === 4 ? 'Finalizar cuestionario →' : 'Continuar →';
+      const buttonName = question === 4 ? 'Finalizar evaluación →' : 'Continuar →';
       fireEvent.click(screen.getByRole('button', { name: buttonName }));
     }
 

@@ -1,4 +1,6 @@
 const { NotFoundError } = require('../utils/errors');
+const { MODALITIES, MODULES } = require('../utils/constants');
+const { toAppointment } = require('../utils/eventModality');
 
 class EventService {
   constructor(eventRepo) {
@@ -9,15 +11,31 @@ class EventService {
     return this.eventRepo.findByOrganization(orgId);
   }
 
+  /**
+   * `virtual`: the evaluation opens for everyone at `fechaHoraHabilitacion`
+   * and candidates get a link. `presencial`: candidates are cited to a venue
+   * and time (`event.onsite`); `availableFrom` is the start of that session,
+   * so everything that reads the appointment time keeps working.
+   */
   async createEvent(orgId, data) {
-    return this.eventRepo.create({
+    const base = {
       orgId,
       name: data.nombre.trim(),
       position: data.puesto.trim(),
       description: data.descripcion?.trim() || '',
-      availableFrom: new Date(data.fechaHoraHabilitacion),
+      modules: data.incluirModuloB === false ? [MODULES.A] : [MODULES.A, MODULES.B],
       plan: 'A',
       status: 'ACTIVE',
+    };
+
+    if (data.modalidad === 'presencial') {
+      const onsite = toAppointment(data.presencial);
+      return this.eventRepo.create({ ...base, modality: MODALITIES.ONSITE, availableFrom: onsite.startsAt, onsite });
+    }
+    return this.eventRepo.create({
+      ...base,
+      modality: MODALITIES.ONLINE,
+      availableFrom: new Date(data.fechaHoraHabilitacion),
     });
   }
 

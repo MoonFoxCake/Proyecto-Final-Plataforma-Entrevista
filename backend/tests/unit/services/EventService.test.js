@@ -24,6 +24,39 @@ describe('EventService', () => {
       status: 'ACTIVE',
     });
     expect(event.availableFrom).toEqual(new Date('2026-10-10T15:00:00.000Z'));
+    expect(event).toMatchObject({ modality: 'online', modules: ['A', 'B'] });
+  });
+
+  test('creates an onsite event with its venue and session, starting the evaluation at the session start', async () => {
+    const eventRepo = { create: jest.fn(async (data) => ({ id: 'event-2', ...data })) };
+    const service = new EventService(eventRepo);
+
+    const event = await service.createEvent('org-1', {
+      nombre: 'Concurso Presencial',
+      puesto: 'Analista',
+      modalidad: 'presencial',
+      incluirModuloB: false,
+      presencial: {
+        sede: ' Campus Central ',
+        ubicacion: ' Edificio T2, aula 204 ',
+        fechaHoraInicio: '2026-11-05T14:00:00.000Z',
+        fechaHoraFin: '2026-11-05T16:00:00.000Z',
+        indicaciones: ' Llegar 15 minutos antes. ',
+      },
+    });
+
+    expect(event).toMatchObject({
+      modality: 'onsite',
+      modules: ['A'],
+      availableFrom: new Date('2026-11-05T14:00:00.000Z'),
+      onsite: {
+        venue: 'Campus Central',
+        room: 'Edificio T2, aula 204',
+        startsAt: new Date('2026-11-05T14:00:00.000Z'),
+        endsAt: new Date('2026-11-05T16:00:00.000Z'),
+        instructions: 'Llegar 15 minutos antes.',
+      },
+    });
   });
 
   test('lists only events returned for the organization', async () => {

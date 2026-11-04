@@ -14,6 +14,18 @@ function serialize(doc) {
   };
 }
 
+const toDate = (value) => value?.toDate?.() ?? value ?? null;
+
+function serializeProgress(data) {
+  return {
+    ...data,
+    timerStartedAt: toDate(data.timerStartedAt),
+    startedAt: toDate(data.startedAt),
+    updatedAt: toDate(data.updatedAt),
+    answers: (data.answers || []).map((answer) => ({ ...answer, answeredAt: toDate(answer.answeredAt) })),
+  };
+}
+
 class FirestoreInvitationRepository extends IInvitationRepository {
   constructor() {
     super();
@@ -75,6 +87,16 @@ class FirestoreInvitationRepository extends IInvitationRepository {
       if (invitation.status === 'CANCELLED') return { state: 'CANCELLED' };
       if (invitation.status === 'EXPIRED') return { state: 'EXPIRED' };
 
+      // One final submission per evaluation, even if another link of the
+      // same candidate and stage was used meanwhile.
+      const candidateRef = db.collection('candidates').doc(invitation.candidateId);
+      const candidate = (await transaction.get(candidateRef)).data() || {};
+      const stageDone = module === 'B' ? candidate.moduleB?.status === 'COMPLETED' : candidate.status === 'EVALUATION_COMPLETED';
+      if (stageDone) {
+        const previous = module === 'B' ? candidate.moduleB?.submittedAt : candidate.submittedAt;
+        return { state: 'COMPLETED', submittedAt: previous?.toDate?.() ?? previous, alreadySubmitted: true };
+      }
+
       const now = new Date();
       const expiresAt = invitation.expiresAt?.toDate?.() ?? new Date(invitation.expiresAt);
       if (expiresAt <= now) {
@@ -95,12 +117,28 @@ class FirestoreInvitationRepository extends IInvitationRepository {
       });
       transaction.update(invitationDoc.ref, { status: 'COMPLETED', submittedAt: now });
       transaction.update(
-        db.collection('candidates').doc(invitation.candidateId),
+        candidateRef,
         module === 'B'
           ? { 'moduleB.status': 'COMPLETED', 'moduleB.submittedAt': now }
           : { status: 'EVALUATION_COMPLETED', submittedAt: now },
       );
       return { state: 'COMPLETED', submittedAt: now, alreadySubmitted: false };
+    });
+  }
+
+  async findProgress(progressId) {
+    const doc = await db.collection('evaluationProgress').doc(progressId).get();
+    return doc.exists ? serializeProgress(doc.data()) : null;
+  }
+
+  /** Read-modify-write in a transaction, so two tabs cannot both answer the same stage. */
+  async updateProgress(progressId, mutate) {
+    const ref = db.collection('evaluationProgress').doc(progressId);
+    return db.runTransaction(async (transaction) => {
+      const doc = await transaction.get(ref);
+      const next = mutate(doc.exists ? serializeProgress(doc.data()) : null);
+      transaction.set(ref, stripUndefined(next));
+      return next;
     });
   }
 
