@@ -2,38 +2,54 @@ const { Router } = require('express');
 const { checkRole } = require('../middleware/checkRole');
 const { checkPersistedRole } = require('../middleware/checkPersistedRole');
 const { validateInput } = require('../middleware/validateInput');
-const { registerSchema, companyUserSchema, setRoleSchema } = require('../validators/auth.schema');
+const {
+  registerSchema,
+  companyUserSchema,
+  setRoleSchema,
+  updateSubscriptionSchema,
+} = require('../validators/auth.schema');
 
 /**
- * Routes reachable with no Authorization header — the caller has no
- * company account yet, so there's nothing to verify a token against.
- * Mounted before the `verifyToken`/`checkTenant` middleware in app.js.
- *
- * @param {import('../controllers/auth.controller')} authController
- * @param {import('../services/AuthService')} authService
- * @returns {import('express').Router}
+ * Rutas públicas que no requieren autenticación.
  */
 function createPublicAuthRoutes(authController) {
   const router = Router();
 
-  router.post('/register', validateInput(registerSchema), authController.register);
+  router.post(
+    '/register',
+    validateInput(registerSchema),
+    authController.register
+  );
 
   return router;
 }
 
 /**
- * Routes that require an authenticated caller. Mounted after
- * `verifyToken`/`checkTenant` in app.js, so `req.user` is already set.
- *
- * @param {import('../controllers/auth.controller')} authController
- * @returns {import('express').Router}
+ * Rutas que requieren autenticación.
  */
 function createAuthRoutes(authController, authService) {
   const router = Router();
 
   router.get('/me', authController.getProfile);
 
-  router.get('/companies', checkPersistedRole(authService, 'admin'), authController.listCompanies);
+  router.get(
+    '/subscription',
+    checkPersistedRole(authService, 'company'),
+    authController.getSubscription
+  );
+
+  router.patch(
+    '/subscription',
+    checkPersistedRole(authService, 'company'),
+    validateInput(updateSubscriptionSchema),
+    authController.updateSubscription
+  );
+
+  router.get(
+    '/companies',
+    checkPersistedRole(authService, 'admin'),
+    authController.listCompanies
+  );
 
   router.post(
     '/company-users',
@@ -52,4 +68,7 @@ function createAuthRoutes(authController, authService) {
   return router;
 }
 
-module.exports = { createAuthRoutes, createPublicAuthRoutes };
+module.exports = {
+  createAuthRoutes,
+  createPublicAuthRoutes,
+};

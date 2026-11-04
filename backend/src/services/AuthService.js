@@ -50,7 +50,23 @@ class AuthService {
     let organization;
     try {
       const acceptedTermsAt = new Date();
+      const planByCode = {
+        A: 'fase-a',
+        AB: 'fase-a-b',
+        COMPLETE: 'completo',
+        'fase-a': 'fase-a',
+        'fase-a-b': 'fase-a-b',
+        completo: 'completo',
+      };
+      const requestedPlan = planByCode[data.subscriptionPlan] || 'fase-a';
       organization = await this.organizationRepo.create({
+        subscription: {
+          planId: requestedPlan,
+          status: 'pending_simulation',
+          paymentMode: 'simulated',
+          createdAt: acceptedTermsAt,
+          updatedAt: acceptedTermsAt,
+        },
         companyName,
         name: companyName,
         industry: data.industry.trim(),
@@ -87,6 +103,22 @@ class AuthService {
       if (organization) await this.organizationRepo.delete(organization.id).catch(() => {});
       throw error;
     }
+  }
+
+  /** Returns the subscription attached to an organization in Firestore. */
+  async getOrganizationSubscription(orgId) {
+    if (!orgId || !this.organizationRepo) {
+      throw new ValidationError('No se encontró la organización de esta cuenta.');
+    }
+    const organization = await this.organizationRepo.findById(orgId);
+    if (!organization) {
+      throw new NotFoundError('No se encontró la organización de esta cuenta.');
+    }
+    return {
+      organizationId: organization.id,
+      companyName: organization.companyName || organization.name || 'Empresa',
+      subscription: organization.subscription || { planId: 'fase-a', status: 'active', paymentMode: 'legacy' },
+    };
   }
 
   /**
@@ -198,6 +230,47 @@ class AuthService {
     await auth.setCustomUserClaims(uid, { role, orgId: orgId ?? null });
     return this.userRepo.update(uid, { role, orgId: orgId ?? null });
   }
+
+  async updateOrganizationSubscription(orgId, planId) {
+  if (!orgId || !this.organizationRepo) {
+    throw new ValidationError('No se encontró la organización de esta cuenta.');
+  }
+
+  const validPlans = ['fase-a', 'fase-a-b', 'completo'];
+
+  if (!validPlans.includes(planId)) {
+    throw new ValidationError('El plan seleccionado no es válido.');
+  }
+
+  const organization = await this.organizationRepo.findById(orgId);
+
+  if (!organization) {
+    throw new NotFoundError('No se encontró la organización de esta cuenta.');
+  }
+
+  const previousSubscription = organization.subscription || {};
+  const now = new Date();
+  const planHistory = [...(previousSubscription.planHistory || [])];
+  if (previousSubscription.planId && previousSubscription.planId !== planId) {
+    planHistory.push({ fromPlan: previousSubscription.planId, toPlan: planId, changedAt: now });
+  }
+  const subscription = {
+    ...previousSubscription,
+    planId,
+    planHistory,
+    status: 'active',
+    paymentMode: 'simulation',
+    updatedAt: now,
+  };
+
+  await this.organizationRepo.update(orgId, { subscription });
+
+  return {
+    organizationId: organization.id,
+    companyName: organization.companyName || organization.name || 'Empresa',
+    subscription,
+  };
+}
 }
 
 module.exports = AuthService;

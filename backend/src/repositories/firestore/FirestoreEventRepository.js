@@ -13,6 +13,13 @@ function serializeEvent(doc, sourceCollection) {
     availableFrom: data.availableFrom?.toDate?.() ?? data.availableFrom,
     createdAt: data.createdAt?.toDate?.() ?? data.createdAt,
     evaluationsPublishedAt: data.evaluationsPublishedAt?.toDate?.() ?? data.evaluationsPublishedAt,
+    ...(data.onsite ? {
+      onsite: {
+        ...data.onsite,
+        startsAt: data.onsite.startsAt?.toDate?.() ?? data.onsite.startsAt,
+        endsAt: data.onsite.endsAt?.toDate?.() ?? data.onsite.endsAt,
+      },
+    } : {}),
   };
 }
 

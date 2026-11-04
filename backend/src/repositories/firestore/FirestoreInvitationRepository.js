@@ -10,6 +10,19 @@ function serialize(doc) {
     expiresAt: data.expiresAt?.toDate?.() ?? data.expiresAt,
     createdAt: data.createdAt?.toDate?.() ?? data.createdAt,
     submittedAt: data.submittedAt?.toDate?.() ?? data.submittedAt,
+    availableAt: data.availableAt?.toDate?.() ?? data.availableAt,
+  };
+}
+
+const toDate = (value) => value?.toDate?.() ?? value ?? null;
+
+function serializeProgress(data) {
+  return {
+    ...data,
+    timerStartedAt: toDate(data.timerStartedAt),
+    startedAt: toDate(data.startedAt),
+    updatedAt: toDate(data.updatedAt),
+    answers: (data.answers || []).map((answer) => ({ ...answer, answeredAt: toDate(answer.answeredAt) })),
   };
 }
 
@@ -40,16 +53,23 @@ class FirestoreInvitationRepository extends IInvitationRepository {
     return { id, ...doc.data(), ...payload };
   }
 
-  async findActiveByCandidate(candidateId, eventId) {
+  async findActiveByCandidate(candidateId, eventId, module = 'A') {
     const snapshot = await this.collection.where('candidateId', '==', candidateId).get();
     const doc = snapshot.docs.find((item) => {
       const data = item.data();
-      return data.eventId === eventId && data.status === 'ACTIVE';
+      return data.eventId === eventId && (data.module || 'A') === module && data.status === 'ACTIVE';
     });
     return doc ? serialize(doc) : null;
   }
 
-  async completeWithSubmission(tokenHash, answers) {
+  /**
+   * Stores the answers and closes the invitation in one transaction.
+   * Module A marks the candidate's evaluation as completed; Module B only
+   * its own stage (candidate.moduleB), leaving the Module A review intact.
+   *
+   * @param {{ module?: 'A'|'B', instrumentVersion?: string, answers: object[] }} submission
+   */
+  async completeWithSubmission(tokenHash, { module = 'A', instrumentVersion = 'DEMO_A_V1', answers }) {
     const query = this.collection.where('tokenHash', '==', tokenHash).limit(1);
     return db.runTransaction(async (transaction) => {
       const snapshot = await transaction.get(query);
@@ -67,6 +87,16 @@ class FirestoreInvitationRepository extends IInvitationRepository {
       if (invitation.status === 'CANCELLED') return { state: 'CANCELLED' };
       if (invitation.status === 'EXPIRED') return { state: 'EXPIRED' };
 
+      // One final submission per evaluation, even if another link of the
+      // same candidate and stage was used meanwhile.
+      const candidateRef = db.collection('candidates').doc(invitation.candidateId);
+      const candidate = (await transaction.get(candidateRef)).data() || {};
+      const stageDone = module === 'B' ? candidate.moduleB?.status === 'COMPLETED' : module === 'C' ? candidate.moduleC?.status === 'COMPLETED' : candidate.status === 'EVALUATION_COMPLETED';
+      if (stageDone) {
+        const previous = module === 'B' ? candidate.moduleB?.submittedAt : candidate.submittedAt;
+        return { state: 'COMPLETED', submittedAt: previous?.toDate?.() ?? previous, alreadySubmitted: true };
+      }
+
       const now = new Date();
       const expiresAt = invitation.expiresAt?.toDate?.() ?? new Date(invitation.expiresAt);
       if (expiresAt <= now) {
@@ -80,23 +110,42 @@ class FirestoreInvitationRepository extends IInvitationRepository {
         candidateId: invitation.candidateId,
         eventId: invitation.eventId,
         orgId: invitation.orgId,
-        module: 'A',
-        instrumentVersion: 'DEMO_A_V1',
+        module,
+        instrumentVersion,
         answers,
         submittedAt: now,
       });
       transaction.update(invitationDoc.ref, { status: 'COMPLETED', submittedAt: now });
-      transaction.update(db.collection('candidates').doc(invitation.candidateId), {
-        status: 'EVALUATION_COMPLETED',
-        submittedAt: now,
-      });
+      transaction.update(
+        candidateRef,
+        module === 'B' ? { 'moduleB.status': 'COMPLETED', 'moduleB.submittedAt': now } : module === 'C' ? { 'moduleC.status': 'COMPLETED', 'moduleC.submittedAt': now } : { status: 'EVALUATION_COMPLETED', submittedAt: now },
+      );
       return { state: 'COMPLETED', submittedAt: now, alreadySubmitted: false };
     });
   }
 
-  async findSubmissionByCandidate(candidateId, eventId) {
+  async findProgress(progressId) {
+    const doc = await db.collection('evaluationProgress').doc(progressId).get();
+    return doc.exists ? serializeProgress(doc.data()) : null;
+  }
+
+  /** Read-modify-write in a transaction, so two tabs cannot both answer the same stage. */
+  async updateProgress(progressId, mutate) {
+    const ref = db.collection('evaluationProgress').doc(progressId);
+    return db.runTransaction(async (transaction) => {
+      const doc = await transaction.get(ref);
+      const next = mutate(doc.exists ? serializeProgress(doc.data()) : null);
+      transaction.set(ref, stripUndefined(next));
+      return next;
+    });
+  }
+
+  async findSubmissionByCandidate(candidateId, eventId, module = 'A') {
     const snapshot = await db.collection('evaluationSubmissions').where('candidateId', '==', candidateId).get();
-    const doc = snapshot.docs.find((item) => item.data().eventId === eventId);
+    const doc = snapshot.docs.find((item) => {
+      const data = item.data();
+      return data.eventId === eventId && (data.module || 'A') === module;
+    });
     if (!doc) return null;
     const data = doc.data();
     return {

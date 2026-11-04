@@ -5,6 +5,9 @@ const FirestoreEventRepository = require('../repositories/firestore/FirestoreEve
 const FirestoreCandidateRepository = require('../repositories/firestore/FirestoreCandidateRepository');
 const FirestoreInvitationRepository = require('../repositories/firestore/FirestoreInvitationRepository');
 const FirestoreMacrocaseRepository = require('../repositories/firestore/FirestoreMacrocaseRepository');
+const FirestoreMicrocaseRepository = require('../repositories/firestore/FirestoreMicrocaseRepository');
+const FirestoreAccessCredentialRepository = require('../repositories/firestore/FirestoreAccessCredentialRepository');
+const FirestoreAuditLogRepository = require('../repositories/firestore/FirestoreAuditLogRepository');
 
 // In-memory repositories (tests)
 const InMemoryUserRepository = require('../repositories/in-memory/InMemoryUserRepository');
@@ -12,6 +15,10 @@ const InMemoryOrganizationRepository = require('../repositories/in-memory/InMemo
 const InMemoryEventRepository = require('../repositories/in-memory/InMemoryEventRepository');
 const InMemoryCandidateRepository = require('../repositories/in-memory/InMemoryCandidateRepository');
 const InMemoryInvitationRepository = require('../repositories/in-memory/InMemoryInvitationRepository');
+const InMemoryMacrocaseRepository = require('../repositories/in-memory/InMemoryMacrocaseRepository');
+const InMemoryMicrocaseRepository = require('../repositories/in-memory/InMemoryMicrocaseRepository');
+const InMemoryAccessCredentialRepository = require('../repositories/in-memory/InMemoryAccessCredentialRepository');
+const InMemoryAuditLogRepository = require('../repositories/in-memory/InMemoryAuditLogRepository');
 
 // Services
 const AuthService = require('../services/AuthService');
@@ -20,8 +27,32 @@ const EventService = require('../services/EventService');
 const CandidateService = require('../services/CandidateService');
 const InvitationService = require('../services/InvitationService');
 const ReviewService = require('../services/ReviewService');
+const ResultDeliveryService = require('../services/ResultDeliveryService');
 const ResendEmailService = require('../services/ResendEmailService');
 const MacrocaseService = require('../services/MacrocaseService');
+const MicrocaseService = require('../services/MicrocaseService');
+const AzureSpeechService = require('../services/AzureSpeechService');
+const AccessCredentialService = require('../services/AccessCredentialService');
+const { PrintableService } = require('../services/PrintableService');
+const OnsiteApplicationService = require('../services/OnsiteApplicationService');
+const OnsiteAccessService = require('../services/OnsiteAccessService');
+const AttemptLimiter = require('../utils/AttemptLimiter');
+
+const MINUTE_MS = 60 * 1000;
+// Failed onsite logins (unknown or malformed codes). Per browser: a candidate
+// who mistypes a few times. Per IP: generous, because a whole room usually
+// shares one public address; the 49-bit codes make guessing hopeless anyway.
+const ONSITE_LOGIN_LIMITS = {
+  client: { max: 5, windowMs: 5 * MINUTE_MS },
+  ip: { max: 40, windowMs: 10 * MINUTE_MS },
+};
+
+// Supabase Storage for macrocase audio. Required lazily: the Supabase client
+// fails at import time without SUPABASE_URL / SUPABASE_SECRET_KEY.
+const supabaseAudioStorage = {
+  upload: (file) => require('../services/storageService').uploadMacrocaseAudio(file),
+  remove: (path) => require('../services/storageService').deleteMacrocaseAudio(path),
+};
 
 /**
  * Builds the repository set for the given backing store.
@@ -37,7 +68,10 @@ function buildRepositories(type) {
       eventRepo: new InMemoryEventRepository(),
       candidateRepo: new InMemoryCandidateRepository(),
       invitationRepo: new InMemoryInvitationRepository(),
-      macrocaseRepo: new FirestoreMacrocaseRepository(),
+      macrocaseRepo: new InMemoryMacrocaseRepository(),
+      microcaseRepo: new InMemoryMicrocaseRepository(),
+      accessCredentialRepo: new InMemoryAccessCredentialRepository(),
+      auditLogRepo: new InMemoryAuditLogRepository(),
     };
   }
 
@@ -48,6 +82,9 @@ function buildRepositories(type) {
     candidateRepo: new FirestoreCandidateRepository(),
     invitationRepo: new FirestoreInvitationRepository(),
     macrocaseRepo: new FirestoreMacrocaseRepository(),
+    microcaseRepo: new FirestoreMicrocaseRepository(),
+    accessCredentialRepo: new FirestoreAccessCredentialRepository(),
+    auditLogRepo: new FirestoreAuditLogRepository(),
   };
 }
 
@@ -67,11 +104,21 @@ function buildRepositories(type) {
  */
 function createContainer(type = 'firestore') {
   const repos = buildRepositories(type);
-  const eventService = new EventService(repos.eventRepo);
+  const eventService = new EventService(repos.eventRepo, repos.organizationRepo);
   const candidateService = new CandidateService(repos.candidateRepo, eventService);
   const emailService = new ResendEmailService({
     apiKey: process.env.RESEND_API_KEY,
     from: process.env.RESEND_FROM,
+  });
+  const microcaseService = new MicrocaseService(repos.microcaseRepo);
+  const macrocaseService = new MacrocaseService(repos.macrocaseRepo, {
+    speechService: new AzureSpeechService({
+      key: process.env.AZURE_SPEECH_KEY,
+      region: process.env.AZURE_SPEECH_REGION,
+      voice: process.env.AZURE_SPEECH_VOICE,
+    }),
+    audioStorage: type === 'memory' ? undefined : supabaseAudioStorage,
+    eventRepo: repos.eventRepo,
   });
   const invitationService = new InvitationService({
     invitationRepo: repos.invitationRepo,
@@ -81,6 +128,8 @@ function createContainer(type = 'firestore') {
     organizationRepo: repos.organizationRepo,
     emailService,
     frontendUrl: process.env.FRONTEND_URL || process.env.CORS_ORIGIN,
+    macrocaseService,
+    microcaseService,
   });
   const reviewService = new ReviewService({
     eventRepo: repos.eventRepo,
@@ -88,18 +137,51 @@ function createContainer(type = 'firestore') {
     invitationRepo: repos.invitationRepo,
     organizationRepo: repos.organizationRepo,
   });
-  const macrocaseService = new MacrocaseService(repos.macrocaseRepo);
+
+  const accessCredentialService = new AccessCredentialService({
+    credentialRepo: repos.accessCredentialRepo,
+    auditRepo: repos.auditLogRepo,
+    candidateRepo: repos.candidateRepo,
+    eventService,
+    printableService: new PrintableService(),
+    invitationRepo: repos.invitationRepo,
+    pepper: process.env.ACCESS_CODE_PEPPER,
+  });
+
+  const onsiteApplicationService = new OnsiteApplicationService({
+    eventService,
+    candidateRepo: repos.candidateRepo,
+    credentialRepo: repos.accessCredentialRepo,
+    auditRepo: repos.auditLogRepo,
+  });
+
+  const onsiteAccessService = new OnsiteAccessService({
+    credentialRepo: repos.accessCredentialRepo,
+    invitationRepo: repos.invitationRepo,
+    candidateRepo: repos.candidateRepo,
+    eventService,
+    invitationService,
+    auditRepo: repos.auditLogRepo,
+    limiter: new AttemptLimiter({ rules: ONSITE_LOGIN_LIMITS }),
+    pepper: process.env.ACCESS_CODE_PEPPER,
+  });
 
   return {
     repos,
+    accessCredentialService,
+    onsiteApplicationService,
+    onsiteAccessService,
     authService: new AuthService(repos.userRepo, repos.organizationRepo),
     tenantService: new TenantService(repos.organizationRepo),
     eventService,
     candidateService,
     invitationService,
     reviewService,
+    resultDeliveryService: new ResultDeliveryService({ eventRepo: repos.eventRepo, candidateRepo: repos.candidateRepo, organizationRepo: repos.organizationRepo, emailService, frontendUrl: process.env.FRONTEND_URL || process.env.CORS_ORIGIN }),
     macrocaseService,
+    microcaseService,
   };
 }
 
 module.exports = { createContainer };
+

@@ -2,11 +2,46 @@ const ICandidateRepository = require('../interfaces/ICandidateRepository');
 const { db } = require('../../config/firebase');
 const { stripUndefined } = require('../../utils/helpers');
 
+/**
+ * Converts the Timestamp fields of a nested object to Dates. Only keys that
+ * exist are touched: these objects are written back as they are, and
+ * Firestore rejects nested `undefined` values.
+ */
+function withDates(object, keys) {
+  if (!object) return object;
+  const result = { ...object };
+  for (const key of keys) {
+    if (result[key]?.toDate) result[key] = result[key].toDate();
+  }
+  return result;
+}
+
+/** Onsite citation (Module A or B). */
+function serializeCitation(citation) {
+  if (!citation) return citation;
+  const result = withDates(citation, ['sentAt', 'failedAt']);
+  if (citation.appointment) result.appointment = withDates(citation.appointment, ['startsAt', 'endsAt']);
+  if (citation.delivery) result.delivery = withDates(citation.delivery, ['checkedAt']);
+  return result;
+}
+
 function serializeCandidate(doc) {
   const data = doc.data();
+  const moduleB = data.moduleB && withDates(data.moduleB, ['invitedAt', 'submittedAt']);
+  if (moduleB?.citation) moduleB.citation = serializeCitation(moduleB.citation);
+  const moduleC = data.moduleC && withDates(data.moduleC, ['invitedAt', 'submittedAt']);
+  if (moduleC?.citation) moduleC.citation = serializeCitation(moduleC.citation);
+  // Onsite attendance per module: { A: { status, markedAt, markedBy }, B: … }
+  const attendance = data.attendance && Object.fromEntries(
+    Object.entries(data.attendance).map(([module, record]) => [module, withDates(record, ['markedAt'])])
+  );
   return {
     id: doc.id,
     ...data,
+    ...(data.citation ? { citation: serializeCitation(data.citation) } : {}),
+    ...(moduleB ? { moduleB } : {}),
+    ...(moduleC ? { moduleC } : {}),
+    ...(attendance ? { attendance } : {}),
     fechaHoraCita: data.fechaHoraCita?.toDate?.() ?? data.fechaHoraCita,
     createdAt: data.createdAt?.toDate?.() ?? data.createdAt,
     submittedAt: data.submittedAt?.toDate?.() ?? data.submittedAt,
@@ -19,6 +54,11 @@ class FirestoreCandidateRepository extends ICandidateRepository {
   constructor() {
     super();
     this.collection = db.collection('candidates');
+  }
+
+  async findAll() {
+    const snapshot = await this.collection.get();
+    return snapshot.docs.map(serializeCandidate);
   }
 
   async findById(id) {

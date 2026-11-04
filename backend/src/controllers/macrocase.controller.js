@@ -1,8 +1,3 @@
-const {
-  uploadMacrocaseAudio,
-  deleteMacrocaseAudio,
-} = require('../services/storageService');
-
 class MacrocaseController {
   constructor(macrocaseService) {
     this.macrocaseService = macrocaseService;
@@ -87,75 +82,26 @@ class MacrocaseController {
 
   uploadAudio = async (req, res, next) => {
     try {
-      const { macrocaseId } = req.params;
-      const { questionId } = req.body;
-
       if (!req.file) {
         return res.status(400).json({
           message: 'Debes enviar un archivo de audio.',
         });
       }
 
-      if (!questionId) {
+      // `questionId` for a question's voice, `sectionId` for a narrative's.
+      if (!req.body.questionId && !req.body.sectionId) {
         return res.status(400).json({
-          message: 'Debes indicar la pregunta.',
+          message: 'Debes indicar la pregunta o la sección.',
         });
       }
 
-      const macrocase =
-        await this.macrocaseService.getMacroCase(macrocaseId);
-
-      const question = macrocase.questions.find(
-        (item) => item.id === questionId
+      res.json(
+        await this.macrocaseService.uploadAudio(
+          req.params.macrocaseId,
+          { questionId: req.body.questionId, sectionId: req.body.sectionId },
+          req.file
+        )
       );
-
-      if (!question) {
-        return res.status(404).json({
-          message: 'Pregunta no encontrada.',
-        });
-      }
-
-      const safeName = req.file.originalname
-        .replace(/[^a-zA-Z0-9._-]/g, '_');
-
-      const filePath =
-        `${macrocaseId}/${questionId}-${Date.now()}-${safeName}`;
-
-      const uploaded = await uploadMacrocaseAudio({
-        fileBuffer: req.file.buffer,
-        filePath,
-        contentType: req.file.mimetype,
-      });
-
-      if (question.audioPath) {
-        try {
-          await deleteMacrocaseAudio(question.audioPath);
-        } catch (error) {
-          console.warn(
-            'No se pudo eliminar el audio anterior:',
-            error.message
-          );
-        }
-      }
-
-      const questions = macrocase.questions.map((item) =>
-        item.id === questionId
-          ? {
-              ...item,
-              audioName: req.file.originalname,
-              audioPath: uploaded.path,
-              audioUrl: uploaded.publicUrl,
-            }
-          : item
-      );
-
-      const updated =
-        await this.macrocaseService.updateMacroCase(
-          macrocaseId,
-          { questions }
-        );
-
-      res.json(updated);
     } catch (error) {
       next(error);
     }

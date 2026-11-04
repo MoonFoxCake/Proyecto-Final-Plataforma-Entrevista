@@ -5,8 +5,10 @@ const { createContainer } = require('./container');
 const createApiRouter = require('./routes');
 const AuthController = require('./controllers/auth.controller');
 const InvitationController = require('./controllers/invitation.controller');
+const OnsiteAccessController = require('./controllers/onsite-access.controller');
 const { createPublicAuthRoutes } = require('./routes/auth.routes');
 const { createPublicInvitationRoutes } = require('./routes/invitation.routes');
+const { createPublicOnsiteAccessRoutes } = require('./routes/onsite-access.routes');
 const { verifyToken } = require('./middleware/verifyToken');
 const { checkTenant } = require('./middleware/checkTenant');
 const { errorHandler } = require('./middleware/errorHandler');
@@ -27,6 +29,14 @@ function createApp(container = createContainer('firestore')) {
 });
 
 
+  app.use('/api', (req, res, next) => {
+  res.set('Cache-Control', 'no-store');
+  next();
+});
+  // Render puts one proxy in front of the app: trust it so `req.ip` is the
+  // caller's address (needed to limit failed onsite logins per IP).
+  app.set('trust proxy', 1);
+
   // Frontend (Firebase Hosting) and backend (Render) are different origins.
   // CORS_ORIGIN restricts requests to that domain in production; unset, it
   // falls back to allowing any origin (fine — auth is a Bearer token, not
@@ -36,12 +46,36 @@ function createApp(container = createContainer('firestore')) {
 
   app.get('/health', (req, res) => res.json({ status: 'ok' }));
 
+  // Public aggregate metrics for the landing page; no personal data is exposed.
+  app.get('/api/v1/public/stats', async (req, res, next) => {
+    try {
+      const [organizations, candidates] = await Promise.all([
+        container.repos.organizationRepo.findAll(),
+        container.repos.candidateRepo.findAll(),
+      ]);
+      const evaluatedCandidateIds = new Set(
+        candidates
+          .filter((candidate) => candidate.submittedAt || candidate.status === 'EVALUATION_COMPLETED')
+          .map((candidate) => candidate.id)
+      );
+      res.json({
+        data: {
+          organizations: organizations.length,
+          evaluatedCandidates: evaluatedCandidateIds.size,
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
   // Public: account creation happens before the caller has a token to
   // verify, so this can't sit behind verifyToken like everything else.
   const authController = new AuthController(container.authService);
   const invitationController = new InvitationController(container.invitationService);
   app.use('/api/v1/auth', createPublicAuthRoutes(authController));
   app.use('/api/v1/invitations', createPublicInvitationRoutes(invitationController));
+  app.use('/api/v1/onsite', createPublicOnsiteAccessRoutes(new OnsiteAccessController(container.onsiteAccessService)));
 
   app.use('/api/v1', verifyToken, checkTenant, createApiRouter(container));
 

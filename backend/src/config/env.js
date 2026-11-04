@@ -14,6 +14,14 @@ const envSchema = z.object({
   RESEND_API_KEY: z.string().min(1).optional(),
   RESEND_FROM: z.string().min(3).optional(),
   FRONTEND_URL: z.string().url().optional(),
+  // Azure Speech: generated voice for macrocase questions (optional).
+  AZURE_SPEECH_KEY: z.string().min(1).optional(),
+  AZURE_SPEECH_REGION: z.string().min(1).optional(),
+  AZURE_SPEECH_VOICE: z.string().min(1).optional(),
+  // Secret for the HMAC of onsite access codes. Optional so the rest of the
+  // app runs without it; issuing codes fails clearly until it is set.
+  // Changing it invalidates every code already issued.
+  ACCESS_CODE_PEPPER: z.string().min(32, 'ACCESS_CODE_PEPPER must be at least 32 characters').optional(),
 });
 
 /**

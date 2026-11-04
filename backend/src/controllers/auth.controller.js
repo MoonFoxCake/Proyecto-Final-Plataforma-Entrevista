@@ -39,6 +39,16 @@ class AuthController {
   };
 
   /** @type {import('express').RequestHandler} */
+  getSubscription = async (req, res, next) => {
+    try {
+      const subscription = await this.service.getOrganizationSubscription(req.user.orgId);
+      res.json({ data: subscription });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /** @type {import('express').RequestHandler} */
   listCompanies = async (req, res, next) => {
     try {
       const companies = await this.service.listCompaniesWithUsers();
@@ -58,6 +68,18 @@ class AuthController {
       next(error);
     }
   };
+
+  updateSubscription = async (req, res, next) => {
+  try {
+    const result = await this.service.updateOrganizationSubscription(
+      req.user.orgId,
+      req.body.planId
+    );
+    res.json({ data: result });
+  } catch (error) {
+    next(error);
+  }
+};
 }
 
 module.exports = AuthController;

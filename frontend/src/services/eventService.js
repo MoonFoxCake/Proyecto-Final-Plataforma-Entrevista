@@ -25,7 +25,28 @@ export async function createEventCandidate(eventId, candidate) {
   return data?.data ?? null;
 }
 
+/**
+ * Module B (second stage): sends the macrocase link to the selected
+ * candidates, or — onsite events — cites them to the `citacion` session.
+ */
+export async function sendModuleBInvitations(eventId, candidateIds, citacion) {
+  const { data } = await api.post(`/events/${eventId}/module-b/invitations`, { candidateIds, ...(citacion ? { citacion } : {}) });
+  return data?.data ?? null;
+}
+
+/** Onsite events: asks the e-mail provider for the delivery status of the citations. */
+export async function refreshCitationStatus(eventId) {
+  const { data } = await api.post(`/events/${eventId}/citations/status`);
+  return data?.data ?? null;
+}
+
 export async function publishEventInvitations(eventId) {
   const { data } = await api.post(`/events/${eventId}/invitations/publish`);
   return data?.data ?? null;
 }
+
+export async function configureModuleC(eventId, microcaseId, sectionIds) { const { data } = await api.put(`/events/${eventId}/module-c/configure`, { microcaseId, sectionIds }); return data?.data ?? null; }
+export async function sendModuleCInvitations(eventId, candidateIds, sectionIds, citacion) { const { data } = await api.post(`/events/${eventId}/module-c/invitations`, { candidateIds, sectionIds, ...(citacion ? { citacion } : {}) }); return data?.data ?? null; }
+
+export async function getResultDownloadUrl(eventId, module) { const { data } = await api.get(`/events/${eventId}/results/${module}/download`); return data?.data ?? null; }
+

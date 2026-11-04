@@ -28,8 +28,10 @@ class InMemoryUserRepository extends IUserRepository {
     return [...this.data];
   }
 
+  /** Like Firestore, a user created with a `uid` is stored under that id. */
   async create(data) {
-    const item = { id: generateId(), ...data, createdAt: new Date() };
+    const { uid, ...rest } = data;
+    const item = { id: uid ?? generateId(), ...rest, createdAt: new Date() };
     this.data.push(item);
     return item;
   }

@@ -1,71 +1,173 @@
+
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+
+import { LandingPage } from '../pages/LandingPage.jsx';
+import { PlanSelectionPage } from '../pages/PlanSelectionPage.jsx';
 
 import { LoginPage } from '../pages/auth/LoginPage.jsx';
 import { RegisterPage } from '../pages/auth/RegisterPage.jsx';
 import { ForgotPasswordPage } from '../pages/auth/ForgotPasswordPage.jsx';
 import { ResetPasswordPage } from '../pages/auth/ResetPasswordPage.jsx';
+
 import { DashboardPage } from '../pages/DashboardPage.jsx';
 import { AdminDashboardPage } from '../pages/AdminDashboardPage.jsx';
 import { AdminProcessDetailPage } from '../pages/AdminProcessDetailPage.jsx';
 import { AdminParticipantReviewPage } from '../pages/AdminParticipantReviewPage.jsx';
+
 import { CandidateDashboardPage } from '../pages/CandidateDashboardPage.jsx';
 import { CompanyDashboardPage } from '../pages/CompanyDashboardPage.jsx';
-import { EventDetailPage } from '../pages/EventDetailPage.jsx';
+
+import { EventLayout } from '../pages/event/EventLayout.jsx';
+import { EventSummaryTab } from '../pages/event/EventSummaryTab.jsx';
+import { EventCandidatesTab } from '../pages/event/EventCandidatesTab.jsx';
+import { EventOnsiteTab } from '../pages/event/EventOnsiteTab.jsx';
+import { EventResultsTab } from '../pages/event/EventResultsTab.jsx';
+
 import { NewEventPage } from '../pages/NewEventPage.jsx';
+import { OnsiteAccessPage } from '../pages/OnsiteAccessPage.jsx';
 import { EvaluationAccessPage } from '../pages/EvaluationAccessPage.jsx';
+
+import { AdminMacrocasePreviewPage } from '../pages/AdminMacrocasePreviewPage.jsx';
 import { CandidateResultPage } from '../pages/CandidateResultPage.jsx';
+
 import { RequireAuth } from './RequireAuth.jsx';
 import { RequireRole } from './RequireRole.jsx';
-import { useAuth } from '../hooks/useAuth';
-import { ROLES } from '../utils/constants.js';
 
-/** Sends `/` to the dashboard if already signed in, to `/login` otherwise. */
-function RootRedirect() {
-  const { user, loading } = useAuth();
-  if (loading) return null;
-  return <Navigate to={user ? '/dashboard' : '/login'} replace />;
-}
+import { ROLES } from '../utils/constants.js';
 
 /**
  * Top-level router.
  *
- * Only the auth pages and a placeholder dashboard exist so far. As new
- * areas (admin/client/candidate) are built, their routes go here, each
- * wrapped in a role guard.
+ * Public routes:
+ * Landing, authentication and subscription plans.
+ *
+ * Protected routes:
+ * Dashboard and role-specific areas.
  */
 export function AppRouter() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<RootRedirect />} />
+
+        {/* Public routes */}
+        <Route path="/" element={<LandingPage />} />
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/planes" element={<PlanSelectionPage />} />
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
 
-        <Route path='/evaluation/access' element={<EvaluationAccessPage />} />
+        {/* Public access routes */}
+        <Route
+          path="/evaluation/access"
+          element={<EvaluationAccessPage />}
+        />
+        <Route
+          path="/presencial"
+          element={<OnsiteAccessPage />}
+        />
 
+        {/* Authenticated routes */}
         <Route element={<RequireAuth />}>
-          <Route path="/dashboard" element={<DashboardPage />} />
 
+          <Route
+            path="/dashboard"
+            element={<DashboardPage />}
+          />
+
+          {/* Admin */}
           <Route element={<RequireRole allowedRoles={[ROLES.ADMIN]} />}>
-            <Route path="/admin-dashboard" element={<AdminDashboardPage />} />
-            <Route path="/admin/processes/:eventId" element={<AdminProcessDetailPage />} />
-            <Route path="/admin/processes/:eventId/participants/:anonymousId" element={<AdminParticipantReviewPage />} />
+            <Route
+              path="/admin-dashboard"
+              element={<AdminDashboardPage />}
+            />
+
+            <Route
+              path="/admin/processes/:eventId"
+              element={<AdminProcessDetailPage />}
+            />
+
+            <Route
+              path="/admin/processes/:eventId/participants/:anonymousId"
+              element={<AdminParticipantReviewPage />}
+            />
+
+            <Route
+              path="/admin/macrocases/:macrocaseId/preview"
+              element={<AdminMacrocasePreviewPage />}
+            />
           </Route>
 
+          {/* Candidate */}
           <Route element={<RequireRole allowedRoles={[ROLES.CANDIDATE]} />}>
-            <Route path="/candidate-dashboard" element={<CandidateDashboardPage />} />
+            <Route
+              path="/candidate-dashboard"
+              element={<CandidateDashboardPage />}
+            />
           </Route>
 
+          {/* Company */}
           <Route element={<RequireRole allowedRoles={[ROLES.COMPANY]} />}>
-            <Route path='/company/events/new' element={<NewEventPage />} />
-            <Route path='/company/events/:eventId' element={<EventDetailPage />} />
-            <Route path='/company/events/:eventId/candidates/:candidateId/result' element={<CandidateResultPage />} />
-            <Route path="/company-dashboard" element={<CompanyDashboardPage />} />
+
+            <Route
+              path="/company/events/new"
+              element={<NewEventPage />}
+            />
+
+            {/* Event with nested tabs */}
+            <Route
+              path="/company/events/:eventId"
+              element={<EventLayout />}
+            >
+              <Route
+                index
+                element={<EventSummaryTab />}
+              />
+
+              <Route
+                path="candidatos"
+                element={<EventCandidatesTab />}
+              />
+
+              <Route
+                path="presencial"
+                element={<EventOnsiteTab />}
+              />
+
+              <Route
+                path="resultados"
+                element={<EventResultsTab />}
+              />
+
+              {/* Former applicator URL redirects to the Apply stage */}
+              <Route
+                path="onsite"
+                element={
+                  <Navigate
+                    to="../presencial?etapa=aplicar"
+                    replace
+                  />
+                }
+              />
+            </Route>
+
+            {/* Candidate result profile */}
+            <Route
+              path="/company/events/:eventId/candidates/:candidateId/result"
+              element={<CandidateResultPage />}
+            />
+
+            <Route
+              path="/company-dashboard"
+              element={<CompanyDashboardPage />}
+            />
+
           </Route>
         </Route>
+
       </Routes>
     </BrowserRouter>
   );
 }
+
+

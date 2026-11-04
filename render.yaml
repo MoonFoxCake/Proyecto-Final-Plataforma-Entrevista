@@ -4,6 +4,7 @@
 services:
   - type: web
     name: nexo-perfil-api
+    branch: demo-02
     runtime: node
     plan: free
     rootDir: backend
@@ -35,3 +36,19 @@ services:
       # origin, which is fine (auth is a Bearer token, not cookies).
       - key: CORS_ORIGIN
         sync: false
+      # Supabase Storage (macrocase question audio).
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SECRET_KEY
+        sync: false
+      # Azure Speech: generated voice for macrocase questions.
+      - key: AZURE_SPEECH_KEY
+        sync: false
+      - key: AZURE_SPEECH_REGION
+        sync: false
+      - key: AZURE_SPEECH_VOICE
+        value: es-GT-MartaNeural
+      # Onsite access codes: HMAC secret (32+ random characters). Changing
+      # it invalidates every code already issued.
+      - key: ACCESS_CODE_PEPPER
+        generateValue: true

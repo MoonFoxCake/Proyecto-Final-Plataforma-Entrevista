@@ -58,6 +58,9 @@ class ReviewService {
     const { candidate, resolvedId } = await this.resolveParticipant(eventId, anonymousId);
     const submission = await this.invitationRepo.findSubmissionByCandidate(candidate.id, eventId);
     if (!submission) throw new NotFoundError('Este participante aún no ha enviado respuestas.');
+    const moduleBSubmission = candidate.moduleB?.status === 'COMPLETED'
+      ? await this.invitationRepo.findSubmissionByCandidate(candidate.id, eventId, 'B')
+      : null;
 
     return {
       process: this.safeEvent(event),
@@ -74,7 +77,53 @@ class ReviewService {
         value: answer.value,
         label: ANSWER_LABELS[answer.value] || String(answer.value),
       })),
+      moduleB: this.moduleBDetail(event, candidate, moduleBSubmission),
     };
+  }
+
+  /** Second stage: null if the candidate was not sent Module B. */
+  moduleBDetail(event, candidate, submission) {
+    if (!candidate.moduleB) return null;
+    return {
+      status: candidate.moduleB.status,
+      invitedAt: candidate.moduleB.invitedAt || null,
+      submittedAt: submission?.submittedAt || candidate.moduleB.submittedAt || null,
+      macrocaseName: event.moduleB?.macrocase?.name || 'Macrocaso',
+      instrumentVersion: submission?.instrumentVersion || null,
+      answers: (submission?.answers || []).map((answer, index) => ({
+        questionId: answer.questionId,
+        number: index + 1,
+        question: answer.question,
+        text: answer.text,
+        timedOut: Boolean(answer.timedOut),
+      })),
+      sections: this.answersBySection(submission?.answers || []),
+    };
+  }
+
+  /**
+   * Module B answers grouped by macrocase section, in the order they were
+   * answered. Submissions made before sections existed have no `sectionId`
+   * and come out as a single untitled section.
+   */
+  answersBySection(answers) {
+    const sections = [];
+    answers.forEach((answer, index) => {
+      const sectionId = answer.sectionId || 'section-1';
+      let section = sections.find((item) => item.sectionId === sectionId);
+      if (!section) {
+        section = { sectionId, number: sections.length + 1, title: answer.sectionTitle || '', answers: [] };
+        sections.push(section);
+      }
+      section.answers.push({
+        questionId: answer.questionId,
+        number: index + 1,
+        question: answer.question,
+        text: answer.text,
+        timedOut: Boolean(answer.timedOut),
+      });
+    });
+    return sections;
   }
 
   async saveReview(eventId, anonymousId, data, adminUid) {
@@ -131,6 +180,7 @@ class ReviewService {
         anonymousId,
         submittedAt: candidate.submittedAt || null,
         status: !hasResponse(candidate) ? 'NO_RESPONSE' : candidate.reviewStatus === 'REVIEWED' ? 'REVIEWED' : 'PENDING_REVIEW',
+        moduleBStatus: candidate.moduleB?.status || null,
       }));
     }
     return result;

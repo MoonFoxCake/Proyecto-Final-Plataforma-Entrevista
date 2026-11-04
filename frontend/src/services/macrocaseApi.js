@@ -1,7 +1,8 @@
 import { auth } from '../config/firebase';
 
+// Same backend as services/api.js; VITE_API_URL is kept for older .env files.
 const API_URL =
-  import.meta.env.VITE_API_URL || 'http://localhost:3000/api/v1';
+  import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api/v1';
 
 async function getHeaders() {
   const user = auth.currentUser;
@@ -48,6 +49,10 @@ export async function getMacroCases() {
   return request('/macrocasos');
 }
 
+export async function getMacroCase(id) {
+  return request(`/macrocasos/${id}`);
+}
+
 export async function createMacroCase(data) {
   return request('/macrocasos', {
     method: 'POST',
@@ -80,9 +85,13 @@ export async function deleteMacroCase(id) {
   });
 }
 
+/**
+ * Uploads the audio of a question (`{ questionId }`) or of a section
+ * narrative (`{ sectionId }`); it replaces the generated voice.
+ */
 export async function uploadMacroCaseAudio(
   macrocaseId,
-  questionId,
+  { questionId, sectionId },
   file
 ) {
   const user = auth.currentUser;
@@ -95,7 +104,8 @@ export async function uploadMacroCaseAudio(
 
   const formData = new FormData();
 
-  formData.append('questionId', questionId);
+  if (questionId) formData.append('questionId', questionId);
+  else formData.append('sectionId', sectionId);
   formData.append('audio', file);
 
   const response = await fetch(
