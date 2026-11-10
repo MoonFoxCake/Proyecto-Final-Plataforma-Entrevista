@@ -24,12 +24,6 @@ export const ADMIN_SECTIONS = [
     '▥',
   ],
   [
-    'candidates',
-    'Candidatos',
-    'Directorio global de candidatos',
-    '♙',
-  ],
-  [
     'macrocasos',
     'Banco de Macrocasos',
     'Escenarios utilizados en la Fase 2',
@@ -155,11 +149,6 @@ export function AdminSidebar({ activeSection, onSelect }) {
                   {item.label}
                 </span>
 
-                {item.id === 'candidates' && (
-                  <span className="rounded-full bg-[#F59E0B] px-1.5 text-[10px] font-bold">
-                    2
-                  </span>
-                )}
               </button>
             ))}
           </nav>
