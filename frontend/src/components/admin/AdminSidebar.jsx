@@ -41,12 +41,6 @@ export const ADMIN_SECTIONS = [
     'Resultados y métricas',
     '⌁',
   ],
-  [
-    'reports',
-    'Reportes',
-    'Informes de la plataforma',
-    '▤',
-  ],
 ].map(([id, label, description, icon]) => ({
   id,
   label,
