@@ -47,12 +47,6 @@ export const ADMIN_SECTIONS = [
     'Informes de la plataforma',
     '▤',
   ],
-  [
-    'settings',
-    'Configuración',
-    'Preferencias del sistema',
-    '⚙',
-  ],
 ].map(([id, label, description, icon]) => ({
   id,
   label,
