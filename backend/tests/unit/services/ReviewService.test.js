@@ -39,6 +39,15 @@ describe('ReviewService', () => {
     expect(process.participants[0]).not.toHaveProperty('cedula');
   });
 
+  test('includes stable organization IDs for current and legacy processes', async () => {
+    const legacy = await eventRepo.create({ recruiterOrgId: 'org-1', name: 'Proceso anterior' });
+    const processes = await service.listProcesses();
+    expect(processes).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: event.id, orgId: 'org-1', company: 'TechCorp' }),
+      expect.objectContaining({ id: legacy.id, orgId: 'org-1', company: 'TechCorp' }),
+    ]));
+  });
+
   test('exposes individual Likert responses with question context', async () => {
     const participant = await service.getParticipant(event.id, 'P-001');
     expect(participant).toMatchObject({ anonymousId: 'P-001', module: 'A', status: 'PENDING_REVIEW' });

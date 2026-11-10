@@ -189,6 +189,7 @@ class ReviewService {
   safeEvent(event) {
     return {
       id: event.id,
+      orgId: event.orgId ?? event.recruiterOrgId ?? null,
       name: event.name || event.title || event.eventName || 'Proceso de evaluación',
       position: event.position || event.positionName || '',
       availableFrom: event.availableFrom || event.eventDate || event.date || null,
