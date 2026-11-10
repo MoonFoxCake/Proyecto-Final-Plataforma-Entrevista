@@ -1,3 +1,4 @@
+const { instrumentOf } = require('../utils/moduleA');
 const { NotFoundError, ValidationError } = require('../utils/errors');
 
 const QUESTIONS = Object.freeze({
@@ -74,6 +75,7 @@ class ReviewService {
       answers: (submission.answers || []).map((answer) => ({
         questionId: answer.questionId,
         ...(QUESTIONS[answer.questionId] || { number: 0, dimension: 'Sin dimensión', text: 'Pregunta del instrumento' }),
+        ...(answer.text ? { text: answer.text, dimension: answer.dimension || 'Sin dimensión', number: answer.number || 0 } : {}),
         value: answer.value,
         label: ANSWER_LABELS[answer.value] || String(answer.value),
       })),
@@ -189,6 +191,7 @@ class ReviewService {
   safeEvent(event) {
     return {
       id: event.id,
+      questionnaire: (({ groupId, name, version, instrumentVersion }) => ({ groupId, name, version, instrumentVersion }))(instrumentOf(event)),
       orgId: event.orgId ?? event.recruiterOrgId ?? null,
       name: event.name || event.title || event.eventName || 'Proceso de evaluación',
       position: event.position || event.positionName || '',

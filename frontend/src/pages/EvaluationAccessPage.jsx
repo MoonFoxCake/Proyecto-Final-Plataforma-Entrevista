@@ -69,7 +69,7 @@ export function EvaluationAccessPage() {
     return (
       <div className='min-h-screen bg-[#F6F9FC]'>
         <EvaluationHeader />
-        {isModuleB ? <MacrocaseEvaluation source={macrocaseSource} /> : isModuleC ? <MicrocaseQuestionnaire token={token} microcase={access.microcase} /> : <LikertQuestionnaire token={token} />}
+        {isModuleB ? <MacrocaseEvaluation source={macrocaseSource} /> : isModuleC ? <MicrocaseQuestionnaire token={token} microcase={access.microcase} /> : <LikertQuestionnaire token={token} questionnaire={access.questionnaire} />}
       </div>
     );
   }
@@ -89,7 +89,7 @@ export function EvaluationAccessPage() {
             {access.event.puesto && <p className='mt-1 text-sm text-[#64748B]'>{access.event.puesto}</p>}
             {isModuleB
               ? <div className='mt-5'><p className='text-xs text-[#64748B]'>Disponible hasta</p><p className='mt-1 text-sm font-medium text-[#10233A]'>{formatDate(access.expiresAt)} · UTC−6</p></div>
-              : <div className='mt-5 grid gap-4 sm:grid-cols-2'><div><p className='text-xs text-[#64748B]'>Fecha y hora</p><p className='mt-1 text-sm font-medium text-[#10233A]'>{formatDate(access.event.availableFrom)} · UTC−6</p></div><div><p className='text-xs text-[#64748B]'>Duración aproximada</p><p className='mt-1 text-sm font-medium text-[#10233A]'>3–5 minutos · Demo</p></div></div>}
+              : <div className='mt-5 grid gap-4 sm:grid-cols-2'><div><p className='text-xs text-[#64748B]'>Fecha y hora</p><p className='mt-1 text-sm font-medium text-[#10233A]'>{formatDate(access.event.availableFrom)} · UTC−6</p></div><div><p className='text-xs text-[#64748B]'>{isModuleC ? 'Duración' : 'Preguntas asignadas'}</p><p className='mt-1 text-sm font-medium text-[#10233A]'>{isModuleC ? `${access.microcase?.timeLimitMinutes || 15} minutos` : access.questionnaire ? `${access.questionnaire.questions.length} preguntas` : 'Disponible al iniciar'}</p></div></div>}
           </div>
 
           <h2 className='mt-6 font-semibold text-[#10233A]'>Antes de comenzar</h2>
@@ -98,7 +98,7 @@ export function EvaluationAccessPage() {
           {waiting && <p className='mt-6 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800'>Podrás comenzar a partir del {formatDate(access.event.availableFrom)}.</p>}
           <button type='button' disabled={waiting} onClick={() => setStarted(true)} className='mt-6 w-full rounded-xl bg-[#168D89] px-5 py-3.5 text-sm font-semibold text-white hover:bg-[#117A76] disabled:cursor-not-allowed disabled:bg-[#AAB7C4]'>{waiting ? 'Aún no disponible' : isModuleB ? 'Continuar →' : 'Comenzar evaluación →'}</button>
         </section>
-        <p className='mt-6 text-center text-xs text-[#7C8AA0]'>Contenido demostrativo · NexoPerfil</p>
+        <p className='mt-6 text-center text-xs text-[#7C8AA0]'>Evaluación · NexoPerfil</p>
       </main>
     </div>
   );

@@ -1,3 +1,4 @@
+import { AdminQuestionBankPage } from './AdminQuestionBankPage.jsx';
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 
@@ -104,6 +105,8 @@ export function AdminDashboardPage() {
       ? 'dashboard'
       : initialSection === 'processes'
       ? 'processes'
+      : initialSection === 'question-bank'
+        ? 'question-bank'
       : initialSection === 'macrocasos'
         ? 'macrocasos'
         : initialSection === 'microcasos'
@@ -120,7 +123,7 @@ export function AdminDashboardPage() {
   const selectSection = (id) => {
     setActiveSection(id);
 
-    if (['dashboard', 'processes', 'macrocasos', 'microcasos', 'results'].includes(id)) {
+    if (['dashboard', 'processes', 'question-bank', 'macrocasos', 'microcasos', 'results'].includes(id)) {
       setSearchParams({ section: id });
     } else {
       setSearchParams({});
@@ -147,6 +150,8 @@ export function AdminDashboardPage() {
           <AdminProcessesView />
         )}
 
+        {activeSection === 'question-bank' && <AdminQuestionBankPage />}
+
         {activeSection === 'macrocasos' && (
           <AdminMacrocasesPage />
         )}
@@ -160,6 +165,7 @@ export function AdminDashboardPage() {
         {activeSection !== 'dashboard' &&
           activeSection !== 'companies' &&
           activeSection !== 'processes' &&
+          activeSection !== 'question-bank' &&
           activeSection !== 'macrocasos' &&
           activeSection !== 'microcasos' &&
           activeSection !== 'results' && (

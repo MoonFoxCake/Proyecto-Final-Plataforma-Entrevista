@@ -87,7 +87,7 @@ export function AdminParticipantReviewPage() {
   };
 
   return <div className='min-h-screen bg-[#F7F9FC] lg:flex'>
-    <AdminSidebar activeSection='processes' onSelect={() => navigate('/admin-dashboard?section=processes')} />
+    <AdminSidebar activeSection='processes' onSelect={(section) => navigate(`/admin-dashboard?section=${encodeURIComponent(section)}`)} />
     <main className='min-w-0 flex-1 p-5 sm:p-8'><div className='mx-auto max-w-6xl'>
       <button type='button' onClick={() => navigate(`/admin/processes/${eventId}`)} className='text-sm text-[#64748B] hover:text-[#087D79]'>← Volver al proceso</button>
       {loading ? <div className='flex min-h-80 items-center justify-center text-sm text-[#64748B]'>Cargando respuestas...</div> : error && !participant ? <p className='mt-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700'>{error}</p> : participant && <ReviewContent participant={participant} observations={observations} setObservations={setObservations} dimensions={dimensions} dimension={dimension} setDimension={setDimension} answers={answers} error={error} success={success} saving={saving} save={save} />}

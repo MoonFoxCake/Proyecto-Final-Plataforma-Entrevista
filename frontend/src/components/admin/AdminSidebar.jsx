@@ -24,6 +24,12 @@ export const ADMIN_SECTIONS = [
     '▥',
   ],
   [
+    'question-bank',
+    'Banco de Preguntas',
+    'Grupos versionados del Módulo A',
+    '▤',
+  ],
+  [
     'macrocasos',
     'Banco de Macrocasos',
     'Escenarios utilizados en la Fase 2',

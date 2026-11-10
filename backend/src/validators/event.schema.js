@@ -51,7 +51,6 @@ const reviewSchema = z.object({
   reviewed: z.boolean().optional().default(false),
 }).strict();
 
-const DEMO_QUESTION_IDS = ['demo-a-1', 'demo-a-2', 'demo-a-3', 'demo-a-4'];
 const accessToken = z.string().regex(/^[A-Za-z0-9_-]{43}$/);
 // Module A sends `answers` (Likert). Module B answers are saved stage by
 // stage (`macrocaseActionSchema`), so its final submission only confirms
@@ -62,7 +61,7 @@ const submissionSchema = z.object({
   answers: z.array(z.object({
     questionId: z.string().trim().min(1).max(120),
     value: z.number().int().min(1).max(5),
-  }).strict()).min(0).max(20).optional(),
+  }).strict()).min(0).max(100).optional(),
   finalize: z.literal(true).optional(),
 }).strict().superRefine((data, context) => {
   if (Boolean(data.answers) === Boolean(data.finalize)) {

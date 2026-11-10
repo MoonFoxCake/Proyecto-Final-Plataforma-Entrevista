@@ -1,3 +1,6 @@
+const FirestoreQuestionGroupRepository = require('../repositories/firestore/FirestoreQuestionGroupRepository');
+const InMemoryQuestionGroupRepository = require('../repositories/in-memory/InMemoryQuestionGroupRepository');
+const QuestionBankService = require('../services/QuestionBankService');
 // Firestore repositories
 const FirestoreUserRepository = require('../repositories/firestore/FirestoreUserRepository');
 const FirestoreOrganizationRepository = require('../repositories/firestore/FirestoreOrganizationRepository');
@@ -63,6 +66,7 @@ const supabaseAudioStorage = {
 function buildRepositories(type) {
   if (type === 'memory') {
     return {
+      questionGroupRepo: new InMemoryQuestionGroupRepository(),
       userRepo: new InMemoryUserRepository(),
       organizationRepo: new InMemoryOrganizationRepository(),
       eventRepo: new InMemoryEventRepository(),
@@ -76,6 +80,7 @@ function buildRepositories(type) {
   }
 
   return {
+    questionGroupRepo: new FirestoreQuestionGroupRepository(),
     userRepo: new FirestoreUserRepository(),
     organizationRepo: new FirestoreOrganizationRepository(),
     eventRepo: new FirestoreEventRepository(),
@@ -104,7 +109,8 @@ function buildRepositories(type) {
  */
 function createContainer(type = 'firestore') {
   const repos = buildRepositories(type);
-  const eventService = new EventService(repos.eventRepo, repos.organizationRepo);
+  const questionBankService = new QuestionBankService(repos.questionGroupRepo);
+  const eventService = new EventService(repos.eventRepo, repos.organizationRepo, questionBankService);
   const candidateService = new CandidateService(repos.candidateRepo, eventService);
   const emailService = new ResendEmailService({
     apiKey: process.env.RESEND_API_KEY,
@@ -168,6 +174,7 @@ function createContainer(type = 'firestore') {
 
   return {
     repos,
+    questionBankService,
     accessCredentialService,
     onsiteApplicationService,
     onsiteAccessService,

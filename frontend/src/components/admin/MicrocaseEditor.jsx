@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { MicrocaseDialog } from './MicrocaseDialog.jsx';
+import { CaseBankDialog, CaseEditorSteps } from './CaseBankDialog.jsx';
 import { SpinnerIcon } from '../auth/icons.jsx';
 import { blankMicrocase, editForm, isReady, microcasePayload, moveItem, newQuestion, newSection, questionCount, validateMicrocase } from '../../pages/adminMicrocases.js';
 
@@ -41,7 +41,7 @@ export function MicrocaseEditor({ item, onClose, onSave }) {
     finally { setSaving(false); }
   };
 
-  return <MicrocaseDialog wide title={item ? 'Editar microcaso' : 'Nuevo microcaso'} description="Crea una historia y organiza el banco de preguntas por habilidades." onClose={requestClose} busy={saving}
+  return <CaseBankDialog wide title={item ? 'Editar microcaso' : 'Nuevo microcaso'} description="Crea una historia y organiza el banco de preguntas por habilidades." onClose={requestClose} busy={saving}
     footer={<>
       {error && <p role="alert" className="mb-3 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</p>}
       {discard ? <div role="alert" className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"><p className="font-semibold">Tienes cambios sin guardar.</p><p className="mt-1">¿Quieres descartarlos y cerrar el editor?</p><div className="mt-3 flex flex-wrap gap-2"><button type="button" onClick={() => setDiscard(false)} className={SECONDARY}>Seguir editando</button><button type="button" onClick={onClose} className="rounded-xl bg-red-700 px-4 py-2.5 font-semibold text-white">Descartar cambios</button></div></div>
@@ -51,10 +51,7 @@ export function MicrocaseEditor({ item, onClose, onSave }) {
         </div></div>}
     </>}>
     <div ref={content}>
-      <nav aria-label="Pasos del editor" className="mb-6 grid grid-cols-3 gap-2">
-        {STEPS.map((label, index) => <button key={label} type="button" disabled={saving} onClick={() => go(index)} aria-current={step === index ? 'step' : undefined}
-          className={`rounded-xl border px-2 py-3 text-left text-xs font-semibold sm:px-4 ${step === index ? 'border-[#A7E4DE] bg-[#E0F7F6] text-[#087D79]' : 'border-[#E5EAF0] text-[#64748B] hover:bg-[#F7F9FC]'}`}><span className="mb-1 block text-[10px] uppercase tracking-wide">Paso {index + 1}</span>{label}</button>)}
-      </nav>
+      <CaseEditorSteps steps={STEPS} current={step} onChange={go} busy={saving} />
       <fieldset disabled={saving} className="min-w-0">
         {step === 0 && <div className="space-y-5">
           <div><h3 className="font-display text-lg font-bold">Información general</h3><p className="mt-1 text-sm text-[#64748B]">Identifica el caso y define el tiempo total de evaluación.</p></div>
@@ -96,5 +93,5 @@ export function MicrocaseEditor({ item, onClose, onSave }) {
         </div>}
       </fieldset>
     </div>
-  </MicrocaseDialog>;
+  </CaseBankDialog>;
 }

@@ -3,8 +3,9 @@ const { MODALITIES, MODULES } = require('../utils/constants');
 const { toAppointment } = require('../utils/eventModality');
 
 class EventService {
-  constructor(eventRepo, organizationRepo) {
+  constructor(eventRepo, organizationRepo, questionBankService) {
     this.eventRepo = eventRepo;
+    this.questionBankService = questionBankService;
     this.organizationRepo = organizationRepo;
   }
 
@@ -30,7 +31,9 @@ class EventService {
     const modules = ['A'];
     if (data.incluirModuloB && allowedModules.includes('B')) modules.push('B');
     if (data.incluirModuloC && allowedModules.includes('C')) modules.push('C');
+    const instrument = this.questionBankService ? await this.questionBankService.pickSnapshot() : null;
     const base = {
+      ...(instrument ? { moduleA: { instrument, assignedAt: new Date().toISOString() } } : {}),
       orgId,
       name: data.nombre.trim(),
       position: data.puesto.trim(),

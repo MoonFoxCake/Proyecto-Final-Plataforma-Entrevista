@@ -209,7 +209,7 @@ export function OnsiteAccessPage() {
       {phase === 'welcome' && access && <WelcomeScreen access={access} onStart={() => setPhase('evaluation')} />}
       {phase === 'evaluation' && access && (access.module === 'B'
         ? <MacrocaseEvaluation source={macrocaseSource} onCompleted={handleCompleted} onClosed={handleClosed} />
-        : <LikertQuestionnaire token={token} onCompleted={handleCompleted} onClosed={handleClosed} />)}
+        : <LikertQuestionnaire token={token} questionnaire={access.questionnaire} onCompleted={handleCompleted} onClosed={handleClosed} />)}
       {(phase === 'finished' || phase === 'closed') && <EndScreen key={phase} variant={phase} onReset={reset} />}
     </div>
   );

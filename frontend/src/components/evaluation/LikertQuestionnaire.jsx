@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { submitEvaluation } from '../../services/invitationService.js';
 import { CompletedPanel, ConfirmPanel, QuestionProgress } from './EvaluationPanels.jsx';
 
-const QUESTIONS = [
+const LEGACY_QUESTIONS = [
   { id: 'demo-a-1', text: 'Cuando trabajo con otras personas, comunico mis ideas de forma clara y respetuosa.' },
   { id: 'demo-a-2', text: 'Ante un cambio inesperado, busco alternativas antes de detener mi trabajo.' },
   { id: 'demo-a-3', text: 'Cuando cometo un error, lo reconozco y tomo acciones para corregirlo.' },
@@ -21,7 +21,8 @@ const OPTIONS = [
  * `onCompleted`: called once the evaluation was submitted (e.g. to reset a
  * shared computer). `onClosed(state)`: the access stopped being valid.
  */
-export function LikertQuestionnaire({ token, onCompleted, onClosed }) {
+export function LikertQuestionnaire({ token, onCompleted, onClosed, questionnaire, preview = false }) {
+  const questions = questionnaire?.questions || LEGACY_QUESTIONS;
   const [questionIndex, setQuestionIndex] = useState(0);
   const [answers, setAnswers] = useState([]);
   const [selected, setSelected] = useState(null);
@@ -29,13 +30,13 @@ export function LikertQuestionnaire({ token, onCompleted, onClosed }) {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
   const [submittedAt, setSubmittedAt] = useState(null);
-  const question = QUESTIONS[questionIndex];
+  const question = questions[questionIndex];
 
   const continueForward = () => {
     if (selected === null) return;
     const nextAnswers = [...answers, { questionId: question.id, value: selected + 1 }];
     setAnswers(nextAnswers);
-    if (questionIndex === QUESTIONS.length - 1) {
+    if (questionIndex === questions.length - 1) {
       setPhase('confirm');
       return;
     }
@@ -47,6 +48,7 @@ export function LikertQuestionnaire({ token, onCompleted, onClosed }) {
     setSubmitting(true);
     setSubmitError('');
     try {
+      if (preview) { setSubmittedAt(new Date().toISOString()); setPhase('completed'); return; }
       const result = await submitEvaluation(token, answers);
       if (result?.state !== 'COMPLETED') {
         if (onClosed && result?.state) onClosed(result.state);
@@ -63,17 +65,19 @@ export function LikertQuestionnaire({ token, onCompleted, onClosed }) {
     }
   };
 
-  if (phase === 'completed') return <CompletedPanel submittedAt={submittedAt} />;
+  if (!questions.length) return <p role='alert' className='p-6 text-sm text-red-700'>No hay preguntas asignadas. Solicita ayuda a la empresa.</p>;
+  if (phase === 'completed' && preview) return <section className='mx-auto max-w-xl rounded-2xl border border-[#A7E4DE] bg-[#F0FFFE] p-8 text-center'><h1 className='font-display text-xl font-bold text-[#10233A]'>Vista previa completada</h1><p className='mt-3 text-sm text-[#087D79]'>Las respuestas no se guardaron.</p></section>;
+  if (phase === 'completed') return <CompletedPanel submittedAt={submittedAt} footnote='Evaluación del Módulo A completada' />;
   if (phase === 'confirm') {
     return <ConfirmPanel submitting={submitting} error={submitError} onSubmit={sendAnswers} />;
   }
 
   return (
     <main className='mx-auto max-w-3xl px-5 py-10 sm:py-16'>
-      <QuestionProgress moduleLabel='Evaluación' current={questionIndex + 1} total={QUESTIONS.length} />
+      <QuestionProgress moduleLabel='Evaluación' current={questionIndex + 1} total={questions.length} />
 
       <section className='rounded-2xl border border-[#D9E2EA] bg-white p-6 shadow-sm sm:p-8'>
-        <span className='inline-flex rounded-full bg-[#E8F7F6] px-3 py-1 text-[11px] font-bold uppercase tracking-wide text-[#0A8F8A]'>Contenido demostrativo</span>
+        <span className='inline-flex rounded-full bg-[#E8F7F6] px-3 py-1 text-[11px] font-bold uppercase tracking-wide text-[#0A8F8A]'>{preview ? 'Vista previa · No se guardan respuestas' : 'Módulo A'}</span>
         <h1 className='mt-5 text-lg font-semibold leading-8 text-[#10233A]'>{question.text}</h1>
         <p className='mt-2 text-sm text-[#7C8AA0]'>Selecciona qué tan de acuerdo estás con esta afirmación.</p>
 
@@ -108,9 +112,9 @@ export function LikertQuestionnaire({ token, onCompleted, onClosed }) {
       </section>
 
       <div className='mt-6 flex justify-end'>
-        <button type='button' onClick={continueForward} disabled={selected === null} className='rounded-xl bg-[#13A9A4] px-6 py-3 text-sm font-semibold text-white transition hover:bg-[#0F8F8B] disabled:cursor-not-allowed disabled:bg-[#BCC7D1]'>{questionIndex === QUESTIONS.length - 1 ? 'Finalizar evaluación →' : 'Continuar →'}</button>
+        <button type='button' onClick={continueForward} disabled={selected === null} className='rounded-xl bg-[#13A9A4] px-6 py-3 text-sm font-semibold text-white transition hover:bg-[#0F8F8B] disabled:cursor-not-allowed disabled:bg-[#BCC7D1]'>{questionIndex === questions.length - 1 ? 'Finalizar evaluación →' : 'Continuar →'}</button>
       </div>
-      <p className='mt-8 text-center text-xs text-[#7C8AA0]'>Contenido demostrativo · Las respuestas no generan una puntuación</p>
+      <p className='mt-8 text-center text-xs text-[#7C8AA0]'>{preview ? 'Simulación: las respuestas no se guardan.' : 'Responde según tu criterio personal.'}</p>
     </main>
   );
 }

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { SpinnerIcon } from '../components/auth/icons.jsx';
+import { CaseBankDialog, CaseEditorSteps } from '../components/admin/CaseBankDialog.jsx';
 
 import {
   getMacroCases,
@@ -23,6 +24,9 @@ const EMPTY_FORM = {
 };
 
 const MAX_NARRATIVE_LENGTH = 8000;
+const PAGE_SIZE = 6;
+const EDITOR_STEPS = ['Información', 'Respuestas', 'Secciones y preguntas'];
+const normalizeSearch = (value) => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('es');
 
 const newId = (prefix) => `${prefix}-${globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`}`;
 
@@ -36,6 +40,8 @@ const FILTERS = [
   ['all', 'Todos'],
   ['active', 'Activos'],
   ['inactive', 'Inactivos'],
+  ['incomplete', 'Por completar'],
+  ['voice-error', 'Error de voz'],
 ];
 
 const inputClass = 'mt-1.5 w-full rounded-xl border border-[#D9E2EA] bg-white px-3.5 py-2.5 text-sm text-[#10233A] placeholder:text-[#9AA8B8] focus:border-[#0AADA8] focus:outline-none focus:ring-2 focus:ring-[#0AADA8]/20';
@@ -204,13 +210,13 @@ function MacrocaseCard({ item, busy, expanded, onToggleExpanded, onToggleActive,
   const unusable = item.active && usableSections(item).length === 0;
 
   return (
-    <article className={`flex flex-col rounded-2xl border bg-white shadow-sm transition ${item.active ? 'border-[#BFE5E2]' : 'border-[#DDE5EC]'}`}>
+    <article aria-label={item.name} className={`flex min-w-0 flex-col rounded-2xl border bg-white shadow-sm transition ${item.active ? 'border-[#BFE5E2]' : 'border-[#DDE5EC]'}`}>
       <div className="flex items-start justify-between gap-4 p-5">
         <div className="min-w-0">
-          <h2 className="truncate font-display text-lg font-bold text-[#101828]">{item.name}</h2>
+          <h2 className="break-words font-display text-lg font-bold text-[#101828]">{item.name}</h2>
           <p className="mt-1 line-clamp-2 min-h-[2.5rem] text-sm leading-5 text-[#64748B]">{item.description || 'Sin descripción'}</p>
         </div>
-        <ActiveSwitch active={item.active} busy={busy} name={item.name} onToggle={onToggleActive} />
+        <ActiveSwitch active={item.active} busy={busy || (!item.active && usableSections(item).length === 0)} name={item.name} onToggle={onToggleActive} />
       </div>
 
       <div className="flex flex-wrap gap-2 px-5">
@@ -222,12 +228,12 @@ function MacrocaseCard({ item, busy, expanded, onToggleExpanded, onToggleActive,
 
       {/* Same height whatever the status, so cards in a row line up. */}
       <div className="mt-3 flex h-10 items-center px-5">
-        {summary.incomplete > 0 ? (
+        {summary.incomplete > 0 || sections.length === 0 ? (
           <p
             title={unusable ? 'Está activo, pero no se asignará a ningún evento hasta que tenga al menos una sección con texto y preguntas.' : 'Las secciones sin texto o sin preguntas, y las preguntas sin texto, no se muestran a los candidatos.'}
             className="w-full truncate rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs text-amber-800"
           >
-            {plural(summary.incomplete, 'elemento incompleto', 'elementos incompletos')} · {unusable ? 'no se asignará a eventos' : 'no se usarán'}. Edita para completarlo.
+            {sections.length === 0 ? 'Sin secciones' : plural(summary.incomplete, 'elemento incompleto', 'elementos incompletos')} · {unusable ? 'no se asignará a eventos' : 'revisa el contenido'}. Edita para completarlo.
           </p>
         ) : summary.errors > 0 ? (
           <p title="Edita y guarda el macrocaso para volver a generar la voz." className="w-full truncate rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs text-red-700">{summary.errors} {summary.errors === 1 ? 'voz' : 'voces'} con error · edita y guarda para reintentar</p>
@@ -262,7 +268,7 @@ function MacrocaseCard({ item, busy, expanded, onToggleExpanded, onToggleActive,
                   <div className="flex items-start gap-3">
                     <div className="min-w-0 flex-1">
                       <p className="text-xs font-bold uppercase tracking-wide text-[#0A8F8A]">Sección {sectionIndex + 1}{section.title ? ` · ${section.title}` : ''}</p>
-                      <p className="mt-1 line-clamp-2 text-sm leading-6 text-[#475569]">{section.narrative || <span className="italic text-[#94A3B8]">Sin texto narrativo</span>}</p>
+                      <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-6 text-[#475569]">{section.narrative || <span className="italic text-[#94A3B8]">Sin texto narrativo</span>}</p>
                       <div className="mt-1"><VoiceBadge question={narrative} /></div>
                     </div>
                     {narrative.audioUrl && (
@@ -295,10 +301,10 @@ function MacrocaseCard({ item, busy, expanded, onToggleExpanded, onToggleActive,
       </div>
 
       <div className="mt-auto flex items-center justify-between gap-2 border-t border-[#EEF2F6] px-5 py-3">
-        <button type="button" onClick={onDelete} className="rounded-lg px-2 py-1.5 text-xs font-semibold text-[#B42318] hover:bg-red-50">Eliminar</button>
+        <button type="button" disabled={busy} onClick={onDelete} className="rounded-lg px-2 py-1.5 text-xs font-semibold text-[#B42318] hover:bg-red-50">Eliminar</button>
         <div className="flex gap-2">
           <Link to={`/admin/macrocases/${item.id}/preview`} className="rounded-xl border border-[#D9E2EA] px-3.5 py-2 text-xs font-semibold text-[#334E68] hover:border-[#0AADA8] hover:text-[#087D79]">Vista previa</Link>
-          <button type="button" onClick={onEdit} className="rounded-xl bg-[#0AADA8] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[#089490]">Editar</button>
+          <button type="button" disabled={busy} onClick={onEdit} className="rounded-xl bg-[#0AADA8] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[#089490]">Editar</button>
         </div>
       </div>
     </article>
@@ -359,26 +365,49 @@ export function AdminMacrocasesPage() {
   const [expandedId, setExpandedId] = useState(null);
   const [busyId, setBusyId] = useState(null);
   const audio = useAudioPreview();
+  const [step, setStep] = useState(0);
+  const [discard, setDiscard] = useState(false);
+  const [undo, setUndo] = useState(null);
+  const [focusField, setFocusField] = useState(null);
+  const [confirmation, setConfirmation] = useState(null);
+  const [confirmationError, setConfirmationError] = useState('');
+  const [loadError, setLoadError] = useState('');
+  const [page, setPage] = useState(1);
+  const baseline = useRef('');
+  const persistedId = useRef(null);
+  const formBody = useRef(null);
+  const requestId = useRef(0);
+
+  useEffect(() => {
+    if (focusField) { document.getElementById(focusField)?.focus(); setFocusField(null); }
+  }, [step, focusField]);
+
 
   const loadMacroCases = async () => {
+    const id = ++requestId.current;
+    setLoadError('');
     try {
       setLoading(true);
-      setMacrocasos(await getMacroCases());
+      const items = await getMacroCases();
+      if (id === requestId.current) setMacrocasos(items);
     } catch (error) {
-      setNotice({ tone: 'error', text: error.message });
+      if (id === requestId.current) setLoadError(error.message || 'No se pudieron cargar los macrocasos.');
     } finally {
-      setLoading(false);
+      if (id === requestId.current) setLoading(false);
     }
   };
 
   useEffect(() => {
     loadMacroCases();
+    return () => { requestId.current += 1; };
   }, []);
 
   const counts = useMemo(() => ({
     all: macrocasos.length,
     active: macrocasos.filter((item) => item.active).length,
     inactive: macrocasos.filter((item) => !item.active).length,
+    incomplete: macrocasos.filter((item) => !sectionsOf(item).length || voiceSummary(item).incomplete > 0).length,
+    'voice-error': macrocasos.filter((item) => voiceSummary(item).errors > 0).length,
   }), [macrocasos]);
 
   const usableActive = macrocasos.filter((item) => item.active && usableSections(item).length > 0).length;
@@ -394,14 +423,24 @@ export function AdminMacrocasesPage() {
   }, { ready: 0, total: 0, errors: 0, sections: 0, questions: 0 });
 
   const visible = macrocasos
-    .filter((item) => (filter === 'all' ? true : filter === 'active' ? item.active : !item.active))
-    .filter((item) => `${item.name} ${item.description || ''}`.toLowerCase().includes(search.trim().toLowerCase()))
+    .filter((item) => filter === 'all' || (filter === 'active' ? item.active : filter === 'inactive' ? !item.active : filter === 'incomplete' ? !sectionsOf(item).length || voiceSummary(item).incomplete > 0 : voiceSummary(item).errors > 0))
+    .filter((item) => normalizeSearch([item.name, item.description, ...sectionsOf(item).map((section) => section.title)].join(' ')).includes(normalizeSearch(search.trim())))
     .sort((a, b) => Number(b.active) - Number(a.active) || a.name.localeCompare(b.name, 'es'));
+  const pages = Math.max(1, Math.ceil(visible.length / PAGE_SIZE));
+  const currentPage = Math.min(page, pages);
+  const paginated = visible.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  const clearFilters = () => { setFilter('all'); setSearch(''); setPage(1); };
+  const upsert = (saved) => setMacrocasos((current) => current.some((item) => item.id === saved.id)
+    ? current.map((item) => item.id === saved.id ? saved : item) : [saved, ...current]);
 
   const openCreate = () => {
     audio.stop();
     setEditing(null);
-    setForm({ ...EMPTY_FORM, sections: [emptySection()] });
+    const next = { ...EMPTY_FORM, sections: [emptySection()] };
+    setForm(next);
+    baseline.current = JSON.stringify(next);
+    persistedId.current = null;
+    setStep(0); setDiscard(false); setUndo(null);
     setFormError('');
     setShowForm(true);
   };
@@ -409,7 +448,7 @@ export function AdminMacrocasesPage() {
   const openEdit = (item) => {
     audio.stop();
     setEditing(item);
-    setForm({
+    const next = {
       name: item.name || '',
       description: item.description || '',
       instructions: item.instructions || '',
@@ -423,7 +462,11 @@ export function AdminMacrocasesPage() {
         narrativeAudioFile: null,
         questions: section.questions.map((question) => ({ ...question, audioFile: null })),
       })),
-    });
+    };
+    setForm(next);
+    baseline.current = JSON.stringify(next);
+    persistedId.current = item.id;
+    setStep(0); setDiscard(false); setUndo(null);
     setFormError('');
     setShowForm(true);
   };
@@ -436,18 +479,29 @@ export function AdminMacrocasesPage() {
     setFormError('');
   };
 
+  const requestCloseForm = () => {
+    if (saving) return;
+    audio.stop();
+    if (JSON.stringify(form) !== baseline.current) setDiscard(true); else closeForm();
+  };
+  const goToStep = (target) => {
+    audio.stop(); setStep(target); setFormError(''); setUndo(null);
+    formBody.current?.closest('dialog')?.scrollTo?.({ top: 0 });
+  };
+
   const updateField = (field, value) => {
+    setUndo(null); setFormError('');
     setForm((current) => ({
       ...current,
       [field]: value,
     }));
   };
 
-  const updateSections = (change) => setForm((current) => ({ ...current, sections: change(current.sections) }));
+  const updateSections = (change) => { setUndo(null); setFormError(''); setForm((current) => ({ ...current, sections: change(current.sections) })); };
 
   const addSection = () => updateSections((sections) => [...sections, emptySection()]);
 
-  const removeSection = (sectionId) => updateSections((sections) => sections.filter((section) => section.id !== sectionId));
+  const removeSection = (sectionId) => { updateSections((sections) => sections.filter((section) => section.id !== sectionId)); setUndo(form); };
 
   const moveSection = (sectionId, offset) => updateSections((sections) => {
     const index = sections.findIndex((section) => section.id === sectionId);
@@ -468,7 +522,7 @@ export function AdminMacrocasesPage() {
 
   const addQuestion = (sectionId) => updateQuestions(sectionId, (questions) => [...questions, emptyQuestion()]);
 
-  const removeQuestion = (sectionId, questionId) => updateQuestions(sectionId, (questions) => questions.filter((question) => question.id !== questionId));
+  const removeQuestion = (sectionId, questionId) => { updateQuestions(sectionId, (questions) => questions.filter((question) => question.id !== questionId)); setUndo(form); };
 
   const updateQuestion = (sectionId, questionId, changes) => updateQuestions(sectionId, (questions) => questions.map((question) => (
     question.id === questionId ? { ...question, ...changes } : question
@@ -500,27 +554,27 @@ export function AdminMacrocasesPage() {
   };
 
   const validate = () => {
-    if (!form.name.trim()) return 'Indica el nombre del macrocaso.';
-    if (!(Number(form.maxCharacters) > 0)) return 'El máximo de caracteres debe ser mayor que 0.';
-    if (!(Number(form.defaultTimeLimit) >= 0)) return 'El tiempo por pregunta no puede ser negativo.';
-    if (form.sections.length === 0) return 'Agrega al menos una sección.';
+    if (!form.name.trim()) return { step: 0, field: 'macrocase-name', message: 'Indica el nombre del macrocaso.' };
+    if (!Number.isInteger(Number(form.maxCharacters)) || Number(form.maxCharacters) < 1) return { step: 1, field: 'macrocase-characters', message: 'El máximo de caracteres debe ser un número entero mayor que 0.' };
+    if (form.defaultTimeLimit === '' || !Number.isInteger(Number(form.defaultTimeLimit)) || Number(form.defaultTimeLimit) < 0) return { step: 1, field: 'macrocase-time', message: 'El tiempo por pregunta debe ser un número entero igual o mayor que 0.' };
+    if (form.sections.length === 0) return { step: 2, message: 'Agrega al menos una sección.' };
     for (const [index, section] of form.sections.entries()) {
-      if (!section.narrative.trim()) return `La sección ${index + 1} necesita su texto narrativo: es lo que lee y escucha el candidato.`;
-      if (section.questions.length === 0) return `La sección ${index + 1} necesita al menos una pregunta.`;
-      if (section.questions.some((question) => !question.text?.trim())) {
-        return `Cada pregunta de la sección ${index + 1} necesita su texto: es lo que lee el asistente y ve el candidato.`;
-      }
+      if (!section.narrative.trim()) return { step: 2, field: `narrative-${section.id}`, message: `La sección ${index + 1} necesita su texto narrativo: es lo que lee y escucha el candidato.` };
+      if (section.questions.length === 0) return { step: 2, message: `La sección ${index + 1} necesita al menos una pregunta.` };
+      const missing = section.questions.find((question) => !question.text?.trim());
+      if (missing) return { step: 2, field: `question-${missing.id}`, message: `Cada pregunta de la sección ${index + 1} necesita su texto: es lo que lee el asistente y ve el candidato.` };
     }
-    return '';
+    return null;
   };
 
   const saveMacrocase = async () => {
     const problem = validate();
     if (problem) {
-      setFormError(problem);
+      setFormError(problem.message); setStep(problem.step); setFocusField(problem.field);
       return;
     }
 
+    let contentSaved = false;
     try {
       setSaving(true);
       setFormError('');
@@ -546,7 +600,10 @@ export function AdminMacrocasesPage() {
         })),
       };
 
-      let saved = editing ? await updateMacroCase(editing.id, payload) : await createMacroCase(payload);
+      let saved = persistedId.current ? await updateMacroCase(persistedId.current, payload) : await createMacroCase(payload);
+      persistedId.current = saved.id;
+      contentSaved = true;
+      upsert(saved);
 
       for (const section of form.sections) {
         if (section.narrativeAudioFile) {
@@ -558,13 +615,15 @@ export function AdminMacrocasesPage() {
       }
 
       const failed = voiceSummary(saved).errors;
-      await loadMacroCases();
+      upsert(saved);
       closeForm();
+      clearFilters();
       setNotice(failed
         ? { tone: 'warning', text: `"${saved.name}" se guardó, pero ${failed === 1 ? 'una voz no pudo generarse' : `${failed} voces no pudieron generarse`}. Esos textos se leerán con la voz del navegador.` }
         : { tone: 'success', text: `"${saved.name}" se guardó correctamente.` });
     } catch (error) {
-      setFormError(error.message);
+      if (contentSaved) await loadMacroCases();
+      setFormError(contentSaved ? `El contenido se guardó, pero no se completó la carga de audio. Puedes reintentar sin crear otro macrocaso. ${error.message || ''}` : error.message || 'No se pudo guardar el macrocaso.');
     } finally {
       setSaving(false);
     }
@@ -583,20 +642,24 @@ export function AdminMacrocasesPage() {
     }
   };
 
-  const handleDelete = async (item) => {
-    const confirmed = window.confirm(
-      `¿Eliminar "${item.name}"? Esta acción no se puede deshacer. Los eventos que ya lo usan en su Módulo B no se verán afectados.`
-    );
-    if (!confirmed) return;
-
+  const askConfirmation = (item, kind) => {
+    audio.stop(); setConfirmationError(''); setConfirmation({ item, kind });
+  };
+  const confirmAction = async () => {
+    const { item, kind } = confirmation;
+    setBusyId(item.id); setConfirmationError('');
     try {
-      audio.stop();
-      await deleteMacroCase(item.id);
-      await loadMacroCases();
-      setNotice({ tone: 'success', text: `"${item.name}" se eliminó del banco.` });
-    } catch (error) {
-      setNotice({ tone: 'error', text: error.message });
-    }
+      if (kind === 'delete') {
+        await deleteMacroCase(item.id);
+        setMacrocasos((current) => current.filter((value) => value.id !== item.id));
+      } else {
+        const saved = await deactivateMacroCase(item.id);
+        upsert(saved);
+      }
+      setConfirmation(null);
+      setNotice({ tone: 'success', text: `"${item.name}" ${kind === 'delete' ? 'se eliminó del banco' : 'se desactivó'}.` });
+    } catch (error) { setConfirmationError(error.message || 'No se pudo completar la operación.'); }
+    finally { setBusyId(null); }
   };
 
   const noticeTone = {
@@ -610,11 +673,11 @@ export function AdminMacrocasesPage() {
       <div className="mx-auto max-w-6xl">
         <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#0AADA8]">Administración</p>
-            <h1 className="mt-2 font-display text-2xl font-bold text-[#101828]">Banco de macrocasos</h1>
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#0AADA8]">Fase B</p>
+            <h1 className="mt-2 font-display text-2xl font-bold text-[#101828]">Banco de Macrocasos</h1>
             <p className="mt-1 max-w-2xl text-sm text-[#64748B]">Los macrocasos activos forman el banco. Cuando una empresa envía el Módulo B, a su evento se le asigna uno al azar y todos sus candidatos reciben ese mismo caso.</p>
           </div>
-          <button type="button" onClick={openCreate} className="shrink-0 rounded-xl bg-[#0AADA8] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#089490]">+ Nuevo macrocaso</button>
+          <button type="button" onClick={openCreate} disabled={Boolean(busyId)} className="shrink-0 rounded-xl bg-[#0AADA8] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#089490]">+ Nuevo macrocaso</button>
         </div>
 
         {notice && (
@@ -624,7 +687,7 @@ export function AdminMacrocasesPage() {
           </div>
         )}
 
-        {!loading && (
+        {!loading && !loadError && (
           <div className="mt-6 grid gap-4 sm:grid-cols-3">
             <StatCard label="En el banco (activos)" value={`${counts.active} de ${counts.all}`} hint={usableActive < counts.active ? `${counts.active - usableActive} sin secciones completas` : 'Disponibles para asignar'} />
             <StatCard label="Secciones y preguntas" value={`${voices.sections} · ${voices.questions}`} hint="Entre todos los macrocasos" />
@@ -632,20 +695,19 @@ export function AdminMacrocasesPage() {
           </div>
         )}
 
-        {!loading && counts.all > 0 && usableActive === 0 && (
+        {!loading && !loadError && counts.all > 0 && usableActive === 0 && (
           <p className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">No hay macrocasos activos con secciones completas: las empresas no podrán enviar el Módulo B. Activa al menos uno.</p>
         )}
 
-        {!loading && counts.all > 0 && (
+        {!loading && !loadError && counts.all > 0 && (
           <div className="mt-6 flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
-            <div className="inline-flex rounded-xl border border-[#DDE5EC] bg-white p-1" role="tablist" aria-label="Filtrar macrocasos">
+            <div className="inline-flex flex-wrap gap-1 rounded-xl border border-[#DDE5EC] bg-white p-1" role="group" aria-label="Filtrar macrocasos">
               {FILTERS.map(([id, label]) => (
                 <button
                   key={id}
                   type="button"
-                  role="tab"
-                  aria-selected={filter === id}
-                  onClick={() => setFilter(id)}
+                  aria-pressed={filter === id}
+                  onClick={() => { setFilter(id); setPage(1); }}
                   className={`rounded-lg px-3.5 py-1.5 text-sm font-semibold transition ${filter === id ? 'bg-[#0AADA8] text-white' : 'text-[#475569] hover:bg-[#F6F9FC]'}`}
                 >
                   {label} <span className={filter === id ? 'text-white/80' : 'text-[#94A3B8]'}>{counts[id]}</span>
@@ -655,8 +717,8 @@ export function AdminMacrocasesPage() {
             <input
               type="search"
               value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Buscar por nombre…"
+              onChange={(event) => { setSearch(event.target.value); setPage(1); }}
+              placeholder="Nombre, descripción o sección…"
               aria-label="Buscar macrocaso"
               className="w-full rounded-xl border border-[#DDE5EC] bg-white px-3.5 py-2 text-sm focus:border-[#0AADA8] focus:outline-none focus:ring-2 focus:ring-[#0AADA8]/20 sm:w-64"
             />
@@ -665,6 +727,8 @@ export function AdminMacrocasesPage() {
 
         {loading ? (
           <div className="flex min-h-64 items-center justify-center text-sm text-[#64748B]"><SpinnerIcon className="mr-2 h-5 w-5 animate-spin" /> Cargando macrocasos...</div>
+        ) : loadError ? (
+          <div role="alert" className="mt-6 rounded-2xl border border-red-200 bg-red-50 p-8 text-center"><p className="text-sm text-red-700">{loadError}</p><button type="button" onClick={loadMacroCases} className="mt-4 rounded-xl border border-red-200 bg-white px-4 py-2.5 text-sm font-semibold text-red-700">Reintentar</button></div>
         ) : counts.all === 0 ? (
           <div className="mt-8 rounded-2xl border border-dashed border-[#CBD5E1] bg-white p-12 text-center">
             <p className="font-semibold text-[#334155]">Aún no hay macrocasos</p>
@@ -672,42 +736,50 @@ export function AdminMacrocasesPage() {
             <button type="button" onClick={openCreate} className="mt-5 rounded-xl bg-[#0AADA8] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#089490]">+ Nuevo macrocaso</button>
           </div>
         ) : visible.length === 0 ? (
-          <div className="mt-6 rounded-2xl border border-dashed border-[#CBD5E1] bg-white p-10 text-center text-sm text-[#94A3B8]">Ningún macrocaso coincide con el filtro.</div>
+          <div className="mt-6 rounded-2xl border border-dashed border-[#CBD5E1] bg-white p-10 text-center text-sm text-[#94A3B8]">Ningún macrocaso coincide con el filtro. <button type="button" onClick={clearFilters} className="ml-2 font-semibold text-[#087D79] underline">Limpiar filtros</button></div>
         ) : (
           <div className="mt-6 grid items-start gap-5 lg:grid-cols-2">
-            {visible.map((item) => (
+            {paginated.map((item) => (
               <MacrocaseCard
                 key={item.id}
                 item={item}
-                busy={busyId === item.id}
+                busy={Boolean(busyId)}
                 expanded={expandedId === item.id}
                 onToggleExpanded={() => setExpandedId((current) => (current === item.id ? null : item.id))}
-                onToggleActive={() => toggleActive(item)}
+                onToggleActive={() => item.active ? askConfirmation(item, 'deactivate') : toggleActive(item)}
                 onEdit={() => openEdit(item)}
-                onDelete={() => handleDelete(item)}
+                onDelete={() => askConfirmation(item, 'delete')}
                 audio={audio}
               />
             ))}
           </div>
         )}
+        {!loading && !loadError && counts.all > 0 && <div className="mt-5 flex flex-wrap items-center justify-between gap-3 text-xs text-[#64748B]">
+          <p role="status">{visible.length} de {counts.all} macrocasos · Activos primero</p>
+          {visible.length > 0 && (search || filter !== 'all') && <button type="button" onClick={clearFilters} className="font-semibold text-[#087D79] underline">Limpiar filtros</button>}
+          {pages > 1 && <nav aria-label="Páginas de macrocasos" className="flex items-center gap-3"><span>Página {currentPage} de {pages}</span><button type="button" disabled={currentPage === 1} onClick={() => setPage(currentPage - 1)} className="rounded-xl border border-[#D9E2EA] bg-white px-3 py-2 font-semibold disabled:opacity-40">Anterior</button><button type="button" disabled={currentPage === pages} onClick={() => setPage(currentPage + 1)} className="rounded-xl border border-[#D9E2EA] bg-white px-3 py-2 font-semibold disabled:opacity-40">Siguiente</button></nav>}
+        </div>}
       </div>
 
       {showForm && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-[#0B1A2B]/50 p-4" role="dialog" aria-modal="true" aria-labelledby="macrocase-form-title">
-          <div className="mx-auto my-6 max-w-3xl rounded-2xl bg-white shadow-2xl">
-            <div className="flex items-start justify-between gap-4 border-b border-[#EEF2F6] px-6 py-5">
-              <div>
-                <h2 id="macrocase-form-title" className="font-display text-xl font-bold text-[#101828]">{editing ? 'Editar macrocaso' : 'Nuevo macrocaso'}</h2>
-                <p className="mt-0.5 text-xs text-[#64748B]">Al guardar se genera la voz de las narraciones y preguntas nuevas o modificadas.</p>
-              </div>
-              <button type="button" onClick={closeForm} aria-label="Cerrar" className="rounded-lg p-1 text-2xl leading-none text-[#94A3B8] hover:bg-[#F6F9FC] hover:text-[#475569]">×</button>
-            </div>
-
-            <div className="space-y-8 px-6 py-6">
-              <FormSection title="Información general">
+        <CaseBankDialog wide title={editing ? 'Editar macrocaso' : 'Nuevo macrocaso'} description="Organiza el caso por secciones. Las voces nuevas o modificadas se generan al guardar." onClose={requestCloseForm} busy={saving}
+          footer={<>
+            {formError && <p className="mb-3 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700" role="alert">{formError}</p>}
+            {discard ? <div role="alert" className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"><p className="font-semibold">Tienes cambios sin guardar.</p><p className="mt-1">¿Quieres descartarlos y cerrar el editor?</p><div className="mt-3 flex flex-wrap gap-2"><button type="button" onClick={() => setDiscard(false)} className="rounded-xl border border-[#D9E2EA] px-4 py-2.5 font-semibold">Seguir editando</button><button type="button" onClick={closeForm} className="rounded-xl bg-red-700 px-4 py-2.5 font-semibold text-white">Descartar cambios</button></div></div>
+              : <div className="flex flex-wrap items-center justify-between gap-3">
+                <button type="button" disabled={saving} onClick={requestCloseForm} className="rounded-xl border border-[#D9E2EA] px-4 py-2.5 text-sm font-semibold text-[#475569] hover:bg-[#F6F9FC] disabled:opacity-40">Cancelar</button>
+                <div className="flex flex-wrap gap-2">
+                  {step > 0 && <button type="button" aria-label="Anterior" disabled={saving} onClick={() => goToStep(step - 1)} className="rounded-xl border border-[#D9E2EA] px-4 py-2.5 text-sm font-semibold text-[#475569] disabled:opacity-40"><span aria-hidden="true" className="sm:hidden">←</span><span className="hidden sm:inline">Anterior</span></button>}
+                  {step < 2 ? <button type="button" onClick={() => goToStep(step + 1)} className="rounded-xl bg-[#0AADA8] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#089490]">Continuar →</button>
+                    : <button type="button" disabled={saving} onClick={saveMacrocase} aria-label={saving ? 'Guardando y generando voz' : editing ? 'Guardar cambios' : 'Crear macrocaso'} className="inline-flex items-center gap-2 rounded-xl bg-[#0AADA8] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#089490] disabled:opacity-50">{saving && <SpinnerIcon className="h-4 w-4 animate-spin" />}<span className="sm:hidden">{saving ? 'Guardando…' : editing ? 'Guardar' : 'Crear'}</span><span className="hidden sm:inline">{saving ? 'Guardando y generando voz…' : editing ? 'Guardar cambios' : 'Crear macrocaso'}</span></button>}
+                </div>
+              </div>}
+          </>}>
+            <div ref={formBody}><CaseEditorSteps steps={EDITOR_STEPS} current={step} onChange={goToStep} busy={saving} /><fieldset disabled={saving} className="min-w-0 space-y-6">
+              {step === 0 && <FormSection title="Información general">
                 <label className="block text-xs font-medium text-[#475569]">
                   Nombre
-                  <input value={form.name} onChange={(e) => updateField('name', e.target.value)} placeholder="Ej.: Caperucita Roja" className={inputClass} />
+                  <input id="macrocase-name" value={form.name} onChange={(e) => updateField('name', e.target.value)} placeholder="Ej.: Caperucita Roja" className={inputClass} />
                 </label>
                 <label className="block text-xs font-medium text-[#475569]">
                   Descripción breve <span className="font-normal text-[#94A3B8]">(solo para administradores)</span>
@@ -717,26 +789,27 @@ export function AdminMacrocasesPage() {
                   Instrucciones para el candidato <span className="font-normal text-[#94A3B8]">(opcional · se muestran en la pantalla de introducción)</span>
                   <textarea value={form.instructions} onChange={(e) => updateField('instructions', e.target.value)} maxLength={2000} rows={3} placeholder="Ej.: Imagina que trabajas en…" className={`${inputClass} resize-y leading-6`} />
                 </label>
-              </FormSection>
+              </FormSection>}
 
-              <FormSection title="Respuestas" description="Se aplica a todas las preguntas de este macrocaso.">
+              {step === 1 && <FormSection title="Respuestas" description="Se aplica a todas las preguntas de este macrocaso.">
                 <div className="grid gap-4 sm:grid-cols-2">
                   <label className="block text-xs font-medium text-[#475569]">
                     Máximo de caracteres por respuesta
-                    <input type="number" min="1" value={form.maxCharacters} onChange={(e) => updateField('maxCharacters', e.target.value)} className={inputClass} />
+                    <input id="macrocase-characters" type="number" min="1" step="1" value={form.maxCharacters} onChange={(e) => updateField('maxCharacters', e.target.value)} className={inputClass} />
                   </label>
                   <label className="block text-xs font-medium text-[#475569]">
                     Tiempo por pregunta (segundos)
-                    <input type="number" min="0" step="30" value={form.defaultTimeLimit} onChange={(e) => updateField('defaultTimeLimit', e.target.value)} className={inputClass} />
+                    <input id="macrocase-time" type="number" min="0" step="1" value={form.defaultTimeLimit} onChange={(e) => updateField('defaultTimeLimit', e.target.value)} className={inputClass} />
                     <span className="mt-1 block font-normal text-[#94A3B8]">{formatTimeLimit(form.defaultTimeLimit)} · 0 = sin límite. Corre desde que el asistente termina de leer.</span>
                   </label>
                 </div>
-              </FormSection>
+              </FormSection>}
 
-              <FormSection
+              {step === 2 && <FormSection
                 title={`Secciones (${form.sections.length})`}
                 description="El candidato recorre las secciones en orden: el asistente narra el texto de cada una y luego le hace sus preguntas. Al pasar a las preguntas, el texto de la sección deja de estar visible."
               >
+                {undo && <div role="status" className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-amber-50 p-3 text-xs text-amber-900"><span>Contenido retirado. Puedes recuperar la última eliminación.</span><button type="button" onClick={() => { setForm(undo); setUndo(null); }} className="font-semibold underline">Deshacer</button></div>}
                 <ol className="space-y-5">
                   {form.sections.map((section, sectionIndex) => {
                     const narrative = narrativeVoice(section);
@@ -747,18 +820,20 @@ export function AdminMacrocasesPage() {
                           <div className="flex items-center gap-1">
                             <button type="button" onClick={() => moveSection(section.id, -1)} disabled={sectionIndex === 0} aria-label={`Subir la sección ${sectionIndex + 1}`} className="rounded-lg px-2 py-1 text-xs font-semibold text-[#475569] hover:bg-[#F6F9FC] disabled:opacity-30">↑</button>
                             <button type="button" onClick={() => moveSection(section.id, 1)} disabled={sectionIndex === form.sections.length - 1} aria-label={`Bajar la sección ${sectionIndex + 1}`} className="rounded-lg px-2 py-1 text-xs font-semibold text-[#475569] hover:bg-[#F6F9FC] disabled:opacity-30">↓</button>
-                            <button type="button" onClick={() => removeSection(section.id)} className="ml-1 text-xs font-semibold text-[#B42318] hover:underline">Quitar sección</button>
+                            <button type="button" disabled={form.sections.length === 1} onClick={() => removeSection(section.id)} className="ml-1 text-xs font-semibold text-[#B42318] hover:underline disabled:opacity-30">Quitar sección</button>
                           </div>
                         </div>
 
                         <label className="mt-3 block text-xs font-medium text-[#475569]">
                           Título <span className="font-normal text-[#94A3B8]">(opcional)</span>
-                          <input value={section.title} onChange={(e) => updateSection(section.id, { title: e.target.value })} maxLength={120} placeholder="Ej.: El encargo" className={inputClass} />
+                          <input aria-label={`Título de la sección ${sectionIndex + 1}`} value={section.title} onChange={(e) => updateSection(section.id, { title: e.target.value })} maxLength={120} placeholder="Ej.: El encargo" className={inputClass} />
                         </label>
 
                         <label className="mt-3 block text-xs font-medium text-[#475569]">
                           Texto narrativo
                           <textarea
+                            id={`narrative-${section.id}`}
+                            aria-label={`Texto narrativo de la sección ${sectionIndex + 1}`}
                             value={section.narrative}
                             onChange={(e) => updateSection(section.id, { narrative: e.target.value })}
                             maxLength={MAX_NARRATIVE_LENGTH}
@@ -784,9 +859,10 @@ export function AdminMacrocasesPage() {
                             <li key={question.id} className="rounded-xl border border-[#DDE5EC] bg-[#FAFBFC] p-4">
                               <div className="flex items-center justify-between gap-3">
                                 <span className="text-xs font-bold uppercase tracking-wide text-[#0A8F8A]">Pregunta {index + 1}</span>
-                                <button type="button" onClick={() => removeQuestion(section.id, question.id)} className="text-xs font-semibold text-[#B42318] hover:underline">Quitar</button>
+                                <button type="button" aria-label={`Quitar pregunta ${index + 1} de sección ${sectionIndex + 1}`} onClick={() => removeQuestion(section.id, question.id)} className="text-xs font-semibold text-[#B42318] hover:underline">Quitar</button>
                               </div>
                               <textarea
+                                id={`question-${question.id}`}
                                 value={question.text || ''}
                                 onChange={(e) => updateQuestion(section.id, question.id, { text: e.target.value })}
                                 maxLength={500}
@@ -814,22 +890,16 @@ export function AdminMacrocasesPage() {
                 </ol>
                 <button type="button" onClick={addSection} className="w-full rounded-xl border-2 border-dashed border-[#9ED9D5] py-3 text-sm font-semibold text-[#087D79] hover:bg-[#F4FBFB]">+ Agregar sección</button>
                 <p className="text-xs text-[#94A3B8]">Un audio propio reemplaza la voz generada de esa narración o pregunta. MP3, WAV, OGG o WEBM, hasta 10 MB.</p>
-              </FormSection>
-            </div>
+              </FormSection>}
+            </fieldset></div>
 
-            <div className="sticky bottom-0 rounded-b-2xl border-t border-[#EEF2F6] bg-white px-6 py-4">
-              {formError && <p className="mb-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">{formError}</p>}
-              <div className="flex justify-end gap-3">
-                <button type="button" onClick={closeForm} className="rounded-xl border border-[#D9E2EA] px-5 py-2.5 text-sm font-semibold text-[#475569] hover:bg-[#F6F9FC]">Cancelar</button>
-                <button type="button" disabled={saving} onClick={saveMacrocase} className="inline-flex items-center rounded-xl bg-[#0AADA8] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#089490] disabled:opacity-60">
-                  {saving && <SpinnerIcon className="mr-2 h-4 w-4 animate-spin" />}
-                  {saving ? 'Guardando y generando voz...' : editing ? 'Guardar cambios' : 'Crear macrocaso'}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+        </CaseBankDialog>
       )}
+      {confirmation && <CaseBankDialog title={confirmation.kind === 'delete' ? 'Eliminar macrocaso' : 'Desactivar macrocaso'} busy={Boolean(busyId)} onClose={() => { if (!busyId) setConfirmation(null); }}
+        footer={<div className="flex flex-wrap justify-end gap-3"><button type="button" disabled={Boolean(busyId)} onClick={() => setConfirmation(null)} className="rounded-xl border border-[#D9E2EA] px-4 py-2.5 text-sm font-semibold text-[#475569]">Cancelar</button><button type="button" disabled={Boolean(busyId)} onClick={confirmAction} className={`rounded-xl px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-40 ${confirmation.kind === 'delete' ? 'bg-red-700' : 'bg-[#0AADA8]'}`}>{busyId ? 'Procesando…' : confirmation.kind === 'delete' ? 'Eliminar macrocaso' : 'Desactivar'}</button></div>}>
+        <p className="break-words text-sm leading-7 text-[#475569]">{confirmation.kind === 'delete' ? <>Se eliminará «<strong>{confirmation.item.name}</strong>» del banco. Esta acción no se puede deshacer.</> : <>«<strong>{confirmation.item.name}</strong>» dejará de estar disponible para nuevas asignaciones. Podrás volver a activarlo desde este banco.</>}</p>
+        {confirmationError && <p role="alert" className="mt-4 rounded-xl bg-red-50 p-3 text-sm text-red-700">{confirmationError}</p>}
+      </CaseBankDialog>}
     </div>
   );
 }

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import * as api from '../services/microcaseApi.js';
 import { SpinnerIcon } from '../components/auth/icons.jsx';
-import { MicrocaseDialog } from '../components/admin/MicrocaseDialog.jsx';
+import { CaseBankDialog } from '../components/admin/CaseBankDialog.jsx';
 import { MicrocaseEditor } from '../components/admin/MicrocaseEditor.jsx';
 import { MicrocaseQuestionnaire } from '../components/evaluation/MicrocaseQuestionnaire.jsx';
 import { isReady, normalizeSearch, questionCount, questionsOf, sectionsOf, usableSection } from './adminMicrocases.js';
@@ -61,7 +61,7 @@ function MicrocasePreview({ item, onClose }) {
     } catch (requestError) { setError(requestError.message || 'No se pudo iniciar la vista previa.'); }
     finally { setBusy(false); }
   };
-  return <MicrocaseDialog wide title={result ? 'Vista previa del candidato' : `Vista previa · ${item.name}`} description="Simulación: las respuestas no se guardan ni afectan evaluaciones reales." onClose={onClose} busy={busy}
+  return <CaseBankDialog wide title={result ? 'Vista previa del candidato' : `Vista previa · ${item.name}`} description="Simulación: las respuestas no se guardan ni afectan evaluaciones reales." onClose={onClose} busy={busy}
     footer={!result && <div className="flex flex-wrap justify-end gap-3"><button type="button" onClick={onClose} disabled={busy} className={SECONDARY}>Cancelar</button><button type="button" disabled={busy || !selected.length} onClick={run} className={PRIMARY}>{busy && <SpinnerIcon className="h-4 w-4 animate-spin" />}{busy ? 'Preparando…' : 'Iniciar vista previa'}</button></div>}>
     {result ? <><button type="button" onClick={() => setResult(null)} className="mb-3 text-xs font-semibold text-[#087D79] hover:underline">← Cambiar habilidades</button><MicrocaseQuestionnaire preview onExitPreview={onClose} microcase={{ name: result.name, story: result.story, timeLimitMinutes: item.timeLimitMinutes ?? 15, questions: result.sections.map((section) => ({ questionId: section.selectedQuestion.id, sectionTitle: section.title, question: section.selectedQuestion.text })) }} /></>
       : <><p className="text-sm leading-6 text-[#64748B]">Selecciona las habilidades que evaluaría la empresa. Se elegirá una pregunta al azar de cada habilidad seleccionada.</p>
@@ -72,7 +72,7 @@ function MicrocasePreview({ item, onClose }) {
         </label>)}</div><p className="mt-4 text-xs text-[#64748B]">{selected.length} habilidades seleccionadas · {item.timeLimitMinutes ?? 15} minutos en total</p>
         {error && <p role="alert" className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</p>}
       </>}
-  </MicrocaseDialog>;
+  </CaseBankDialog>;
 }
 
 export function AdminMicrocasesPage() {
@@ -153,10 +153,10 @@ export function AdminMicrocasesPage() {
         </>}
     {editor && <MicrocaseEditor item={editor.item} onClose={() => setEditor(null)} onSave={save} />}
     {preview && <MicrocasePreview item={preview} onClose={() => setPreview(null)} />}
-    {confirmation && <MicrocaseDialog title={confirmation.kind === 'delete' ? 'Eliminar microcaso' : 'Desactivar microcaso'} onClose={() => { if (!busyId) { setConfirmation(null); setActionError(''); } }} busy={Boolean(busyId)}
+    {confirmation && <CaseBankDialog title={confirmation.kind === 'delete' ? 'Eliminar microcaso' : 'Desactivar microcaso'} onClose={() => { if (!busyId) { setConfirmation(null); setActionError(''); } }} busy={Boolean(busyId)}
       footer={<div className="flex flex-wrap justify-end gap-3"><button type="button" disabled={Boolean(busyId)} onClick={() => { setConfirmation(null); setActionError(''); }} className={SECONDARY}>Cancelar</button><button type="button" disabled={Boolean(busyId)} onClick={confirmAction} className={confirmation.kind === 'delete' ? 'rounded-xl bg-red-700 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-40' : PRIMARY}>{busyId ? 'Procesando…' : confirmation.kind === 'delete' ? 'Eliminar microcaso' : 'Desactivar'}</button></div>}>
       <p className="break-words text-sm leading-7 text-[#475569]">{confirmation.kind === 'delete' ? <>Se eliminará «<strong>{confirmation.item.name}</strong>» del banco. Esta acción no se puede deshacer.</> : <>«<strong>{confirmation.item.name}</strong>» dejará de estar disponible para nuevas asignaciones. Podrás volver a activarlo desde este banco.</>}</p>
       {actionError && <p role="alert" className="mt-4 rounded-xl bg-red-50 p-3 text-sm text-red-700">{actionError}</p>}
-    </MicrocaseDialog>}
+    </CaseBankDialog>}
   </div></div>;
 }

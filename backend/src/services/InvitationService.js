@@ -1,3 +1,4 @@
+const { instrumentOf } = require('../utils/moduleA');
 const crypto = require('crypto');
 
 const {
@@ -556,6 +557,7 @@ class InvitationService {
       : {
           state: 'VALID',
           ...context,
+          questionnaire: instrumentOf(event),
         };
 
     return {
@@ -719,17 +721,26 @@ class InvitationService {
     if (!answers) {
       throw new ValidationError('Envía las respuestas de tu evaluación.');
     }
-    const demoIds = ['demo-a-1', 'demo-a-2', 'demo-a-3', 'demo-a-4'];
-    if (answers.length !== demoIds.length || demoIds.some((id) => !answers.some((answer) => answer.questionId === id))) {
-      throw new ValidationError('La Fase A requiere responder sus cuatro preguntas.');
+    const instrument = instrumentOf(access.event);
+    const questions = instrument.questions;
+    if (!Array.isArray(answers) || answers.length !== questions.length
+      || new Set(answers.map((answer) => answer.questionId)).size !== questions.length
+      || questions.some((question) => !answers.some((answer) => answer.questionId === question.id))
+      || answers.some((answer) => !Number.isInteger(answer.value) || answer.value < 1 || answer.value > 5)) {
+      throw new ValidationError(`El Módulo A requiere responder las ${questions.length} preguntas asignadas, una sola vez y con valores de 1 a 5.`);
     }
+    // Keep authoritative question text beside each answer for historical reviews.
+    const normalizedAnswers = questions.map((question, index) => ({
+      questionId: question.id, value: answers.find((answer) => answer.questionId === question.id).value,
+      ...(access.event.moduleA?.instrument ? { text: question.text, dimension: question.dimension || '', number: index + 1 } : {}),
+    }));
 
     const result = await this.invitationRepo.completeWithSubmission(
       tokenHash,
       {
         module: MODULES.A,
-        instrumentVersion: 'DEMO_A_V1',
-        answers,
+        instrumentVersion: instrument.instrumentVersion,
+        answers: normalizedAnswers,
       }
     );
 

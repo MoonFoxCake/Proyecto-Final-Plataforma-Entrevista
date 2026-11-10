@@ -42,6 +42,8 @@ function createApp(container = createContainer('firestore')) {
   // falls back to allowing any origin (fine — auth is a Bearer token, not
   // cookies, so a permissive default carries no CSRF-style risk).
   app.use(cors(process.env.CORS_ORIGIN ? { origin: process.env.CORS_ORIGIN } : undefined));
+  // A full instrument can contain 100 questions with up to 1000 characters each.
+  app.use('/api/v1/admin/question-groups', express.json({ limit: '512kb' }));
   app.use(express.json());
 
   app.get('/health', (req, res) => res.json({ status: 'ok' }));
