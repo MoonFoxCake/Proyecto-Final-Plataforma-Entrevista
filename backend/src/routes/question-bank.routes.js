@@ -1,8 +1,9 @@
+const { adminPermission } = require('../middleware/adminPermission');
 const { Router } = require('express');
 const { checkPersistedRole } = require('../middleware/checkPersistedRole');
 function createQuestionBankRoutes(service, authService) {
   const router = Router();
-  router.use(checkPersistedRole(authService, 'admin'));
+  router.use(checkPersistedRole(authService, 'admin'), adminPermission('questions.manage'));
   const handle = (fn) => async (req, res, next) => { try { res.json({ data: await fn(req) }); } catch (error) { next(error); } };
   router.get('/', handle(() => service.list()));
   router.post('/', handle((req) => service.create(req.body)));

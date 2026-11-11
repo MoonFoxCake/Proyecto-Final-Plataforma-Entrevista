@@ -20,6 +20,15 @@ class IUserRepository {
 
   /** @param {string} id @param {object} data @returns {Promise<object|null>} */
   async update(id, data) { throw new Error('Not implemented'); }
+
+  /** Updates access with optimistic concurrency, protecting the owner. */
+  async changeAccount(id, changes, expectedRevision) { throw new Error('Not implemented'); }
+
+  /** Atomically reserves the unique owner and creates its profile. */
+  async initializeOwner(uid, profile) { throw new Error('Not implemented'); }
+
+  /** @returns {Promise<string|null>} */
+  async getOwnerId() { throw new Error('Not implemented'); }
 }
 
 module.exports = IUserRepository;

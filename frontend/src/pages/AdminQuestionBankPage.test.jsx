@@ -1,4 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { AuthContext } from '../context/AuthContext.jsx';
 import { MemoryRouter } from 'react-router-dom';
 import { AdminQuestionBankPage } from './AdminQuestionBankPage.jsx';
 import { AdminSidebar } from '../components/admin/AdminSidebar.jsx';
@@ -26,7 +27,7 @@ afterEach(cleanup);
 const renderPage = async () => { render(<AdminQuestionBankPage />); await screen.findByRole('article', { name: group.name }); };
 
 test('places the new admin navigation between companies and macrocases', () => {
-  render(<MemoryRouter><AdminSidebar activeSection="question-bank" onSelect={() => {}} /></MemoryRouter>);
+  render(<MemoryRouter><AuthContext.Provider value={{ profile: { role: "admin", adminAccess: "full" } }}><AdminSidebar activeSection="question-bank" onSelect={() => {}} /></AuthContext.Provider></MemoryRouter>);
   const labels = within(screen.getByRole('navigation')).getAllByRole('button').map((button) => button.textContent);
   expect(labels.indexOf('▤Banco de Preguntas')).toBe(labels.indexOf('▥Empresas') + 1);
   expect(labels.indexOf('◇Banco de Macrocasos')).toBe(labels.indexOf('▤Banco de Preguntas') + 1);

@@ -1,69 +1,44 @@
-import { createContext, useEffect, useState } from 'react';
+import { createContext, useCallback, useEffect, useState } from 'react';
 import { getProfile, onAuthStateChanged } from '../services/authService';
 
-/**
- * @typedef {object} AuthContextValue
- * @property {import('firebase/auth').User|null} user
- * @property {string|null} role
- * @property {boolean} loading
- */
-
-/** @type {import('react').Context<AuthContextValue>} */
-export const AuthContext = createContext({
-  user: null,
-  role: null,
-  loading: true,
-});
-
-/**
- * Wraps the app, subscribing to Firebase auth state and exposing
- * `{ user, role, loading }` via {@link AuthContext}. `role` is read from
- * the ID token's custom claims (see `AuthService.assignRole` on the
- * backend), not from Firestore, so it's available without an extra API
- * call and stays in sync whenever the token refreshes.
- */
+export const AuthContext = createContext({ user: null, role: null, profile: null, loading: true, refreshProfile: async () => {} });
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
-  const [role, setRole] = useState(null);
+  const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    let unsubscribe;
-    let active = true;
-
-    const initialize = async () => {
-      if (!active) return;
-
-      unsubscribe = onAuthStateChanged(async (firebaseUser) => {
-        if (!firebaseUser) {
-          setUser(null);
-          setRole(null);
-          setLoading(false);
-          return;
-        }
-
-        try {
-          const profile = await getProfile();
-          setUser(firebaseUser);
-          setRole(profile?.role ?? null);
-        } catch (error) {
-          console.error('No se pudo cargar el perfil del usuario:', error);
-          setUser(firebaseUser);
-          setRole(null);
-        } finally {
-          setLoading(false);
-        }
-      });
-    };
-
-    initialize();
-    return () => {
-      active = false;
-      unsubscribe?.();
-    };
+  const refreshProfile = useCallback(async () => {
+    const next = await getProfile();
+    setProfile(next);
+    return next;
   }, []);
-
-  return (
-    <AuthContext.Provider value={{ user, role, loading }}>{children}</AuthContext.Provider>
-  );
+  useEffect(() => {
+    let active = true;
+    let sequence = 0;
+    const unsubscribe = onAuthStateChanged(async (firebaseUser) => {
+      if (!active) return;
+      const current = ++sequence;
+      setLoading(true);
+      if (!firebaseUser) { setUser(null); setProfile(null); setLoading(false); return; }
+      try {
+        const next = await getProfile();
+        if (active && current === sequence) { setUser(firebaseUser); setProfile(next); }
+      } catch { if (active && current === sequence) { setUser(null); setProfile(null); } }
+      finally { if (active && current === sequence) setLoading(false); }
+    });
+    return () => { active = false; unsubscribe?.(); };
+  }, []);
+  useEffect(() => {
+    if (!user) return undefined;
+    let active = true;
+    const refresh = async () => {
+      try { const next = await getProfile(); if (active) setProfile(next); }
+      catch (error) { if (active && [401, 403, 404].includes(error.response?.status)) { setProfile(null); setUser(null); } }
+    };
+    const onVisibility = () => { if (document.visibilityState === 'visible') refresh(); };
+    window.addEventListener('focus', refresh);
+    document.addEventListener('visibilitychange', onVisibility);
+    const timer = window.setInterval(refresh, 60000);
+    return () => { active = false; window.clearInterval(timer); window.removeEventListener('focus', refresh); document.removeEventListener('visibilitychange', onVisibility); };
+  }, [user]);
+  return <AuthContext.Provider value={{ user, role: profile?.role || null, profile, loading, refreshProfile }}>{children}</AuthContext.Provider>;
 }

@@ -28,10 +28,6 @@ export function LoginPage() {
       await authService.login(email, password);
       const profile = await authService.getProfile();
 
-      console.log('=== LOGIN DEBUG ===');
-      console.log('PROFILE:', profile);
-      console.log('ROLE:', profile?.role);
-      console.log('LOCATION STATE:', location.state);
       const dashboardByRole = {
         [ROLES.ADMIN]: '/admin-dashboard',
         [ROLES.COMPANY]: '/company-dashboard',
@@ -40,7 +36,7 @@ export function LoginPage() {
       const redirectTo = location.state?.from?.pathname || dashboardByRole[profile?.role] || '/dashboard';
       navigate(redirectTo, { replace: true });
     } catch (err) {
-      setError(getAuthErrorMessage(err));
+      setError(err.response?.data?.error?.message || getAuthErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -71,13 +67,14 @@ export function LoginPage() {
 
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-[#364153]">
-                Correo electrónico
+                Correo electrónico o usuario
               </label>
               <div className="mt-1.5">
                 <Input
                   id="email"
-                  type="email"
-                  placeholder="nombre@empresa.com"
+                  type="text"
+                  autoComplete="username"
+                  placeholder="nombre@empresa.com o usuario"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   icon={<MailIcon className="h-4 w-4" />}
@@ -111,6 +108,7 @@ export function LoginPage() {
               </div>
             </div>
 
+            <p className="mt-3 text-xs leading-5 text-[#64748B]">Las cuentas administrativas pueden ingresar con su nombre de usuario, sin correo.</p>
             <div className="mt-5 flex justify-end">
               <Link to="/forgot-password" className="text-sm font-medium text-[#0AADA8] hover:underline">
                 ¿Olvidaste tu contraseña?

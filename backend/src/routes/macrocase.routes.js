@@ -1,3 +1,4 @@
+const { adminPermission } = require('../middleware/adminPermission');
 const { Router } = require('express');
 const multer = require('multer');
 const { checkPersistedRole } = require('../middleware/checkPersistedRole');
@@ -30,7 +31,7 @@ const upload = multer({
 function createMacrocaseRoutes(macrocaseController, authService) {
   const router = Router();
 
-  const adminOnly = checkPersistedRole(authService, 'admin');
+  const adminOnly = [checkPersistedRole(authService, 'admin'), adminPermission('macrocases.manage')];
 
   router.get('/', adminOnly, macrocaseController.list);
 

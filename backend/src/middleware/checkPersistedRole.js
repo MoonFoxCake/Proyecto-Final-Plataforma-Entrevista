@@ -16,7 +16,9 @@ function checkPersistedRole(authService, ...allowedRoles) {
     }
 
     try {
-      const profile = await authService.getProfile(req.user.uid);
+      const profile = req.profile || await authService.getProfile(req.user.uid);
+      if (['disabled', 'deleted', 'deletion_pending'].includes(profile.status)) throw new ForbiddenError('Esta cuenta está desactivada.');
+      req.profile = profile;
       if (!allowedRoles.includes(profile.role)) {
         return next(new ForbiddenError(`Requires one of roles: ${allowedRoles.join(', ')}`));
       }

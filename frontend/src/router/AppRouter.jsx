@@ -1,3 +1,4 @@
+import { RequirePermission } from './RequirePermission.jsx';
 
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 
@@ -82,20 +83,26 @@ export function AppRouter() {
               element={<AdminDashboardPage />}
             />
 
+            <Route element={<RequirePermission permissions={['processes.view', 'companies.view', 'evaluations.review', 'evaluations.publish']} />}>
             <Route
               path="/admin/processes/:eventId"
               element={<AdminProcessDetailPage />}
             />
+            </Route>
 
+            <Route element={<RequirePermission permissions={['evaluations.review', 'evaluations.publish']} />}>
             <Route
               path="/admin/processes/:eventId/participants/:anonymousId"
               element={<AdminParticipantReviewPage />}
             />
+            </Route>
 
+            <Route element={<RequirePermission permissions={['macrocases.manage']} />}>
             <Route
               path="/admin/macrocases/:macrocaseId/preview"
               element={<AdminMacrocasePreviewPage />}
             />
+            </Route>
           </Route>
 
           {/* Candidate */}

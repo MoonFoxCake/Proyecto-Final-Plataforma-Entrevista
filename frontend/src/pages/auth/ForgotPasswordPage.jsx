@@ -38,6 +38,10 @@ export function ForgotPasswordPage() {
       setError('Ingresa tu correo electrónico.');
       return;
     }
+    if (normalizedEmail.toLowerCase().endswith('@admin.nexoperfil.invalid')) {
+      setError('Para recuperar una cuenta administrativa sin correo, contacta al propietario de la plataforma.');
+      return;
+    }
     if (!EMAIL_PATTERN.test(normalizedEmail)) {
       setError('Ingresa un correo electrónico válido.');
       return;
@@ -83,6 +87,7 @@ export function ForgotPasswordPage() {
                 Ingresa el correo asociado a tu cuenta y te enviaremos las instrucciones para restablecer tu contraseña.
               </p>
 
+              <p className="mt-3 text-xs leading-relaxed text-[#6A7282]">Si usas un nombre de usuario administrativo sin correo, solicita al propietario que restablezca tu contraseña.</p>
               <form className="mt-8" noValidate onSubmit={(event) => { event.preventDefault(); sendResetEmail(); }}>
                 <label htmlFor="recovery-email" className="block text-sm font-medium text-[#364153]">Correo electrónico</label>
                 <div className="mt-1.5">

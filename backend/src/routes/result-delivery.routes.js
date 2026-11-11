@@ -1,3 +1,4 @@
+const { adminPermission } = require('../middleware/adminPermission');
 const { Router } = require('express');
 const multer = require('multer');
 const { checkPersistedRole } = require('../middleware/checkPersistedRole');
@@ -5,8 +6,8 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 15 
 function createResultDeliveryRoutes(controller, authService) {
   const router = Router();
   router.use(checkPersistedRole(authService, 'admin'));
-  router.get('/pending', controller.list);
-  router.post('/:eventId/:module', upload.single('pdf'), controller.deliver);
+  router.get('/pending', adminPermission('results.view', 'results.deliver'), controller.list);
+  router.post('/:eventId/:module', adminPermission('results.deliver'), upload.single('pdf'), controller.deliver);
   return router;
 }
 module.exports = { createResultDeliveryRoutes };

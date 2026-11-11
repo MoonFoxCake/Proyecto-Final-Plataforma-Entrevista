@@ -18,7 +18,7 @@ async function verifyToken(req, res, next) {
   }
 
   try {
-    const decoded = await auth.verifyIdToken(token);
+    const decoded = await auth.verifyIdToken(token, true);
 
     req.user = {
       uid: decoded.uid,

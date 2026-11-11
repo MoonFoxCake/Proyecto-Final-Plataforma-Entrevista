@@ -1,3 +1,5 @@
+const AdminAccountService = require('../services/AdminAccountService');
+const { auth: identity } = require('../config/firebase');
 const FirestoreQuestionGroupRepository = require('../repositories/firestore/FirestoreQuestionGroupRepository');
 const InMemoryQuestionGroupRepository = require('../repositories/in-memory/InMemoryQuestionGroupRepository');
 const QuestionBankService = require('../services/QuestionBankService');
@@ -175,6 +177,7 @@ function createContainer(type = 'firestore') {
   return {
     repos,
     questionBankService,
+    adminAccountService: new AdminAccountService({ userRepo: repos.userRepo, auditRepo: repos.auditLogRepo, identity }),
     accessCredentialService,
     onsiteApplicationService,
     onsiteAccessService,

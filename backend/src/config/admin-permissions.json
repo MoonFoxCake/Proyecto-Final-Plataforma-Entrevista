@@ -1,0 +1,18 @@
+[
+  { "id": "dashboard.view", "group": "Consulta", "label": "Ver dashboard", "description": "Consultar el resumen general de empresas y procesos." },
+  { "id": "companies.view", "group": "Consulta", "label": "Ver empresas", "description": "Consultar empresas y sus usuarios asociados." },
+  { "id": "processes.view", "group": "Evaluaciones", "label": "Ver procesos", "description": "Consultar procesos y participación." },
+  { "id": "evaluations.review", "group": "Evaluaciones", "label": "Calificar y revisar", "description": "Leer respuestas anónimas y guardar revisiones." },
+  { "id": "evaluations.publish", "group": "Evaluaciones", "label": "Publicar evaluaciones", "description": "Publicar los perfiles cuando la revisión esté completa." },
+  { "id": "questions.manage", "group": "Contenido", "label": "Gestionar preguntas del Módulo A", "description": "Crear versiones y activar grupos del Banco de Preguntas." },
+  { "id": "macrocases.manage", "group": "Contenido", "label": "Gestionar macrocasos", "description": "Crear, editar, activar y eliminar macrocasos y sus audios." },
+  { "id": "microcases.manage", "group": "Contenido", "label": "Gestionar microcasos", "description": "Crear, editar, activar y eliminar microcasos." },
+  { "id": "results.view", "group": "Resultados", "label": "Consultar resultados", "description": "Ver entregas pendientes de resultados." },
+  { "id": "results.deliver", "group": "Resultados", "label": "Entregar resultados", "description": "Subir el PDF y notificar su entrega a la empresa." },
+  { "id": "admins.view", "group": "Cuentas", "label": "Ver administradores", "description": "Consultar cuentas administrativas y sus permisos." },
+  { "id": "admins.create", "group": "Cuentas", "label": "Crear administradores", "description": "Crear cuentas con permisos iguales o inferiores a los propios." },
+  { "id": "admins.manage", "group": "Cuentas", "label": "Gestionar administradores", "description": "Cambiar permisos, suspender cuentas y restablecer contraseñas dentro del alcance propio." },
+  { "id": "admins.delete", "group": "Cuentas", "label": "Eliminar administradores", "description": "Eliminar cuentas administrativas dentro del alcance propio, excepto la propietaria." },
+  { "id": "users.view", "group": "Cuentas", "label": "Ver usuarios", "description": "Consultar cuentas de empresas y candidatos registradas en la plataforma." },
+  { "id": "users.delete", "group": "Cuentas", "label": "Eliminar usuarios", "description": "Eliminar el acceso de usuarios de empresa o candidatos, conservando sus procesos." }
+]

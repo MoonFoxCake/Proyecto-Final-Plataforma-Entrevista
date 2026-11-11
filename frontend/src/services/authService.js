@@ -1,4 +1,5 @@
 import {
+  EmailAuthProvider, reauthenticateWithCredential, updatePassword,
   confirmPasswordReset as firebaseConfirmPasswordReset,
   onAuthStateChanged as firebaseOnAuthStateChanged,
   sendPasswordResetEmail,
@@ -73,7 +74,9 @@ export async function getCompanies() {
  * @returns {Promise<import('firebase/auth').User>}
  */
 export async function login(email, password) {
-  const credential = await signInWithEmailAndPassword(auth, email, password);
+  const identifier = email.trim().toLowerCase();
+  const loginEmail = identifier.includes('@') ? identifier : `${identifier}@admin.nexoperfil.invalid`;
+  const credential = await signInWithEmailAndPassword(auth, loginEmail, password);
   return credential.user;
 }
 
@@ -148,4 +151,12 @@ export function getCurrentUser() {
  */
 export function onAuthStateChanged(callback) {
   return firebaseOnAuthStateChanged(auth, callback);
+}
+
+export async function changePassword(currentPassword, newPassword) {
+  const user = auth.currentUser;
+  if (!user?.email) throw new Error('Inicia sesión nuevamente.');
+  await reauthenticateWithCredential(user, EmailAuthProvider.credential(user.email, currentPassword));
+  await updatePassword(user, newPassword);
+  await user.getIdToken(true);
 }

@@ -1,3 +1,4 @@
+const { loadProfile } = require('./middleware/loadProfile');
 const express = require('express');
 const cors = require('cors');
 
@@ -79,7 +80,7 @@ function createApp(container = createContainer('firestore')) {
   app.use('/api/v1/invitations', createPublicInvitationRoutes(invitationController));
   app.use('/api/v1/onsite', createPublicOnsiteAccessRoutes(new OnsiteAccessController(container.onsiteAccessService)));
 
-  app.use('/api/v1', verifyToken, checkTenant, createApiRouter(container));
+  app.use('/api/v1', verifyToken, loadProfile(container.authService), checkTenant, createApiRouter(container));
 
   // Must be mounted last.
   app.use(errorHandler);

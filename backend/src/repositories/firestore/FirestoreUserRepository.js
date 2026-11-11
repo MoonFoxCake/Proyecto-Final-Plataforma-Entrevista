@@ -1,6 +1,7 @@
 const IUserRepository = require('../interfaces/IUserRepository');
 const { db } = require('../../config/firebase');
 const { stripUndefined } = require('../../utils/helpers');
+const { AppError, ForbiddenError } = require('../../utils/errors');
 
 /**
  * Firestore implementation of {@link IUserRepository}.
@@ -58,6 +59,39 @@ class FirestoreUserRepository extends IUserRepository {
     const payload = stripUndefined(data);
     await ref.update(payload);
     return { id, ...doc.data(), ...payload };
+  }
+
+  async changeAccount(id, changes, expectedRevision) {
+    const ref = this.collection.doc(id);
+    return db.runTransaction(async (transaction) => {
+      const doc = await transaction.get(ref);
+      if (!doc.exists) return null;
+      const current = doc.data();
+      if (current.adminAccess === 'owner') throw new ForbiddenError('La cuenta propietaria está protegida.');
+      if ((current.revision || 0) !== expectedRevision) throw new AppError('La cuenta cambió. Actualiza la lista antes de continuar.', 409);
+      const payload = stripUndefined({ ...changes, revision: expectedRevision + 1, updatedAt: new Date().toISOString() });
+      transaction.update(ref, payload);
+      return { id, ...current, ...payload };
+    });
+  }
+
+  async initializeOwner(uid, profile) {
+    const security = db.collection('adminSecurity').doc('owner');
+    const ref = this.collection.doc(uid);
+    return db.runTransaction(async (transaction) => {
+      const [owner, user] = await Promise.all([transaction.get(security), transaction.get(ref)]);
+      if (owner.exists) throw new ForbiddenError('La cuenta propietaria ya fue configurada.');
+      if (user.exists && (user.data().role !== 'admin' || ['deleted', 'deletion_pending'].includes(user.data().status))) throw new ForbiddenError('Esta identidad ya pertenece a una cuenta incompatible.');
+      const saved = { ...profile, role: 'admin', adminAccess: 'owner', permissions: [], status: 'active', orgId: null, revision: 1, createdAt: new Date().toISOString() };
+      transaction.create(security, { uid, createdAt: new Date().toISOString() });
+      transaction.set(ref, saved);
+      return { id: uid, ...saved };
+    });
+  }
+
+  async getOwnerId() {
+    const doc = await db.collection('adminSecurity').doc('owner').get();
+    return doc.exists ? doc.data().uid : null;
   }
 }
 

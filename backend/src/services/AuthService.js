@@ -1,6 +1,7 @@
+const { ADMIN_EMAIL_DOMAIN } = require('../utils/adminPermissions');
 const { auth } = require('../config/firebase');
 const { ROLES } = require('../utils/constants');
-const { ValidationError, NotFoundError } = require('../utils/errors');
+const { ValidationError, NotFoundError, ForbiddenError } = require('../utils/errors');
 
 /**
  * Handles user registration and role assignment (Firebase Custom Claims).
@@ -28,6 +29,7 @@ class AuthService {
    */
   async registerCompany(data) {
     const email = data.email.trim().toLowerCase();
+    if (email.endsWith(`@${ADMIN_EMAIL_DOMAIN}`)) throw new ValidationError('Ese identificador está reservado para cuentas administrativas.');
     const companyName = data.companyName.trim();
 
     if (await this.organizationRepo.findByCompanyName(companyName)) {
@@ -129,6 +131,7 @@ class AuthService {
    */
   async createCompanyUser(data) {
     const { companyName, email, password, displayName, phone } = data;
+    if (email.trim().toLowerCase().endsWith(`@${ADMIN_EMAIL_DOMAIN}`)) throw new ValidationError('Ese identificador está reservado para cuentas administrativas.');
     const normalizedCompanyName = companyName.trim().toLowerCase();
 
     let userRecord;
@@ -227,6 +230,7 @@ class AuthService {
       throw new NotFoundError('User not found');
     }
 
+    if (role === 'admin' || user.role === 'admin') throw new ForbiddenError('Gestiona las cuentas administrativas desde el panel de accesos.');
     await auth.setCustomUserClaims(uid, { role, orgId: orgId ?? null });
     return this.userRepo.update(uid, { role, orgId: orgId ?? null });
   }

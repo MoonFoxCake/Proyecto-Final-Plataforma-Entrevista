@@ -1,3 +1,5 @@
+import { AccountPasswordDialog } from './AccountPasswordDialog.jsx';
+import { canSection } from '../../utils/adminPermissions.js';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { SpinnerIcon } from '../auth/icons.jsx';
@@ -47,6 +49,7 @@ export const ADMIN_SECTIONS = [
     'Resultados y métricas',
     '⌁',
   ],
+  ['accounts', 'Accesos y usuarios', 'Administradores, permisos y cuentas', '♙'],
 ].map(([id, label, description, icon]) => ({
   id,
   label,
@@ -64,11 +67,12 @@ const initials = (name = '') =>
     .slice(0, 2) || 'AD';
 
 export function AdminSidebar({ activeSection, onSelect }) {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
+  const [showPassword, setShowPassword] = useState(false);
   const navigate = useNavigate();
   const [loggingOut, setLoggingOut] = useState(false);
 
-  const displayName = user?.displayName || 'Administrador';
+  const displayName = profile?.displayName || user?.displayName || 'Administrador';
 
   const handleLogout = async () => {
     setLoggingOut(true);
@@ -115,7 +119,7 @@ export function AdminSidebar({ activeSection, onSelect }) {
             className="flex gap-1 overflow-x-auto lg:block lg:space-y-1"
             aria-label="Navegación administrativa"
           >
-            {ADMIN_SECTIONS.map((item) => (
+            {ADMIN_SECTIONS.filter((item) => canSection(profile, item.id)).map((item) => (
               <button
                 key={item.id}
                 type="button"
@@ -148,6 +152,8 @@ export function AdminSidebar({ activeSection, onSelect }) {
           </nav>
         </div>
 
+        <div className="px-3 pb-3"><button type="button" onClick={() => setShowPassword(true)} className="w-full rounded-lg px-3 py-2 text-left text-xs font-medium text-[#C5D0DF] hover:bg-white/5">Mi contraseña</button></div>
+        {showPassword && <AccountPasswordDialog onClose={() => setShowPassword(false)} />}
         {/* User */}
         <div className="hidden border-t border-white/10 p-3 lg:block">
           <div className="mb-2 flex items-center gap-3 rounded-xl bg-white/[0.06] px-3 py-3">
@@ -161,7 +167,7 @@ export function AdminSidebar({ activeSection, onSelect }) {
               </p>
 
               <p className="text-[10px] text-[#8EA2BC]">
-                Administrador
+                {profile?.adminAccess === 'owner' ? 'Propietario' : profile?.adminAccess === 'full' ? 'Administrador completo' : 'Administrador restringido'}
               </p>
             </div>
           </div>

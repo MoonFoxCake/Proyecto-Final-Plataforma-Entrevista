@@ -1,5 +1,5 @@
 const { Router } = require('express');
-const { checkRole } = require('../middleware/checkRole');
+const { adminPermission, ownerOnly } = require('../middleware/adminPermission');
 const { checkPersistedRole } = require('../middleware/checkPersistedRole');
 const { validateInput } = require('../middleware/validateInput');
 const {
@@ -48,19 +48,22 @@ function createAuthRoutes(authController, authService) {
   router.get(
     '/companies',
     checkPersistedRole(authService, 'admin'),
+    adminPermission('companies.view', 'dashboard.view'),
     authController.listCompanies
   );
 
   router.post(
     '/company-users',
     checkPersistedRole(authService, 'admin'),
+    ownerOnly,
     validateInput(companyUserSchema),
     authController.createCompanyUser
   );
 
   router.post(
     '/set-role',
-    checkRole('admin'),
+    checkPersistedRole(authService, 'admin'),
+    ownerOnly,
     validateInput(setRoleSchema),
     authController.setRole
   );

@@ -1,3 +1,6 @@
+import { AdminAccountsPage } from './AdminAccountsPage.jsx';
+import { useAuth } from '../hooks/useAuth.js';
+import { canSection } from '../utils/adminPermissions.js';
 import { AdminQuestionBankPage } from './AdminQuestionBankPage.jsx';
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
@@ -5,7 +8,6 @@ import { useSearchParams } from 'react-router-dom';
 import {
   AdminSidebar,
   ADMIN_SECTIONS,
-  AdminPlaceholderView,
 } from '../components/admin/AdminSidebar.jsx';
 
 import { CompaniesView } from './AdminCompaniesView.jsx';
@@ -97,82 +99,25 @@ function AdminOverviewView() {
 
 export function AdminDashboardPage() {
   const [searchParams, setSearchParams] = useSearchParams();
-
-  const initialSection = searchParams.get('section');
-
-  const [activeSection, setActiveSection] = useState(
-    initialSection === 'dashboard'
-      ? 'dashboard'
-      : initialSection === 'processes'
-      ? 'processes'
-      : initialSection === 'question-bank'
-        ? 'question-bank'
-      : initialSection === 'macrocasos'
-        ? 'macrocasos'
-        : initialSection === 'microcasos'
-          ? 'microcasos'
-        : initialSection === 'results'
-          ? 'results'
-        : 'companies'
-  );
-
-  const section = ADMIN_SECTIONS.find(
-    (item) => item.id === activeSection
-  );
-
-  const selectSection = (id) => {
-    setActiveSection(id);
-
-    if (['dashboard', 'processes', 'question-bank', 'macrocasos', 'microcasos', 'results'].includes(id)) {
-      setSearchParams({ section: id });
-    } else {
-      setSearchParams({});
-    }
-  };
-
-  return (
-    <div className="min-h-screen bg-[#F7F9FC] lg:flex">
-
-      <AdminSidebar
-        activeSection={activeSection}
-        onSelect={selectSection}
-      />
-
-      <main className="min-w-0 flex-1">
-
+  const { profile } = useAuth();
+  const allowedSections = ADMIN_SECTIONS.filter((item) => canSection(profile, item.id));
+  const requested = searchParams.get('section');
+  const activeSection = requested || allowedSections[0]?.id;
+  const allowed = activeSection && canSection(profile, activeSection);
+  const selectSection = (id) => { if (canSection(profile, id)) setSearchParams({ section: id }); };
+  return <div className="min-h-screen bg-[#F7F9FC] lg:flex">
+    <AdminSidebar activeSection={activeSection} onSelect={selectSection} />
+    <main className="min-w-0 flex-1">
+      {!allowed ? <div className="mx-auto max-w-2xl p-8"><h1 className="font-display text-2xl font-bold text-[#10233A]">Acceso restringido</h1><p className="mt-3 text-sm leading-7 text-[#64748B]">{allowedSections.length ? 'Tu cuenta no tiene permiso para esta sección. Selecciona una opción disponible del menú.' : 'Tu cuenta aún no tiene permisos administrativos asignados. El propietario debe configurar tu acceso.'}</p></div> : <>
         {activeSection === 'dashboard' && <AdminOverviewView />}
-
-        {activeSection === 'companies' && (
-          <CompaniesView />
-        )}
-
-        {activeSection === 'processes' && (
-          <AdminProcessesView />
-        )}
-
+        {activeSection === 'companies' && <CompaniesView />}
+        {activeSection === 'processes' && <AdminProcessesView />}
         {activeSection === 'question-bank' && <AdminQuestionBankPage />}
-
-        {activeSection === 'macrocasos' && (
-          <AdminMacrocasesPage />
-        )}
-
-        {activeSection === 'microcasos' && (
-          <AdminMicrocasesPage />
-        )}
-
+        {activeSection === 'macrocasos' && <AdminMacrocasesPage />}
+        {activeSection === 'microcasos' && <AdminMicrocasesPage />}
         {activeSection === 'results' && <AdminResultsPage />}
-
-        {activeSection !== 'dashboard' &&
-          activeSection !== 'companies' &&
-          activeSection !== 'processes' &&
-          activeSection !== 'question-bank' &&
-          activeSection !== 'macrocasos' &&
-          activeSection !== 'microcasos' &&
-          activeSection !== 'results' && (
-            <AdminPlaceholderView section={section} />
-          )}
-
-      </main>
-    </div>
-  );
+        {activeSection === 'accounts' && <AdminAccountsPage />}
+      </>}
+    </main>
+  </div>;
 }

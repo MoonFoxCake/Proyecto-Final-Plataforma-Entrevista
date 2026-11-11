@@ -1,3 +1,5 @@
+import { useAuth } from '../hooks/useAuth.js';
+import { can } from '../utils/adminPermissions.js';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { AdminSidebar } from '../components/admin/AdminSidebar.jsx';
@@ -54,6 +56,8 @@ function ModuleBAnswers({ moduleB }) {
 }
 
 export function AdminParticipantReviewPage() {
+  const { profile } = useAuth();
+  const canReview = can(profile, 'evaluations.review');
   const { eventId, anonymousId } = useParams();
   const navigate = useNavigate();
   const [participant, setParticipant] = useState(null);
@@ -90,12 +94,12 @@ export function AdminParticipantReviewPage() {
     <AdminSidebar activeSection='processes' onSelect={(section) => navigate(`/admin-dashboard?section=${encodeURIComponent(section)}`)} />
     <main className='min-w-0 flex-1 p-5 sm:p-8'><div className='mx-auto max-w-6xl'>
       <button type='button' onClick={() => navigate(`/admin/processes/${eventId}`)} className='text-sm text-[#64748B] hover:text-[#087D79]'>← Volver al proceso</button>
-      {loading ? <div className='flex min-h-80 items-center justify-center text-sm text-[#64748B]'>Cargando respuestas...</div> : error && !participant ? <p className='mt-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700'>{error}</p> : participant && <ReviewContent participant={participant} observations={observations} setObservations={setObservations} dimensions={dimensions} dimension={dimension} setDimension={setDimension} answers={answers} error={error} success={success} saving={saving} save={save} />}
+      {loading ? <div className='flex min-h-80 items-center justify-center text-sm text-[#64748B]'>Cargando respuestas...</div> : error && !participant ? <p className='mt-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700'>{error}</p> : participant && <ReviewContent canReview={canReview} participant={participant} observations={observations} setObservations={setObservations} dimensions={dimensions} dimension={dimension} setDimension={setDimension} answers={answers} error={error} success={success} saving={saving} save={save} />}
     </div></main>
   </div>;
 }
 
-function ReviewContent({ participant, observations, setObservations, dimensions, dimension, setDimension, answers, error, success, saving, save }) {
+function ReviewContent({ canReview, participant, observations, setObservations, dimensions, dimension, setDimension, answers, error, success, saving, save }) {
   return <>
     <header className='mt-5 border-b border-[#DCE3EA] pb-6'>
       <div className='flex flex-wrap items-center gap-3'><h1 className='font-display text-2xl font-bold text-[#101828]'>Participante {participant.anonymousId}</h1><span className={`rounded-full px-3 py-1 text-xs font-semibold ${participant.status === 'REVIEWED' ? 'bg-[#E8F8F5] text-[#087D79]' : 'bg-[#FFF7E8] text-[#9A651E]'}`}>{participant.status === 'REVIEWED' ? 'Revisado' : 'Pendiente de revisión'}</span></div>
@@ -106,7 +110,7 @@ function ReviewContent({ participant, observations, setObservations, dimensions,
         <div className='border-b border-[#E8EDF2] p-5'><h2 className='font-display text-lg font-bold text-[#10233A]'>Respuestas individuales</h2><p className='mt-1 text-sm text-[#64748B]'>Revisa cada respuesta del instrumento; no se calcula una nota.</p><div className='mt-4 flex flex-wrap gap-2'>{dimensions.map((item) => <button key={item} type='button' onClick={() => setDimension(item)} className={`rounded-full px-3 py-1.5 text-xs font-semibold ${dimension === item ? 'bg-[#0AADA8] text-white' : 'bg-[#F1F5F9] text-[#475569]'}`}>{item}</button>)}</div></div>
         <div className='divide-y divide-[#E8EDF2]'>{answers.map((answer) => <article key={answer.questionId} className='p-5'><div className='flex items-center justify-between gap-3'><span className='text-xs font-bold uppercase tracking-wide text-[#0A8F8A]'>Pregunta {String(answer.number).padStart(2, '0')}</span><span className='rounded bg-[#EEF6FF] px-2 py-1 text-[11px] font-semibold text-[#315B88]'>{answer.dimension}</span></div><p className='mt-3 text-sm leading-6 text-[#10233A]'>“{answer.text}”</p><div className='mt-4 rounded-xl bg-[#F6F9FC] p-4'><p className='text-[11px] uppercase tracking-wide text-[#7C8AA0]'>Respuesta seleccionada</p><p className='mt-1 text-sm font-semibold text-[#334E68]'>{answer.label}</p></div></article>)}</div>
       </section><ModuleBAnswers moduleB={participant.moduleB} /></div>
-      <div className='space-y-6'><ProvisionalProfile /><section className='rounded-2xl border border-[#DDE5EC] bg-white p-6 shadow-sm'><label htmlFor='observations' className='font-display text-lg font-bold text-[#10233A]'>Observaciones del administrador</label><textarea id='observations' value={observations} onChange={(event) => setObservations(event.target.value)} maxLength='2000' rows='7' className='mt-4 w-full resize-y rounded-xl border border-[#D9E2EA] p-3 text-sm text-[#10233A] focus:border-[#0AADA8] focus:outline-none focus:ring-2 focus:ring-[#0AADA8]/20' placeholder='Registra observaciones de la revisión, sin asignar una nota.' />{error && <p className='mt-3 text-sm text-red-700'>{error}</p>}{success && <p className='mt-3 text-sm text-[#087D79]'>{success}</p>}<div className='mt-5 grid gap-3'><button type='button' onClick={() => save(false)} disabled={saving} className='rounded-xl border border-[#D9E2EA] px-4 py-2.5 text-sm font-semibold text-[#475569] disabled:opacity-60'>Guardar observaciones</button><button type='button' onClick={() => save(true)} disabled={saving || participant.status === 'REVIEWED'} className='rounded-xl bg-[#0AADA8] px-4 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-[#B8C5CF]'>{participant.status === 'REVIEWED' ? 'Revisión completada' : saving ? 'Guardando...' : 'Marcar como revisado'}</button></div></section></div>
+      <div className='space-y-6'><ProvisionalProfile /><section className='rounded-2xl border border-[#DDE5EC] bg-white p-6 shadow-sm'><label htmlFor='observations' className='font-display text-lg font-bold text-[#10233A]'>Observaciones del administrador</label><textarea disabled={!canReview} id='observations' value={observations} onChange={(event) => setObservations(event.target.value)} maxLength='2000' rows='7' className='mt-4 w-full resize-y rounded-xl border border-[#D9E2EA] p-3 text-sm text-[#10233A] focus:border-[#0AADA8] focus:outline-none focus:ring-2 focus:ring-[#0AADA8]/20' placeholder='Registra observaciones de la revisión, sin asignar una nota.' />{error && <p className='mt-3 text-sm text-red-700'>{error}</p>}{success && <p className='mt-3 text-sm text-[#087D79]'>{success}</p>}<div className='mt-5 grid gap-3'><button type='button' onClick={() => save(false)} disabled={saving || !canReview} className='rounded-xl border border-[#D9E2EA] px-4 py-2.5 text-sm font-semibold text-[#475569] disabled:opacity-60'>Guardar observaciones</button><button type='button' onClick={() => save(true)} disabled={saving || !canReview || participant.status === 'REVIEWED'} className='rounded-xl bg-[#0AADA8] px-4 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-[#B8C5CF]'>{participant.status === 'REVIEWED' ? 'Revisión completada' : saving ? 'Guardando...' : 'Marcar como revisado'}</button></div></section></div>
     </div>
   </>;
 }

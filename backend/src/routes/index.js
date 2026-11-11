@@ -1,3 +1,4 @@
+const { createAdminAccountRoutes } = require('./admin-accounts.routes');
 const { createQuestionBankRoutes } = require('./question-bank.routes');
 const { Router } = require('express');
 
@@ -50,6 +51,7 @@ function createApiRouter(container) {
   const resultDeliveryController = new ResultDeliveryController(container.resultDeliveryService);
 
   router.use('/admin/question-groups', createQuestionBankRoutes(container.questionBankService, container.authService));
+  router.use('/admin', createAdminAccountRoutes(container.adminAccountService, container.authService));
   router.use('/auth', createAuthRoutes(authController, container.authService));
   router.use(
     '/events/:eventId/credentials',

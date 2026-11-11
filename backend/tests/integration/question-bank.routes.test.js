@@ -8,7 +8,7 @@ describe('Question bank authorization and history', () => {
   const payload = { name: 'Grupo A', questions: [{ id: 'q1', text: 'Actúo responsablemente.' }] };
   beforeEach(async () => {
     container = createContainer('memory');
-    await container.repos.userRepo.create({ uid: 'admin-1', role: 'admin' });
+    await container.repos.userRepo.create({ uid: 'admin-1', role: 'admin', adminAccess: 'full' });
     await container.repos.userRepo.create({ uid: 'company-1', role: 'company', orgId: 'org-1' });
     app = createApp(container);
   });
