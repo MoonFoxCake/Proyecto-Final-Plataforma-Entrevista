@@ -41,6 +41,11 @@ export function IssuedCodesDialog({ result, eventName, onClose }) {
               <strong>Estos códigos solo se muestran ahora.</strong> Descarga las hojas de acceso e imprímelas antes de cerrar esta ventana. No se guardan en el sistema: si se pierde una hoja, revoca ese acceso y reemítelo. Guarda el PDF en un lugar seguro o elimínalo después de imprimir.
             </p>
           )}
+          {hasCodes && (
+            <p className='no-print mt-3 rounded-xl border border-[#CDEBEA] bg-[#F4FBFB] p-3 text-sm leading-6 text-[#27625F]'>
+              El día de la evaluación, abre <a href={`${window.location.origin}/presencial`} target='_blank' rel='noreferrer' className='break-all font-semibold underline'>{window.location.origin}/presencial</a> en cada computadora: allí el candidato escribe su código.
+            </p>
+          )}
         </div>
 
         {hasCodes && (

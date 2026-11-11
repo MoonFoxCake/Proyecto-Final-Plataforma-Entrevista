@@ -66,7 +66,6 @@ test('details preserve the selected event and expose only published profiles', a
   change('Evento', 'e2');
   fireEvent.click(screen.getByRole('button', { name: 'Ver detalle' }));
   dialog = within(screen.getByRole('dialog'));
-  expect(dialog.getByRole('link', { name: /perfil inicial/ }).getAttribute('href')).toBe('/company/events/e2/candidates/c1/result');
 });
 
 test('adds candidates through an open event and excludes published events from the picker', async () => {

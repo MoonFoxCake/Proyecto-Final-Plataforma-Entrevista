@@ -8,7 +8,7 @@ const SECONDARY = 'rounded-xl border border-[#D9E2EA] px-3 py-2.5 text-sm font-s
 const PRIMARY = 'inline-flex items-center justify-center gap-2 rounded-xl bg-[#0AADA8] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#089490] disabled:opacity-40';
 
 export function QuestionGroupEditor({ group, onSave, onClose }) {
-  const [form, setForm] = useState(() => ({ name: group?.name || '', description: group?.description || '', questions: group?.questions.map((q) => ({ ...q })) || [question()] }));
+  const [form, setForm] = useState(() => ({ name: group?.name || '', description: group?.description || '', timeLimitMinutes: group?.timeLimitMinutes ?? 0, questions: group?.questions.map((q) => ({ ...q })) || [question()] }));
   const original = useRef(JSON.stringify(form));
   const [step, setStep] = useState(0);
   const [busy, setBusy] = useState(false);
@@ -30,8 +30,10 @@ export function QuestionGroupEditor({ group, onSave, onClose }) {
     if (!form.name.trim()) { setError('Escribe el nombre del grupo.'); setStep(0); setFocus('group-name'); return; }
     const empty = form.questions.findIndex((q) => !q.text.trim());
     if (!form.questions.length || empty !== -1) { setError('Cada pregunta necesita su texto.'); setStep(1); setFocus(`group-question-${empty}`); return; }
+    const minutes = Number(form.timeLimitMinutes);
+    if (!Number.isInteger(minutes) || minutes < 0 || minutes > 240) { setError('El tiempo límite debe ser un número entero entre 0 y 240 minutos.'); setStep(0); setFocus('group-time'); return; }
     setBusy(true); setError('');
-    try { await onSave({ ...form, name: form.name.trim(), description: form.description.trim(), questions: form.questions.map((q) => ({ ...q, text: q.text.trim(), dimension: q.dimension.trim() })), ...(group ? { baseVersion: group.version } : {}) }); }
+    try { await onSave({ ...form, timeLimitMinutes: minutes, name: form.name.trim(), description: form.description.trim(), questions: form.questions.map((q) => ({ ...q, text: q.text.trim(), dimension: q.dimension.trim() })), ...(group ? { baseVersion: group.version } : {}) }); }
     catch (requestError) { setError(requestError.response?.data?.error?.message || requestError.message || 'No se pudo guardar.'); }
     finally { setBusy(false); }
   };
@@ -47,6 +49,7 @@ export function QuestionGroupEditor({ group, onSave, onClose }) {
           <div><h3 className="font-display text-lg font-bold">Información del grupo</h3><p className="mt-1 text-sm leading-6 text-[#64748B]">Cada proceso recibe todas las preguntas de una versión, en el orden definido aquí.</p></div>
           <label className="block text-sm font-medium">Nombre del grupo<input id="group-name" maxLength={120} value={form.name} onChange={(e) => patch('name', e.target.value)} className={FIELD} placeholder="Ej.: Habilidades éticas · Instrumento A" /></label>
           <label className="block text-sm font-medium">Descripción (opcional)<textarea maxLength={1000} rows={3} value={form.description} onChange={(e) => patch('description', e.target.value)} className={FIELD} /></label>
+          <label className="block text-sm font-medium">Tiempo límite total (minutos)<input id="group-time" type="number" min="0" max="240" step="1" value={form.timeLimitMinutes} onChange={(e) => patch('timeLimitMinutes', e.target.value)} className={FIELD} /><span className="mt-1 block text-xs font-normal text-[#64748B]">0 significa sin límite. Si se agota, se envían las respuestas registradas.</span></label>
           <p className="rounded-xl border border-[#A7E4DE] bg-[#F0FFFE] p-4 text-xs leading-6 text-[#087D79]">Las versiones anteriores y los procesos que ya recibieron preguntas se conservan. {group?.active ? 'La nueva versión quedará disponible para los próximos procesos porque este grupo está activo.' : 'El grupo debe estar activo para participar en la selección de nuevos procesos.'}</p>
         </>}
         {step === 1 && <>

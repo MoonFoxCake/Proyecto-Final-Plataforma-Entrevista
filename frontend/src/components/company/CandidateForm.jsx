@@ -48,7 +48,7 @@ export function CandidateForm({ eventId, onCreated, onCancel }) {
             id='nombreCompleto'
             value={form.nombreCompleto}
             onChange={update('nombreCompleto')}
-            placeholder='María Demo'
+            placeholder='María González'
             icon={<UserIcon className='h-4 w-4' />}
             required
           />

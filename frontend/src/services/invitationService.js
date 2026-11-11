@@ -25,8 +25,22 @@ export async function advanceMacrocase(token, action) {
   return data?.data ?? { state: 'INVALID' };
 }
 
-/** Module B: confirms the answers saved stage by stage as the final submission. */
-export async function finalizeMacrocase(token) {
+/** Confirms the answers saved stage by stage as the final submission. */
+export async function finalizeEvaluation(token) {
   const { data } = await api.post('/invitations/access/submit', { token, finalize: true });
   return data?.data ?? null;
+}
+
+export const finalizeMacrocase = finalizeEvaluation;
+
+/** Timed evaluations: stage, saved answers and remaining time (resumes after a reload). */
+export async function getTimedState(token) {
+  const { data } = await api.post('/invitations/access/timed/state', { token });
+  return data?.data ?? { state: 'INVALID' };
+}
+
+/** Timed evaluations: one candidate action (`START`, `STORY_DONE`, `ANSWER`). */
+export async function advanceTimed(token, action) {
+  const { data } = await api.post('/invitations/access/timed/advance', { token, action });
+  return data?.data ?? { state: 'INVALID' };
 }

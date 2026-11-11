@@ -11,7 +11,7 @@ const { NotFoundError } = require('../../../src/utils/errors');
 
 const PEPPER = 'p'.repeat(32);
 const SESSION = {
-  venue: 'Campus Central', room: 'Aula 204', startsAt: new Date('2026-11-05T14:00:00.000Z'), endsAt: new Date('2026-11-05T16:00:00.000Z'),
+  venue: 'Campus Central', room: 'Aula 204', startsAt: new Date('2099-11-05T14:00:00.000Z'), endsAt: new Date('2099-11-05T16:00:00.000Z'),
 };
 const LIKERT = [1, 2, 3, 4].map((number) => ({ questionId: `demo-a-${number}`, value: number }));
 
@@ -74,7 +74,7 @@ describe('OnsiteAccessService', () => {
     // Codes prepared before the appointment; its entry window (default 30 min) opens.
     const { issued } = await credentials.issueBatch('event-1', 'org-1', { module: 'A', candidateIds: [ana.id, bruno.id] }, 'preparer');
     codes = Object.fromEntries(issued.map((item) => [item.candidateId, item.code]));
-    clock.now = new Date('2026-11-05T14:10:00.000Z');
+    clock.now = new Date('2099-11-05T14:10:00.000Z');
   });
 
   const client = { ip: '10.0.0.1', clientId: 'browser-1' };
@@ -108,29 +108,29 @@ describe('OnsiteAccessService', () => {
   });
 
   test('before the appointment starts the code does not open anything yet', async () => {
-    clock.now = new Date('2026-11-05T13:59:00.000Z');
+    clock.now = new Date('2099-11-05T13:59:00.000Z');
     await expect(service.login(codes[bruno.id], client)).resolves.toEqual({ state: 'NOT_YET' });
     expect(invitationRepo.data).toEqual([]);
     expect(credentialRepo.data.find((item) => item.candidateId === bruno.id).status).toBe('GENERATED');
   });
 
   test('once the entry window closes the code no longer lets anyone begin', async () => {
-    clock.now = new Date('2026-11-05T14:30:00.000Z');
+    clock.now = new Date('2099-11-05T14:30:00.000Z');
     await expect(service.login(codes[bruno.id], client)).resolves.toEqual({ state: 'WINDOW_CLOSED' });
     expect(invitationRepo.data).toEqual([]);
   });
 
   test('the window lasts the minutes configured for the appointment', async () => {
     event = { ...event, onsite: { ...SESSION, entryWindowMinutes: 10 } };
-    clock.now = new Date('2026-11-05T14:09:59.000Z');
+    clock.now = new Date('2099-11-05T14:09:59.000Z');
     await expect(service.login(codes[ana.id], client)).resolves.toMatchObject({ state: 'VALID' });
-    clock.now = new Date('2026-11-05T14:10:00.000Z');
+    clock.now = new Date('2099-11-05T14:10:00.000Z');
     await expect(service.login(codes[bruno.id], client)).resolves.toEqual({ state: 'WINDOW_CLOSED' });
   });
 
   test('a session begun inside the window continues after it closes', async () => {
     const { token } = await service.login(codes[ana.id], client);
-    clock.now = new Date('2026-11-05T15:40:00.000Z');
+    clock.now = new Date('2099-11-05T15:40:00.000Z');
     await expect(invitations.validateAccess(token)).resolves.toMatchObject({ state: 'VALID' });
     await expect(invitations.submitEvaluation(token, { answers: LIKERT })).resolves.toMatchObject({ state: 'COMPLETED' });
   });
@@ -152,7 +152,7 @@ describe('OnsiteAccessService', () => {
     await credentials.revoke('event-1', 'org-1', roster.rows.find((row) => row.candidateId === bruno.id).credential.id, 'supervisor');
     await expect(service.login(codes[bruno.id], client)).resolves.toEqual({ state: 'REVOKED' });
 
-    clock.now = new Date('2026-11-06T06:00:00.000Z');
+    clock.now = new Date('2099-11-06T06:00:00.000Z');
     await expect(service.login(codes[ana.id], client)).resolves.toEqual({ state: 'EXPIRED' });
   });
 
@@ -183,7 +183,7 @@ describe('OnsiteAccessService', () => {
   });
 
   test('correct codes that cannot be used now do not count as failed attempts', async () => {
-    clock.now = new Date('2026-11-05T13:00:00.000Z');
+    clock.now = new Date('2099-11-05T13:00:00.000Z');
     for (let index = 0; index < 5; index += 1) await service.login(codes[bruno.id], client);
     expect(limiter.retryAfter([`client:${client.clientId}`])).toBe(0);
   });

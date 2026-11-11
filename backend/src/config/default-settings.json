@@ -1,0 +1,85 @@
+{
+  "landing": {
+    "badge": "Evaluación ética para el reclutamiento universitario",
+    "heroTitle": "Conoce las habilidades éticas que acompañan el",
+    "heroHighlight": "talento universitario.",
+    "heroText": "Apoya los procesos de reclutamiento universitario con evaluaciones estructuradas de habilidades éticas, resultados organizados y criterios claros para revisar cada perfil.",
+    "aboutTitle": "Decisiones de talento con más claridad",
+    "aboutText": "NexoPerfil es una plataforma para apoyar a las instituciones en el reclutamiento universitario mediante evaluaciones estructuradas de habilidades éticas y la revisión organizada de resultados.",
+    "benefitsTitle": "Todo el proceso en un mismo lugar",
+    "benefits": [
+      {
+        "title": "Evaluación por etapas",
+        "body": "Organiza el proceso de acuerdo con las fases contratadas."
+      },
+      {
+        "title": "Resultados comparables",
+        "body": "Consulta resultados y contrasta perfiles con criterios definidos."
+      },
+      {
+        "title": "Gestión centralizada",
+        "body": "Administra procesos, candidatos e informes desde el portal empresarial."
+      }
+    ],
+    "plansTitle": "Elige las fases que necesita tu institución",
+    "plansText": "Selecciona el plan que mejor se adapte a tu proceso de selección.",
+    "contactTitle": "¿Listo para evaluar con más claridad?",
+    "contactText": "Selecciona un plan para configurar el proceso de evaluación de tu institución."
+  },
+  "plans": {
+    "fase-a": {
+      "name": "Fase A",
+      "price": "₡XXX",
+      "description": "Conoce el perfil profesional de tus candidatos.",
+      "features": [
+        "Cuestionario Likert",
+        "Perfil inicial",
+        "Comparación con perfil ideal",
+        "Reporte descargable"
+      ]
+    },
+    "fase-a-b": {
+      "name": "Fase A + B",
+      "price": "₡XXX",
+      "description": "Profundiza con una evaluación basada en casos.",
+      "features": [
+        "Todo lo incluido en Fase A",
+        "Macrocaso profesional",
+        "Evaluación por criterios",
+        "Resultados por fase"
+      ]
+    },
+    "completo": {
+      "name": "Plan completo",
+      "price": "₡XXX",
+      "description": "Una evaluación integral por etapas.",
+      "features": [
+        "Todo lo incluido en A + B",
+        "Acceso a microcasos (Fase C)",
+        "Perfil final integral",
+        "Comparación multidimensional"
+      ]
+    }
+  },
+  "evaluation": {
+    "moduleAValidityHours": 24,
+    "moduleBCValidityDays": 3,
+    "defaultEntryWindowMinutes": 30
+  },
+  "emails": {
+    "invitationSubject": "Invitación a evaluación · {evento}",
+    "invitationIntro": "{empresa} te ha invitado a participar en:",
+    "moduleBSubject": "Segunda etapa · {evento}",
+    "moduleBIntro": "{empresa} te invita a continuar con la segunda etapa de:",
+    "moduleBNote": "En esta etapa leerás un caso y responderás, con una escala del 1 al 5, las preguntas que te hará un asistente virtual. Activa el sonido de tu dispositivo.",
+    "moduleCSubject": "Tercera etapa · {evento}",
+    "moduleCIntro": "{empresa} te invita a continuar con la tercera etapa de:",
+    "moduleCNote": "Leerás una historia y responderás preguntas de escala Likert sobre las habilidades seleccionadas.",
+    "citationClosing": "Llega con anticipación y lleva un documento de identidad. Solo podrás iniciar la evaluación dentro del horario de inicio indicado. Tus datos de acceso a la evaluación se te entregarán en la sede.",
+    "resultSubject": "Resultado de Fase {fase} · {evento}",
+    "resultBody": "Ya está disponible el resultado correspondiente a la Fase {fase} del proceso {evento}."
+  },
+  "notifications": {
+    "adminEmail": ""
+  }
+}

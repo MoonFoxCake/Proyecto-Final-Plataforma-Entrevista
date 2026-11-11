@@ -5,6 +5,7 @@ import { EMPTY_SESSION, SessionFields, sessionProblem, toCitationPayload } from 
 import { Button, FormField, Input } from '../components/ui';
 import { BriefcaseIcon, SpinnerIcon } from '../components/auth/icons.jsx';
 import * as eventService from '../services/eventService.js';
+import * as settingsService from '../services/settingsService.js';
 import * as subscriptionService from '../services/subscriptionService.js';
 import { canUseModule, normalizePlanId, SUBSCRIPTION_PLANS } from '../utils/subscriptionPlans.js';
 
@@ -47,6 +48,16 @@ useEffect(() => {
     .then((value) => setSubscription(value))
     .catch(() => setSubscription(null))
     .finally(() => setSubscriptionLoading(false));
+}, []);
+
+// The administrator's default entry window for new onsite sessions.
+useEffect(() => {
+  settingsService.getPublicSettings()
+    .then((settings) => {
+      const minutes = settings?.evaluation?.defaultEntryWindowMinutes;
+      if (minutes) setForm((current) => ({ ...current, presencial: { ...current.presencial, ventana: String(minutes) } }));
+    })
+    .catch(() => {});
 }, []);
 
 const planId = normalizePlanId(subscription?.subscription?.planId ?? subscription?.planId);
@@ -219,7 +230,7 @@ const onsite = form.modalidad === 'presencial';
                     </span>
 
                     <span className='mt-1 block text-xs leading-5 text-[#64748B]'>
-                      Segunda etapa para los candidatos que elijas después de revisar su perfil del Módulo A.
+                      Segunda etapa para los candidatos que elijas después de recibir el informe del Módulo A.
                       {onsite
                         ? ' En eventos presenciales se cita a una sesión propia, porque requiere los resultados del Módulo A publicados.'
                         : ''}

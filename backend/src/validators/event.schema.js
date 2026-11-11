@@ -83,8 +83,23 @@ const moduleBInvitationSchema = z.object({
 // `papel`: paper size of the printable cards PDF.
 const paperSize = z.enum(['CARTA', 'A4']).optional().default('CARTA');
 
+const phaseModule = z.enum(['A', 'B', 'C']);
+
+const moduleCConfigSchema = z.object({
+  sectionIds: z.array(z.string().min(1).max(120)).min(1, 'Selecciona al menos una habilidad.').max(100),
+}).strict();
+
+const moduleCInvitationSchema = z.object({
+  candidateIds: z.array(z.string().min(1).max(120)).min(1, 'Selecciona al menos un candidato.').max(500),
+  citacion: citationSchema.optional(),
+}).strict();
+
+const withdrawSchema = z.object({ modulo: phaseModule }).strict();
+
+const phaseParamSchema = z.object({ module: phaseModule }).passthrough();
+
 const credentialBatchSchema = z.object({
-  modulo: z.enum(['A', 'B']),
+  modulo: phaseModule,
   candidateIds: z.array(z.string().min(1).max(120)).min(1, 'Selecciona al menos un candidato.').max(500),
   papel: paperSize,
 }).strict();
@@ -95,17 +110,17 @@ const credentialActionSchema = z.object({
 }).strict();
 
 const attendanceQuerySchema = z.object({
-  modulo: z.enum(['A', 'B']).optional().default('A'),
+  modulo: phaseModule.optional().default('A'),
   papel: paperSize,
 }).strict();
 
 // Applicator panel.
 const onsiteRosterQuerySchema = z.object({
-  modulo: z.enum(['A', 'B']).optional().default('A'),
+  modulo: phaseModule.optional().default('A'),
 }).strict();
 
 const attendanceSchema = z.object({
-  modulo: z.enum(['A', 'B']),
+  modulo: phaseModule,
   candidateId: z.string().min(1).max(120),
   presente: z.boolean(),
 }).strict();
@@ -116,6 +131,16 @@ const onsiteLoginSchema = z.object({
 }).strict();
 
 const macrocaseStageSchema = z.object({ token: accessToken }).strict();
+
+// Timed Likert evaluations (Module C, and Module A with a time limit).
+const timedActionSchema = z.object({
+  token: accessToken,
+  action: z.discriminatedUnion('type', [
+    z.object({ type: z.literal('START') }).strict(),
+    z.object({ type: z.literal('STORY_DONE') }).strict(),
+    z.object({ type: z.literal('ANSWER'), questionId: z.string().min(1).max(120), value: z.number().int().min(1).max(5) }).strict(),
+  ]),
+}).strict();
 
 const stageId = z.string().min(1).max(120);
 // `timedOut`: the question's time ran out and the answer goes as it was (it
@@ -140,6 +165,11 @@ module.exports = {
   reviewSchema,
   submissionSchema,
   moduleBInvitationSchema,
+  moduleCConfigSchema,
+  moduleCInvitationSchema,
+  withdrawSchema,
+  phaseParamSchema,
+  timedActionSchema,
   macrocaseStageSchema,
   macrocaseActionSchema,
   credentialBatchSchema,

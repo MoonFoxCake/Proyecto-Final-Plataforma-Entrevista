@@ -15,7 +15,8 @@ function formatAppointment(value) {
 
 /** General status of the candidate's evaluation (onsite: the citation has its own column). */
 export function EvaluationStatus({ status, profileAvailable, onsite }) {
-  if (profileAvailable) return <StatusBadge tone='ok'>Perfil disponible</StatusBadge>;
+  if (status === 'WITHDRAWN') return <StatusBadge tone='muted'>Retirado</StatusBadge>;
+  if (profileAvailable) return <StatusBadge tone='ok'>Evaluado</StatusBadge>;
   if (status === 'EVALUATION_COMPLETED') return <StatusBadge tone='warning'>En revisión</StatusBadge>;
   if (onsite) return <StatusBadge tone='muted'>Por evaluar</StatusBadge>;
   if (status === 'INVITATION_SENT') return <StatusBadge tone='info'>Invitación enviada</StatusBadge>;
@@ -33,7 +34,7 @@ function CitationStatus({ citation }) {
  * general evaluation status. `citationAction` is rendered next to the
  * citation column title (e.g. refresh the delivery status).
  */
-export function CandidateList({ candidates, onsite = false, citationAction = null }) {
+export function CandidateList({ candidates, onsite = false, citationAction = null, actions = null }) {
   return (
     <table className='w-full text-left'>
       <thead className='border-y border-[#E8EDF2] bg-[#FAFBFC] text-[11px] font-semibold uppercase tracking-wide text-[#718096]'>
@@ -47,6 +48,7 @@ export function CandidateList({ candidates, onsite = false, citationAction = nul
           )}
           <th scope='col' className='px-5 py-3'>{onsite ? 'Evaluación' : 'Estado'}</th>
           <th scope='col' className='hidden px-5 py-3 xl:table-cell'>Cita</th>
+          {actions && <th scope='col' className='px-5 py-3 text-right'><span className='sr-only'>Acciones</span></th>}
         </tr>
       </thead>
       <tbody className='divide-y divide-[#E8EDF2]'>
@@ -66,6 +68,7 @@ export function CandidateList({ candidates, onsite = false, citationAction = nul
             {onsite && <td className='px-5 py-4'><CitationStatus citation={candidate.citation} /></td>}
             <td className='px-5 py-4'><EvaluationStatus status={candidate.status} profileAvailable={candidate.profileAvailable} onsite={onsite} /></td>
             <td className='hidden whitespace-nowrap px-5 py-4 text-sm text-[#475569] xl:table-cell'>{formatAppointment(candidate.fechaHoraCita)}</td>
+            {actions && <td className='px-5 py-4 text-right'>{actions(candidate)}</td>}
           </tr>
         ))}
       </tbody>

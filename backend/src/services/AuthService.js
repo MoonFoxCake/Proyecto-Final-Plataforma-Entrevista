@@ -64,7 +64,7 @@ class AuthService {
       organization = await this.organizationRepo.create({
         subscription: {
           planId: requestedPlan,
-          status: 'pending_simulation',
+          status: 'active',
           paymentMode: 'simulated',
           createdAt: acceptedTermsAt,
           updatedAt: acceptedTermsAt,

@@ -16,5 +16,5 @@ test('suggests one next step for each moment of the event', () => {
 
   expect(nextAction(summarize(onsite, [{ status: 'EVALUATION_COMPLETED' }])).title).toBe('En revisión');
   expect(nextAction(summarize(published, [{ status: 'EVALUATION_COMPLETED', profileAvailable: true }]))).toMatchObject({ title: 'Elige quiénes continúan al Módulo B', to: 'resultados' });
-  expect(nextAction(summarize({ ...published, modules: ['A'] }, [{ status: 'EVALUATION_COMPLETED', profileAvailable: true }]))).toMatchObject({ title: 'Resultados publicados' });
+  expect(nextAction(summarize({ ...published, modules: ['A'] }, [{ status: 'EVALUATION_COMPLETED', profileAvailable: true }]))).toMatchObject({ title: 'Resultados disponibles' });
 });

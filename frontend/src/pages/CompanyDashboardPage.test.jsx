@@ -68,6 +68,6 @@ test('reloads subscription details when returning from another section', async (
   subscriptions.getSubscription.mockResolvedValue({ ...plan, subscription: { planId: 'fase-a-b', status: 'pending_simulation' } });
   fireEvent.click(navButton(/Mi plan/));
   await screen.findByRole('heading', { name: 'Fase A + B' });
-  expect(screen.getByText('Activación pendiente')).toBeTruthy();
+  expect(screen.getByText('Plan activo')).toBeTruthy();
   expect(subscriptions.getSubscription).toHaveBeenCalledTimes(2);
 });

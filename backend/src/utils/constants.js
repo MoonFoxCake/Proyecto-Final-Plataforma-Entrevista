@@ -16,6 +16,7 @@ const CANDIDATE_STATUSES = Object.freeze({
   INVITATION_SENT: 'INVITATION_SENT',
   CITED: 'CITED',
   EVALUATION_COMPLETED: 'EVALUATION_COMPLETED',
+  WITHDRAWN: 'WITHDRAWN',
 });
 
 // event.modality. Events created before modalities existed are online.

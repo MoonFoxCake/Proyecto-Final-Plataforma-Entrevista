@@ -20,11 +20,11 @@ describe('EventService', () => {
       orgId: 'org-1',
       name: 'Concurso Demo',
       position: 'Analista',
-      plan: 'A',
+      plan: 'fase-a',
       status: 'ACTIVE',
     });
     expect(event.availableFrom).toEqual(new Date('2026-10-10T15:00:00.000Z'));
-    expect(event).toMatchObject({ modality: 'online', modules: ['A', 'B'] });
+    expect(event).toMatchObject({ modality: 'online', modules: ['A'], requiresPhaseReports: true });
   });
 
   test('creates an onsite event with its venue and session, starting the evaluation at the session start', async () => {

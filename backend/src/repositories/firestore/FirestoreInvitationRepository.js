@@ -93,7 +93,7 @@ class FirestoreInvitationRepository extends IInvitationRepository {
       const candidate = (await transaction.get(candidateRef)).data() || {};
       const stageDone = module === 'B' ? candidate.moduleB?.status === 'COMPLETED' : module === 'C' ? candidate.moduleC?.status === 'COMPLETED' : candidate.status === 'EVALUATION_COMPLETED';
       if (stageDone) {
-        const previous = module === 'B' ? candidate.moduleB?.submittedAt : candidate.submittedAt;
+        const previous = module === 'B' ? candidate.moduleB?.submittedAt : module === 'C' ? candidate.moduleC?.submittedAt : candidate.submittedAt;
         return { state: 'COMPLETED', submittedAt: previous?.toDate?.() ?? previous, alreadySubmitted: true };
       }
 

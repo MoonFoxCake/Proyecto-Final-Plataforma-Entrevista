@@ -32,7 +32,6 @@ export function renderEvent(path = '/company/events/event-1') {
           <Route path='resultados' element={<EventResultsTab />} />
           <Route path='onsite' element={<Navigate to='../presencial?etapa=aplicar' replace />} />
         </Route>
-        <Route path='/company/events/:eventId/candidates/:candidateId/result' element={<p>Perfil del candidato</p>} />
       </Routes>
       <LocationProbe />
     </MemoryRouter>,

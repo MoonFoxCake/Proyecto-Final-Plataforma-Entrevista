@@ -45,8 +45,17 @@ export async function publishEventInvitations(eventId) {
   return data?.data ?? null;
 }
 
-export async function configureModuleC(eventId, microcaseId, sectionIds) { const { data } = await api.put(`/events/${eventId}/module-c/configure`, { microcaseId, sectionIds }); return data?.data ?? null; }
-export async function sendModuleCInvitations(eventId, candidateIds, sectionIds, citacion) { const { data } = await api.post(`/events/${eventId}/module-c/invitations`, { candidateIds, sectionIds, ...(citacion ? { citacion } : {}) }); return data?.data ?? null; }
+/** Processes created before the draw moved to creation: assigns their microcase. */
+export async function assignModuleC(eventId) { const { data } = await api.post(`/events/${eventId}/module-c/assign`); return data?.data ?? null; }
+
+/** Module C: which skills of the process's microcase are evaluated. */
+export async function configureModuleC(eventId, sectionIds) { const { data } = await api.put(`/events/${eventId}/module-c/configure`, { sectionIds }); return data?.data ?? null; }
+export async function sendModuleCInvitations(eventId, candidateIds, citacion) { const { data } = await api.post(`/events/${eventId}/module-c/invitations`, { candidateIds, ...(citacion ? { citacion } : {}) }); return data?.data ?? null; }
+
+/** Module A: a new link or citation for someone who has not answered. */
+export async function resendCandidate(eventId, candidateId) { const { data } = await api.post(`/events/${eventId}/candidates/${candidateId}/resend`); return data?.data ?? null; }
+export async function withdrawCandidate(eventId, candidateId, modulo) { const { data } = await api.post(`/events/${eventId}/candidates/${candidateId}/withdraw`, { modulo }); return data?.data ?? null; }
+export async function closePhase(eventId, module) { const { data } = await api.post(`/events/${eventId}/phases/${module}/close`); return data?.data ?? null; }
 
 export async function getResultDownloadUrl(eventId, module) { const { data } = await api.get(`/events/${eventId}/results/${module}/download`); return data?.data ?? null; }
 

@@ -1,5 +1,6 @@
 const { createAdminAccountRoutes } = require('./admin-accounts.routes');
 const { createQuestionBankRoutes } = require('./question-bank.routes');
+const { createSettingsRoutes } = require('./settings.routes');
 const { Router } = require('express');
 
 const AuthController = require('../controllers/auth.controller');
@@ -38,7 +39,7 @@ function createApiRouter(container) {
     container.microcaseService,
     container.resultDeliveryService
   );
-  const adminReviewController = new AdminReviewController(container.reviewService);
+  const adminReviewController = new AdminReviewController(container.reviewService, container.invitationService);
 
   const macrocaseController = new MacrocaseController(
   container.macrocaseService
@@ -50,6 +51,7 @@ function createApiRouter(container) {
   const onsiteApplicationController = new OnsiteApplicationController(container.onsiteApplicationService);
   const resultDeliveryController = new ResultDeliveryController(container.resultDeliveryService);
 
+  router.use('/admin/settings', createSettingsRoutes(container.settingsService, container.authService));
   router.use('/admin/question-groups', createQuestionBankRoutes(container.questionBankService, container.authService));
   router.use('/admin', createAdminAccountRoutes(container.adminAccountService, container.authService));
   router.use('/auth', createAuthRoutes(authController, container.authService));

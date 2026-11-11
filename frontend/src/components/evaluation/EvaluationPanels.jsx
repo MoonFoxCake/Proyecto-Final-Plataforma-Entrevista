@@ -18,7 +18,7 @@ export function QuestionProgress({ moduleLabel, current, total }) {
   );
 }
 
-export function CompletedPanel({ submittedAt, footnote = 'Contenido demostrativo · Sin calificación' }) {
+export function CompletedPanel({ submittedAt, footnote = 'Evaluación · NexoPerfil' }) {
   const formatted = submittedAt ? new Intl.DateTimeFormat('es-GT', {
     dateStyle: 'medium', timeStyle: 'short', timeZone: 'America/Guatemala',
   }).format(new Date(submittedAt)) : '';

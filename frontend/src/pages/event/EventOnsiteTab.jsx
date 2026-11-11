@@ -3,6 +3,7 @@ import { Navigate, useOutletContext, useSearchParams } from 'react-router-dom';
 import { OnsitePrepareStage } from '../../components/onsite/OnsitePrepareStage.jsx';
 import { OnsiteOrganizeStage } from '../../components/onsite/OnsiteOrganizeStage.jsx';
 import { OnsiteApplyStage } from '../../components/onsite/OnsiteApplyStage.jsx';
+import { OnsiteAccessLink } from '../../components/onsite/OnsiteAccessLink.jsx';
 import * as credentialService from '../../services/credentialService.js';
 
 const STAGES = [
@@ -36,8 +37,8 @@ export function EventOnsiteTab() {
     }
   }, [eventId]);
 
-  // Reload when the candidates change (new ones, Module B citations).
-  const candidatesVersion = candidates.map((candidate) => `${candidate.id}:${candidate.status}:${candidate.moduleB?.status ?? ''}`).join('|');
+  // Reload when the candidates change (new ones, Module B or C citations).
+  const candidatesVersion = candidates.map((candidate) => `${candidate.id}:${candidate.status}:${candidate.moduleB?.status ?? ''}:${candidate.moduleC?.status ?? ''}`).join('|');
   useEffect(() => { if (state.onsite) loadSummary(); }, [loadSummary, candidatesVersion, state.onsite]);
 
   // Online events have no onsite application (only once the event is known).
@@ -48,6 +49,7 @@ export function EventOnsiteTab() {
 
   return (
     <div className='space-y-6'>
+      <OnsiteAccessLink />
       <div className='flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between'>
         <nav aria-label='Etapas de la aplicación presencial'>
           <ol className='flex flex-wrap gap-2'>

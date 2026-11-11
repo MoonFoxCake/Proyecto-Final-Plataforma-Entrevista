@@ -105,7 +105,7 @@ export function OnsitePrepareStage({ event, module, summary, loaded, reload, not
       <div className='overflow-x-auto rounded-2xl border border-[#DDE5EC] bg-white shadow-sm'>
         {rows.length === 0 ? (
           <div className='px-6 py-12 text-center text-sm text-[#64748B]'>
-            {module === 'B' ? 'Aún no hay candidatos citados al Módulo B. Cítalos desde Resultados.' : 'Aún no hay candidatos en este evento. Agrégalos desde Candidatos.'}
+            {module !== 'A' ? `Aún no hay candidatos citados al Módulo ${module}. Cítalos desde Resultados.` : 'Aún no hay candidatos en este evento. Agrégalos desde Candidatos.'}
           </div>
         ) : (
           <table className='w-full text-left text-sm'>

@@ -2,7 +2,9 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import * as eventService from '../../services/eventService.js';
 import { ONSITE_EVENT, renderEvent } from './renderEvent.test-utils.jsx';
 
-vi.mock('../../services/eventService.js', () => ({ getEvent: vi.fn(), getEventCandidates: vi.fn(), sendModuleBInvitations: vi.fn() }));
+vi.mock('../../services/eventService.js', () => ({ getEvent: vi.fn(), getEventCandidates: vi.fn(), sendModuleBInvitations: vi.fn(), getResultDownloadUrl: vi.fn(), configureModuleC: vi.fn(), sendModuleCInvitations: vi.fn() }));
+vi.mock('../../services/subscriptionService.js', () => ({ getSubscription: vi.fn(async () => ({ subscription: { planId: 'completo' } })) }));
+vi.mock('../../services/settingsService.js', () => ({ getPublicSettings: vi.fn(async () => null) }));
 vi.mock('../../services/credentialService.js', () => ({ getCredentials: vi.fn(async () => ({ modules: [] })) }));
 vi.mock('../../components/company/CompanySidebar.jsx', () => ({ CompanySidebar: () => <nav aria-label='Menú' /> }));
 
@@ -22,21 +24,18 @@ beforeEach(() => {
 test('before publication it explains when the results will appear', async () => {
   eventService.getEvent.mockResolvedValue(ONSITE_EVENT);
   renderEvent('/company/events/event-1/resultados');
-  expect(await screen.findByText('Aún no hay resultados publicados')).toBeTruthy();
+  expect(await screen.findByText('Aún no hay resultados entregados')).toBeTruthy();
   expect(screen.queryByRole('table')).toBeNull();
 });
 
-test('lists the profiles and opens the existing profile page', async () => {
+test('lists each candidate with the status of every phase', async () => {
   eventService.getEvent.mockResolvedValue(PUBLISHED);
   renderEvent('/company/events/event-1/resultados');
 
   const maria = (await screen.findByText('María López')).closest('tr');
-  expect(within(maria).getByText('Perfil disponible')).toBeTruthy();
+  expect(within(maria).getByText('Evaluado')).toBeTruthy();
   expect(within(screen.getByText('Carlos Díaz').closest('tr')).getByText('Respondido')).toBeTruthy();
-  expect(within(screen.getByText('Ana Ruiz').closest('tr')).getByText('No disponible')).toBeTruthy();
-
-  fireEvent.click(within(maria).getByRole('link', { name: 'Ver perfil' }));
-  expect(await screen.findByText('Perfil del candidato')).toBeTruthy();
+  expect(screen.queryByRole('link', { name: 'Ver perfil' })).toBeNull();
 });
 
 test('onsite Module B: picks who continues and asks for the session in a dialog', async () => {
@@ -76,10 +75,10 @@ test('online Module B keeps its confirmation before sending links', async () => 
   await waitFor(() => expect(eventService.sendModuleBInvitations).toHaveBeenCalledWith('event-1', ['c1'], undefined));
 });
 
-test('events without Module B only list the profiles', async () => {
+test('events without Module B only list the phase A status', async () => {
   eventService.getEvent.mockResolvedValue({ ...PUBLISHED, modules: ['A'] });
   renderEvent('/company/events/event-1/resultados');
-  expect(await screen.findByText('Perfiles publicados del Módulo A.')).toBeTruthy();
+  expect(await screen.findByText('Informe de la Fase A.')).toBeTruthy();
   expect(screen.queryByRole('checkbox')).toBeNull();
   expect(screen.queryByRole('button', { name: /Módulo B/ })).toBeNull();
 });

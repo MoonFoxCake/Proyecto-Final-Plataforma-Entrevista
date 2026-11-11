@@ -59,9 +59,11 @@ export function EventSummaryTab() {
           <Metric label='Candidatos' value={state.total} />
           <Metric label={state.onsite ? 'Citados' : 'Invitados'} value={state.contacted} hint={state.pending ? `${state.pending} pendientes` : undefined} />
           <Metric label='Evaluaciones completadas' value={state.completed} />
-          {state.hasModuleB && state.published
-            ? <Metric label='Módulo B respondidos' value={`${state.moduleBCompleted}/${state.moduleBSent}`} />
-            : <Metric label='Perfiles publicados' value={state.profiles} />}
+          {state.moduleCSent > 0
+            ? <Metric label='Módulo C respondidos' value={`${state.moduleCCompleted}/${state.moduleCSent}`} />
+            : state.hasModuleB && state.published
+              ? <Metric label='Módulo B respondidos' value={`${state.moduleBCompleted}/${state.moduleBSent}`} />
+              : <Metric label='Evaluados' value={state.profiles} />}
         </dl>
       </section>
 
@@ -78,7 +80,7 @@ export function EventSummaryTab() {
           ) : (
             <Fact label='Disponible desde'>{formatDateTime(event?.availableFrom || event?.date)}</Fact>
           )}
-          <Fact label='Módulos'>{state.hasModuleB ? 'A · Cuestionario y B · Macrocaso' : 'A · Cuestionario'}</Fact>
+          <Fact label='Módulos'>{state.hasModuleC ? 'A · Cuestionario, B · Macrocaso y C · Microcaso' : state.hasModuleB ? 'A · Cuestionario y B · Macrocaso' : 'A · Cuestionario'}</Fact>
         </dl>
         {state.onsite && event?.onsite?.instructions && (
           <div className='mt-5 border-t border-[#EEF2F6] pt-4'>

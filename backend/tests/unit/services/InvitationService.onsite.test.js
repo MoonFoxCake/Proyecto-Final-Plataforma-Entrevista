@@ -46,7 +46,7 @@ describe('InvitationService · onsite events', () => {
         getEvent: jest.fn(async () => event),
         assignModuleB: jest.fn(async (_eventId, _orgId, macrocase) => { event = { ...event, moduleB: { macrocase } }; return event; }),
       },
-      organizationRepo: { findById: jest.fn().mockResolvedValue({ id: 'org-1', name: 'TechCorp' }) },
+      organizationRepo: { findById: jest.fn().mockResolvedValue({ id: 'org-1', name: 'TechCorp', subscription: { planId: 'completo' } }) },
       emailService,
       // No FRONTEND_URL: onsite citations do not need one, they carry no link.
       frontendUrl: undefined,

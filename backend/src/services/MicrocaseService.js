@@ -3,7 +3,7 @@ const { NotFoundError, ValidationError } = require('../utils/errors');
 const DEFAULT_SECTIONS = ['Habilidades éticas 1', 'Habilidades éticas 2', 'Habilidades éticas 3', 'Habilidades éticas 4'];
 const id = () => crypto.randomUUID();
 class MicrocaseService {
-  constructor(repo) { this.repo = repo; }
+  constructor(repo, { random = Math.random } = {}) { this.repo = repo; this.random = random; }
   async list() { return (await this.repo.findAll()).sort((a,b) => (b.updatedAt?.seconds || 0) - (a.updatedAt?.seconds || 0)); }
   async get(microcaseId) { const item = await this.repo.findById(microcaseId); if (!item) throw new NotFoundError('Microcaso no encontrado.'); return item; }
   normalize(data, existing = {}) {
@@ -33,6 +33,28 @@ class MicrocaseService {
       }
     }
     return this.repo.update(microcaseId, { active: Boolean(active) });
+  }
+  /**
+   * Draws one of the active, complete microcases for a process and returns a
+   * copy, so editing the bank later does not change a running process.
+   */
+  async pickSnapshot() {
+    const usable = (await this.repo.findAll()).filter((item) => item.active === true && item.story?.trim()
+      && item.sections?.length && item.sections.every((section) => section.questions?.some((question) => question.text?.trim())));
+    if (!usable.length) throw new ValidationError('No hay microcasos activos y completos en el Banco de Microcasos. Activa al menos uno.');
+    const item = usable[Math.floor(this.random() * usable.length) % usable.length];
+    return {
+      id: item.id,
+      name: item.name,
+      story: item.story,
+      timeLimitMinutes: item.timeLimitMinutes || 15,
+      sections: item.sections.map((section) => ({
+        id: section.id,
+        order: section.order,
+        title: section.title,
+        questions: section.questions.filter((question) => question.text?.trim()).map(({ id: questionId, text }) => ({ id: questionId, text })),
+      })),
+    };
   }
   async delete(microcaseId) { const item = await this.repo.delete(microcaseId); if (!item) throw new NotFoundError('Microcaso no encontrado.'); return item; }
   async preview(microcaseId, sectionIds = []) {

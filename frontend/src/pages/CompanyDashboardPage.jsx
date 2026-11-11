@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { CompanyPlanView } from '../components/company/CompanyPlanView.jsx';
+import { CompanyResultsView } from '../components/company/CompanyResultsView.jsx';
 import { CompanyCandidatesView } from './CompanyCandidatesView.jsx';
 import { CompanyEventsView } from './CompanyEventsView.jsx';
 import {
@@ -9,33 +10,34 @@ import {
   CompanyPlaceholderView,
 } from '../components/company/CompanySidebar.jsx';
 import { SpinnerIcon } from '../components/auth/icons.jsx';
+import { BarChart, ChartCard } from '../components/ui/Charts.jsx';
 import * as eventService from '../services/eventService.js';
+import { formatSession, isOnsite, modulesOf } from '../utils/eventModality.js';
+import { hasCompleted, inPhase, isWithdrawn } from '../utils/phases.js';
+
+const PHASES = [['A', 'Fase A · Cuestionario'], ['B', 'Fase B · Macrocaso'], ['C', 'Fase C · Microcaso']];
 
 function eventName(event) {
-  return (
-    event.name ||
-    event.title ||
-    event.eventName ||
-    event.positionName ||
-    'Evento sin nombre'
-  );
+  return event.name || event.title || event.eventName || event.positionName || 'Evento sin nombre';
 }
 
-function isPhaseAInvited(candidate) {
-  return ['INVITATION_SENT', 'EVALUATION_COMPLETED'].includes(candidate.status);
+const asDate = (value) => {
+  if (!value) return null;
+  const date = new Date(value._seconds != null ? value._seconds * 1000 : value);
+  return Number.isNaN(date.getTime()) ? null : date;
+};
+
+/** Reached by the phase: invited or cited (Module A also counts whoever is registered but not contacted as not invited). */
+function isInvited(candidate, module) {
+  if (isWithdrawn(candidate, module)) return false;
+  if (module === 'A') return candidate.status !== 'INVITED_PENDING';
+  return inPhase(candidate, module);
 }
 
-function isPhaseACompleted(candidate) {
-  return Boolean(candidate.submittedAt) || candidate.status === 'EVALUATION_COMPLETED';
-}
-
-function isPhaseBInvited(candidate) {
-  return ['INVITATION_SENT', 'COMPLETED'].includes(candidate.moduleB?.status);
-}
-
-function isPhaseBCompleted(candidate) {
-  return candidate.moduleB?.status === 'COMPLETED' || Boolean(candidate.moduleB?.submittedAt);
-}
+const phaseCounts = (candidates, module) => ({
+  invited: candidates.filter((candidate) => isInvited(candidate, module)).length,
+  completed: candidates.filter((candidate) => hasCompleted(candidate, module)).length,
+});
 
 function StatCard({ label, value, helper, icon }) {
   return (
@@ -52,27 +54,42 @@ function StatCard({ label, value, helper, icon }) {
   );
 }
 
-function PhaseProgress({ title, completed, invited, description }) {
+function PhaseProgress({ title, completed, invited }) {
   const percentage = invited > 0 ? Math.round((completed / invited) * 100) : 0;
   return (
     <article className="rounded-2xl border border-[#E5EAF0] bg-white p-5 shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h3 className="font-display font-bold text-[#101828]">{title}</h3>
-          <p className="mt-1 text-xs text-[#64748B]">{description}</p>
-        </div>
-        <span className="rounded-full bg-[#E8F8F5] px-3 py-1 text-xs font-semibold text-[#087D79]">{percentage}%</span>
+        <h3 className="font-display font-bold text-[#101828]">{title}</h3>
+        <span className="text-xs font-semibold text-[#334E68]">{percentage}%</span>
       </div>
       <div className="mt-5 flex items-baseline gap-2">
         <span className="font-display text-2xl font-bold text-[#101828]">{completed}</span>
-        <span className="text-sm text-[#64748B]">de {invited} invitados completaron</span>
+        <span className="text-sm text-[#64748B]">de {invited} convocados completaron</span>
       </div>
       <div className="mt-3 h-2 overflow-hidden rounded-full bg-[#E8EEF3]">
-        <div className="h-full rounded-full bg-[#0AADA8] transition-all" style={{ width: `${percentage}%` }} />
+        <div className="h-full rounded-full bg-[#0A8F8A] transition-all" style={{ width: `${percentage}%` }} />
       </div>
-      {invited === 0 && <p className="mt-2 text-xs text-[#94A3B8]">Todavía no hay invitaciones registradas para esta fase.</p>}
+      {invited === 0 && <p className="mt-2 text-xs text-[#94A3B8]">Todavía no hay convocados en esta fase.</p>}
     </article>
   );
+}
+
+/** Upcoming onsite sessions: each process's Module A session and every later citation. */
+function upcomingSessions(groups, now = new Date()) {
+  const sessions = new Map();
+  groups.filter(({ event }) => isOnsite(event)).forEach(({ event, candidates }) => {
+    const add = (module, appointment) => {
+      const startsAt = asDate(appointment?.startsAt);
+      if (!startsAt || startsAt < now) return;
+      sessions.set(`${event.id}-${module}-${startsAt.getTime()}`, { key: `${event.id}-${module}-${startsAt.getTime()}`, event, module, appointment, startsAt });
+    };
+    add('A', event.onsite);
+    candidates.forEach((candidate) => {
+      add('B', candidate.moduleB?.citation?.appointment);
+      add('C', candidate.moduleC?.citation?.appointment);
+    });
+  });
+  return [...sessions.values()].sort((a, b) => a.startsAt - b.startsAt).slice(0, 5);
 }
 
 function CompanyOverview() {
@@ -106,10 +123,15 @@ function CompanyOverview() {
 
   const allCandidates = candidateGroups.flatMap((group) => group.candidates);
   const activeEvents = events.filter((event) => !['CLOSED', 'CANCELLED', 'COMPLETED', 'ARCHIVED'].includes(String(event.status || '').toUpperCase()));
-  const phaseAInvited = allCandidates.filter(isPhaseAInvited).length;
-  const phaseACompleted = allCandidates.filter(isPhaseACompleted).length;
-  const phaseBInvited = allCandidates.filter(isPhaseBInvited).length;
-  const phaseBCompleted = allCandidates.filter(isPhaseBCompleted).length;
+  const totals = Object.fromEntries(PHASES.map(([module]) => [module, phaseCounts(allCandidates, module)]));
+  const funnel = PHASES.map(([module, label]) => ({ label, value: totals[module].completed, hint: `${totals[module].invited} convocados` }));
+  const onsiteCandidates = candidateGroups.filter(({ event }) => isOnsite(event)).flatMap((group) => group.candidates);
+  const attendance = [
+    { label: 'Convocados', value: onsiteCandidates.filter((candidate) => isInvited(candidate, 'A')).length },
+    { label: 'Presentes', value: onsiteCandidates.filter((candidate) => candidate.attendance?.A?.status === 'PRESENT').length },
+    { label: 'Completaron', value: onsiteCandidates.filter((candidate) => hasCompleted(candidate, 'A')).length },
+  ];
+  const sessions = upcomingSessions(candidateGroups);
 
   return (
     <div className="p-5 sm:p-8">
@@ -131,32 +153,39 @@ function CompanyOverview() {
             <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
               <StatCard label="Procesos activos" value={activeEvents.length} helper={`${events.length} procesos registrados en total`} icon="▦" />
               <StatCard label="Candidatos totales" value={allCandidates.length} helper="Candidatos asociados a tus procesos" icon="♙" />
-              <StatCard label="Fase 1 completada" value={`${phaseACompleted}/${phaseAInvited}`} helper="Cuestionario de evaluación ética" icon="✓" />
-              <StatCard label="Fase 2 completada" value={`${phaseBCompleted}/${phaseBInvited}`} helper="Microcaso o segunda fase" icon="◷" />
+              <StatCard label="Fase A completada" value={`${totals.A.completed}/${totals.A.invited}`} helper="Cuestionario" icon="✓" />
+              <StatCard label="Fases B y C completadas" value={`${totals.B.completed + totals.C.completed}/${totals.B.invited + totals.C.invited}`} helper="Macrocaso y microcaso" icon="◷" />
             </div>
 
             <div className="mt-8">
               <h2 className="font-display text-lg font-bold text-[#101828]">Avance de las evaluaciones</h2>
-              <p className="mt-1 text-sm text-[#64748B]">Completados en relación con las invitaciones enviadas a cada fase.</p>
-              <div className="mt-4 grid gap-4 lg:grid-cols-2">
-                <PhaseProgress title="Fase 1 · Cuestionario" completed={phaseACompleted} invited={phaseAInvited} description="Candidatos que completaron el cuestionario inicial." />
-                <PhaseProgress title="Fase 2 · Evaluación complementaria" completed={phaseBCompleted} invited={phaseBInvited} description="Candidatos invitados a la segunda fase que la completaron." />
+              <p className="mt-1 text-sm text-[#64748B]">Completados en relación con los convocados a cada fase.</p>
+              <div className="mt-4 grid gap-4 lg:grid-cols-3">
+                {PHASES.map(([module, label]) => <PhaseProgress key={module} title={label} completed={totals[module].completed} invited={totals[module].invited} />)}
               </div>
             </div>
 
+            <div className="mt-8 grid gap-4 lg:grid-cols-2">
+              <ChartCard title="Embudo de candidatos" description="Candidatos que completaron cada fase."><BarChart caption="Candidatos que completaron cada fase" items={funnel} /></ChartCard>
+              <ChartCard title="Asistencia presencial" description="Fase A de tus procesos presenciales."><BarChart caption="Asistencia presencial" items={attendance} /></ChartCard>
+            </div>
+
+            {sessions.length > 0 && (
+              <section className="mt-8 rounded-2xl border border-[#E5EAF0] bg-white p-5 shadow-sm">
+                <h2 className="font-display text-lg font-bold text-[#101828]">Próximas sesiones presenciales</h2>
+                <ul className="mt-3 divide-y divide-[#EEF2F6]">{sessions.map((session) => <li key={session.key} className="flex flex-wrap items-center justify-between gap-2 py-2.5 text-sm"><span className="font-medium text-[#10233A]">{eventName(session.event)} · Fase {session.module}</span><span className="text-xs text-[#64748B]">{formatSession(session.appointment)}</span></li>)}</ul>
+              </section>
+            )}
+
             <div className="mt-8">
-              <div className="flex flex-wrap items-end justify-between gap-2">
-                <div><h2 className="font-display text-lg font-bold text-[#101828]">Procesos activos</h2><p className="mt-1 text-sm text-[#64748B]">Resumen del avance por proceso.</p></div>
-              </div>
+              <h2 className="font-display text-lg font-bold text-[#101828]">Procesos activos</h2>
+              <p className="mt-1 text-sm text-[#64748B]">Resumen del avance por proceso.</p>
               {activeEvents.length === 0 ? (
                 <div className="mt-4 rounded-2xl border border-dashed border-[#CBD5E1] bg-white p-8 text-center"><p className="font-semibold text-[#334155]">Todavía no hay procesos activos</p><p className="mt-1 text-sm text-[#94A3B8]">Cuando se creen procesos, sus estadísticas aparecerán aquí.</p></div>
               ) : (
                 <div className="mt-4 space-y-3">{candidateGroups.filter(({ event }) => activeEvents.some((active) => active.id === event.id)).map(({ event, candidates }) => {
-                  const aInvited = candidates.filter(isPhaseAInvited).length;
-                  const aDone = candidates.filter(isPhaseACompleted).length;
-                  const bInvited = candidates.filter(isPhaseBInvited).length;
-                  const bDone = candidates.filter(isPhaseBCompleted).length;
-                  return <article key={event.id} className="rounded-2xl border border-[#E5EAF0] bg-white p-5 shadow-sm"><div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center"><div><h3 className="font-semibold text-[#101828]">{eventName(event)}</h3><p className="mt-1 text-xs text-[#64748B]">{event.position || event.positionName || 'Proceso de evaluación'} · {candidates.length} candidatos</p></div><span className="w-fit rounded-full bg-[#E8F8F5] px-3 py-1 text-xs font-semibold text-[#087D79]">{event.status === 'PUBLISHED' ? 'Publicado' : 'Activo'}</span></div><div className="mt-4 grid gap-3 sm:grid-cols-2"><div className="rounded-xl bg-[#F7F9FC] p-3"><p className="text-xs text-[#64748B]">Fase 1</p><p className="mt-1 text-sm font-semibold text-[#101828]">{aDone}/{aInvited} completados</p></div><div className="rounded-xl bg-[#F7F9FC] p-3"><p className="text-xs text-[#64748B]">Fase 2</p><p className="mt-1 text-sm font-semibold text-[#101828]">{bDone}/{bInvited} completados</p></div></div></article>;
+                  const included = PHASES.filter(([module]) => modulesOf(event).includes(module));
+                  return <article key={event.id} className="rounded-2xl border border-[#E5EAF0] bg-white p-5 shadow-sm"><div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center"><div><h3 className="font-semibold text-[#101828]">{eventName(event)}</h3><p className="mt-1 text-xs text-[#64748B]">{event.position || event.positionName || 'Proceso de evaluación'} · {candidates.length} candidatos · {isOnsite(event) ? 'Presencial' : 'Virtual'}</p></div><span className="w-fit rounded-full bg-[#E8F8F5] px-3 py-1 text-xs font-semibold text-[#087D79]">{event.status === 'PUBLISHED' ? 'Con resultados' : 'Activo'}</span></div><div className="mt-4 grid gap-3 sm:grid-cols-3">{included.map(([module]) => { const counts = phaseCounts(candidates, module); return <div key={module} className="rounded-xl bg-[#F7F9FC] p-3"><p className="text-xs text-[#64748B]">Fase {module}</p><p className="mt-1 text-sm font-semibold text-[#101828]">{counts.completed}/{counts.invited} completados</p></div>; })}</div></article>;
                 })}</div>
               )}
             </div>
@@ -164,26 +193,6 @@ function CompanyOverview() {
         )}
       </div>
     </div>
-  );
-}
-
-function ReceivedResultsView() {
-  return (
-    <div className="p-5 sm:p-8"><div className="mx-auto max-w-6xl">
-      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#0AADA8]">Documentos entregados</p>
-      <h1 className="mt-2 font-display text-2xl font-bold text-[#101828]">Resultados recibidos</h1>
-      <p className="mt-2 max-w-2xl text-sm leading-6 text-[#64748B]">Aquí estarán disponibles los informes PDF que el administrador comparta con tu organización, identificados por proceso y fase de evaluación.</p>
-      <div className="mt-6 grid gap-4 sm:grid-cols-3">
-        <StatCard label="Informes recibidos" value="—" helper="Se mostrará al habilitar la entrega de informes" icon="▤" />
-        <StatCard label="Procesos con resultados" value="—" helper="Procesos que tienen al menos un informe compartido" icon="▦" />
-        <StatCard label="Última entrega" value="—" helper="Fecha del informe más reciente" icon="◷" />
-      </div>
-      <div className="mt-6 rounded-2xl border border-dashed border-[#CBD5E1] bg-white p-10 text-center sm:p-14">
-        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-[#E0F7F6] text-2xl text-[#087D79]">PDF</div>
-        <h2 className="mt-4 font-display text-lg font-bold text-[#101828]">Tus informes aparecerán aquí</h2>
-        <p className="mx-auto mt-2 max-w-lg text-sm leading-6 text-[#64748B]">La recepción y descarga de archivos todavía no está habilitada. Cuando el administrador comparta un resultado, se mostrará su nombre, proceso, fase, fecha de entrega y un botón para abrir o descargar el PDF.</p>
-      </div>
-    </div></div>
   );
 }
 
@@ -212,7 +221,7 @@ export function CompanyDashboardPage() {
         ) : activeSection === 'subscription' ? (
           <CompanyPlanView />
         ) : activeSection === 'reports' ? (
-          <ReceivedResultsView />
+          <CompanyResultsView />
         ) : (
           <CompanyPlaceholderView section={section} />
         )}

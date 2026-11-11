@@ -43,6 +43,23 @@ function checkLength(value, max, label) {
   if (value.length > max) throw new ValidationError(`${label} supera los ${max} caracteres.`);
 }
 
+// Seconds per question. 0: no time limit.
+const MAX_TIME_LIMIT = 3600;
+
+function parseName(value) {
+  const name = typeof value === 'string' ? value.trim() : '';
+  if (!name) throw new ValidationError('El nombre del macrocaso es obligatorio.');
+  return name;
+}
+
+function parseTimeLimit(value) {
+  const seconds = Number(value);
+  if (value === '' || value === null || !Number.isInteger(seconds) || seconds < 0 || seconds > MAX_TIME_LIMIT) {
+    throw new ValidationError(`El tiempo por pregunta debe ser un número entero entre 0 y ${MAX_TIME_LIMIT} segundos.`);
+  }
+  return seconds;
+}
+
 class MacrocaseService {
   /**
    * @param {object} macrocaseRepo
@@ -83,7 +100,7 @@ class MacrocaseService {
       description: active.description || '',
       instructions: active.instructions || '',
       responseType: 'likert',
-      defaultTimeLimit: active.defaultTimeLimit,
+      defaultTimeLimit: active.defaultTimeLimit ?? 0,
       sections,
     };
   }
@@ -129,6 +146,8 @@ class MacrocaseService {
   }
 
   async createMacroCase(data) {
+    const name = parseName(data?.name);
+    const defaultTimeLimit = parseTimeLimit(data.defaultTimeLimit ?? 0);
     // Clients that still send `introduction` + `questions` get one section.
     const input = data.sections ? data : toSectionedMacrocase(data);
     const sections = this.normalizeSections(input.sections);
@@ -136,11 +155,11 @@ class MacrocaseService {
     checkLength(instructions, MAX_INSTRUCTIONS_TEXT, 'Las instrucciones');
     const created = await this.macrocaseRepo.create({
       schemaVersion: MACROCASE_SCHEMA_VERSION,
-      name: data.name.trim(),
+      name,
       description: data.description?.trim() || '',
       instructions,
       responseType: 'likert',
-      defaultTimeLimit: Number(data.defaultTimeLimit),
+      defaultTimeLimit,
       active: Boolean(data.active),
       sections,
     });
@@ -157,7 +176,7 @@ class MacrocaseService {
     payload.responseType = 'likert';
 
     if (payload.name !== undefined) {
-      payload.name = payload.name.trim();
+      payload.name = parseName(payload.name);
     }
 
     if (payload.description !== undefined) {
@@ -170,7 +189,7 @@ class MacrocaseService {
     }
 
     if (payload.defaultTimeLimit !== undefined) {
-      payload.defaultTimeLimit = Number(payload.defaultTimeLimit);
+      payload.defaultTimeLimit = parseTimeLimit(payload.defaultTimeLimit);
     }
 
     if (payload.sections !== undefined) {

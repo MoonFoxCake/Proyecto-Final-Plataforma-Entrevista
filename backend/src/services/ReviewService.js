@@ -1,5 +1,6 @@
 const { instrumentOf } = require('../utils/moduleA');
 const { NotFoundError, ValidationError } = require('../utils/errors');
+const { hasResponse, isWithdrawn, phaseState } = require('../utils/phases');
 
 const QUESTIONS = Object.freeze({
   'demo-a-1': { number: 1, dimension: 'HBE', text: 'Cuando trabajo con otras personas, comunico mis ideas de forma clara y respetuosa.' },
@@ -16,16 +17,28 @@ const ANSWER_LABELS = Object.freeze({
   5: 'Totalmente de acuerdo',
 });
 
-function hasResponse(candidate) {
-  return Boolean(candidate.submittedAt || candidate.status === 'EVALUATION_COMPLETED');
+/** `{ '2026-11': 3 }`: evaluations submitted per month, across every phase. */
+function completionsByMonth(candidates) {
+  const counts = {};
+  candidates.flatMap((candidate) => [candidate.submittedAt, candidate.moduleB?.submittedAt, candidate.moduleC?.submittedAt]).forEach((value) => {
+    if (!value) return;
+    const date = new Date(value?.toDate?.() ?? value);
+    if (Number.isNaN(date.getTime())) return;
+    const month = date.toISOString().slice(0, 7);
+    counts[month] = (counts[month] || 0) + 1;
+  });
+  return counts;
 }
+
+const stillIn = (candidates) => candidates.filter((candidate) => !isWithdrawn(candidate, 'A'));
 
 function processStatus(event, candidates) {
   if (event.evaluationsPublishedAt || event.status === 'PUBLISHED') return 'PUBLISHED';
-  if (candidates.length > 0 && candidates.every((candidate) => hasResponse(candidate) && candidate.reviewStatus === 'REVIEWED')) {
+  const active = stillIn(candidates);
+  if (active.length > 0 && active.every((candidate) => hasResponse(candidate) && candidate.reviewStatus === 'REVIEWED')) {
     return 'READY_TO_PUBLISH';
   }
-  if (candidates.some(hasResponse)) return 'IN_REVIEW';
+  if (active.some(hasResponse)) return 'IN_REVIEW';
   return event.status === 'FINALIZED' ? 'FINALIZED' : 'ACTIVE';
 }
 
@@ -44,9 +57,24 @@ class ReviewService {
     this.organizationRepo = organizationRepo;
   }
 
+  /** Three reads for the whole list instead of two per process. */
   async listProcesses() {
-    const events = await this.eventRepo.findAll();
-    return Promise.all(events.map((event) => this.buildProcess(event)));
+    const [events, organizations, candidates] = await Promise.all([
+      this.eventRepo.findAll(),
+      this.organizationRepo.findAll(),
+      this.candidateRepo.findAll(),
+    ]);
+    const organizationById = new Map(organizations.map((organization) => [organization.id, organization]));
+    const candidatesByEvent = new Map();
+    candidates.forEach((candidate) => {
+      if (!candidatesByEvent.has(candidate.eventId)) candidatesByEvent.set(candidate.eventId, []);
+      candidatesByEvent.get(candidate.eventId).push(candidate);
+    });
+    return events.map((event) => this.summarizeProcess(
+      event,
+      organizationById.get(event.orgId ?? event.recruiterOrgId),
+      candidatesByEvent.get(event.id) || [],
+    ));
   }
 
   async getProcess(eventId) {
@@ -61,6 +89,9 @@ class ReviewService {
     if (!submission) throw new NotFoundError('Este participante aún no ha enviado respuestas.');
     const moduleBSubmission = candidate.moduleB?.status === 'COMPLETED'
       ? await this.invitationRepo.findSubmissionByCandidate(candidate.id, eventId, 'B')
+      : null;
+    const moduleCSubmission = candidate.moduleC?.status === 'COMPLETED'
+      ? await this.invitationRepo.findSubmissionByCandidate(candidate.id, eventId, 'C')
       : null;
 
     return {
@@ -77,9 +108,31 @@ class ReviewService {
         ...(QUESTIONS[answer.questionId] || { number: 0, dimension: 'Sin dimensión', text: 'Pregunta del instrumento' }),
         ...(answer.text ? { text: answer.text, dimension: answer.dimension || 'Sin dimensión', number: answer.number || 0 } : {}),
         value: answer.value,
-        label: ANSWER_LABELS[answer.value] || String(answer.value),
+        label: ANSWER_LABELS[answer.value] || 'Sin respuesta: el tiempo se agotó.',
       })),
       moduleB: this.moduleBDetail(event, candidate, moduleBSubmission),
+      moduleC: this.moduleCDetail(event, candidate, moduleCSubmission),
+    };
+  }
+
+  /** Third stage: null if the candidate was not sent Module C. */
+  moduleCDetail(event, candidate, submission) {
+    if (!candidate.moduleC) return null;
+    return {
+      status: candidate.moduleC.status,
+      invitedAt: candidate.moduleC.invitedAt || null,
+      submittedAt: submission?.submittedAt || candidate.moduleC.submittedAt || null,
+      microcaseName: event.moduleC?.microcase?.name || 'Microcaso',
+      story: event.moduleC?.microcase?.story || '',
+      answers: (submission?.answers || []).map((answer, index) => ({
+        questionId: answer.questionId,
+        number: index + 1,
+        skill: answer.sectionTitle || '',
+        question: answer.question,
+        value: answer.value,
+        label: ANSWER_LABELS[answer.value] || null,
+        timedOut: Boolean(answer.timedOut),
+      })),
     };
   }
 
@@ -146,7 +199,7 @@ class ReviewService {
 
   async publish(eventId, adminUid) {
     const event = await this.requireEvent(eventId);
-    const candidates = await this.candidateRepo.findByEventId(eventId);
+    const candidates = stillIn(await this.candidateRepo.findByEventId(eventId));
     if (!candidates.length || !candidates.every((candidate) => hasResponse(candidate) && candidate.reviewStatus === 'REVIEWED')) {
       throw new ValidationError('Debes revisar a todos los participantes antes de publicar.');
     }
@@ -166,33 +219,45 @@ class ReviewService {
       this.organizationRepo.findById(event.orgId ?? event.recruiterOrgId),
       this.candidateRepo.findByEventId(event.id),
     ]);
-    const responsesReceived = candidates.filter(hasResponse).length;
-    const reviewed = candidates.filter((candidate) => candidate.reviewStatus === 'REVIEWED').length;
-    const result = {
-      ...this.safeEvent(event),
-      company: organization?.companyName || organization?.name || 'Empresa sin nombre',
-      status: processStatus(event, candidates),
-      summary: {
-        totalParticipants: candidates.length,
-        responsesReceived,
-        reviewed,
-        pendingReview: Math.max(responsesReceived - reviewed, 0),
-      },
-    };
+    const result = this.summarizeProcess(event, organization, candidates);
     if (includeParticipants) {
       result.participants = anonymousCandidates(candidates).map(({ candidate, anonymousId }) => ({
         anonymousId,
         submittedAt: candidate.submittedAt || null,
-        status: !hasResponse(candidate) ? 'NO_RESPONSE' : candidate.reviewStatus === 'REVIEWED' ? 'REVIEWED' : 'PENDING_REVIEW',
+        status: isWithdrawn(candidate, 'A') ? 'WITHDRAWN' : !hasResponse(candidate) ? 'NO_RESPONSE' : candidate.reviewStatus === 'REVIEWED' ? 'REVIEWED' : 'PENDING_REVIEW',
         moduleBStatus: candidate.moduleB?.status || null,
+        moduleCStatus: candidate.moduleC?.status || null,
       }));
     }
     return result;
   }
 
+  summarizeProcess(event, organization, candidates) {
+    const active = stillIn(candidates);
+    const responsesReceived = active.filter(hasResponse).length;
+    const reviewed = active.filter((candidate) => candidate.reviewStatus === 'REVIEWED').length;
+    return {
+      ...this.safeEvent(event),
+      company: organization?.companyName || organization?.name || 'Empresa sin nombre',
+      status: processStatus(event, candidates),
+      summary: {
+        totalParticipants: active.length,
+        responsesReceived,
+        reviewed,
+        pendingReview: Math.max(responsesReceived - reviewed, 0),
+        phases: { A: phaseState('A', candidates), B: phaseState('B', candidates), C: phaseState('C', candidates) },
+        completionsByMonth: completionsByMonth(candidates),
+      },
+    };
+  }
+
   safeEvent(event) {
     return {
       id: event.id,
+      modality: event.modality === 'onsite' ? 'onsite' : 'online',
+      modules: Array.isArray(event.modules) && event.modules.length ? event.modules : ['A', 'B'],
+      deliveredModules: Object.keys(event.moduleResults || {}).filter((module) => event.moduleResults[module]?.deliveredAt),
+      createdAt: event.createdAt || null,
       questionnaire: (({ groupId, name, version, instrumentVersion }) => ({ groupId, name, version, instrumentVersion }))(instrumentOf(event)),
       orgId: event.orgId ?? event.recruiterOrgId ?? null,
       name: event.name || event.title || event.eventName || 'Proceso de evaluación',

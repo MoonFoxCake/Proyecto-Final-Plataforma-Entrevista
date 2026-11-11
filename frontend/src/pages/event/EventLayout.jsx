@@ -95,7 +95,7 @@ export function EventLayout() {
               <header className='mt-4'>
                 <h1 className='font-display text-2xl font-bold text-[#101828] sm:text-[1.75rem]'>{eventName(event)}</h1>
                 <div className='mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-[#64748B]'>
-                  <StatusBadge tone={state.published ? 'ok' : 'info'}>{state.published ? 'Resultados publicados' : 'Activo'}</StatusBadge>
+                  <StatusBadge tone={state.published ? 'ok' : 'info'}>{state.published ? 'Con resultados' : 'Activo'}</StatusBadge>
                   <StatusBadge tone={state.onsite ? 'warning' : 'muted'}>{state.onsite ? 'Presencial' : 'Virtual'}</StatusBadge>
                   {eventPosition(event) && <span>{eventPosition(event)}</span>}
                   <span aria-hidden='true'>·</span>

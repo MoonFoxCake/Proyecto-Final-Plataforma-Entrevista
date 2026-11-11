@@ -28,6 +28,22 @@ class InvitationController {
     }
   };
 
+  timedState = async (req, res, next) => {
+    try {
+      res.json({ data: await this.invitationService.getTimedState(req.body.token) });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  advanceTimed = async (req, res, next) => {
+    try {
+      res.json({ data: await this.invitationService.advanceTimed(req.body.token, req.body.action) });
+    } catch (error) {
+      next(error);
+    }
+  };
+
   submit = async (req, res, next) => {
     try {
       const result = await this.invitationService.submitEvaluation(req.body.token, req.body);

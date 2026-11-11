@@ -29,7 +29,6 @@ import { OnsiteAccessPage } from '../pages/OnsiteAccessPage.jsx';
 import { EvaluationAccessPage } from '../pages/EvaluationAccessPage.jsx';
 
 import { AdminMacrocasePreviewPage } from '../pages/AdminMacrocasePreviewPage.jsx';
-import { CandidateResultPage } from '../pages/CandidateResultPage.jsx';
 
 import { RequireAuth } from './RequireAuth.jsx';
 import { RequireRole } from './RequireRole.jsx';
@@ -157,12 +156,6 @@ export function AppRouter() {
                 }
               />
             </Route>
-
-            {/* Candidate result profile */}
-            <Route
-              path="/company/events/:eventId/candidates/:candidateId/result"
-              element={<CandidateResultPage />}
-            />
 
             <Route
               path="/company-dashboard"

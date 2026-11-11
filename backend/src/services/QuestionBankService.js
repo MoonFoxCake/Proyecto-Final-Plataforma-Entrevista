@@ -10,6 +10,8 @@ const question = z.object({
 const contentSchema = z.object({
   name: z.string().trim().min(1).max(120), description: z.string().trim().max(1000).optional().default(''),
   questions: z.array(question).min(1).max(100),
+  // Total time to answer, in minutes. 0: no time limit.
+  timeLimitMinutes: z.number().int().min(0).max(240).optional().default(0),
 }).strict();
 function content(data) {
   const result = contentSchema.safeParse(data);
@@ -37,7 +39,7 @@ class QuestionBankService {
   async setActive(id, data) {
     if (typeof data?.active !== 'boolean' || !Number.isInteger(data?.baseVersion) || data.baseVersion < 1) throw new ValidationError('Indica un estado y una versión base válidos.');
     const group = await this.get(id);
-    if (data.active) content({ name: group.name, description: group.description, questions: group.questions });
+    if (data.active) content({ name: group.name, description: group.description, questions: group.questions, timeLimitMinutes: group.timeLimitMinutes || 0 });
     return this.repo.setActive(id, data.active, data.baseVersion);
   }
   async pickSnapshot() {
@@ -47,6 +49,7 @@ class QuestionBankService {
     return {
       groupId: group.id, name: group.name, version: group.version,
       instrumentVersion: `QUESTION_GROUP:${group.id}:v${group.version}`,
+      timeLimitMinutes: group.timeLimitMinutes || 0,
       questions: group.questions.map((q) => ({ ...q })),
     };
   }

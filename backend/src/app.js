@@ -52,9 +52,10 @@ function createApp(container = createContainer('firestore')) {
   // Public aggregate metrics for the landing page; no personal data is exposed.
   app.get('/api/v1/public/stats', async (req, res, next) => {
     try {
-      const [organizations, candidates] = await Promise.all([
+      const [organizations, candidates, events] = await Promise.all([
         container.repos.organizationRepo.findAll(),
         container.repos.candidateRepo.findAll(),
+        container.repos.eventRepo.findAll(),
       ]);
       const evaluatedCandidateIds = new Set(
         candidates
@@ -65,8 +66,18 @@ function createApp(container = createContainer('firestore')) {
         data: {
           organizations: organizations.length,
           evaluatedCandidates: evaluatedCandidateIds.size,
+          processes: events.length,
         },
       });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // Public: the landing and plan pages' content, editable from "Configuración".
+  app.get('/api/v1/public/settings', async (req, res, next) => {
+    try {
+      res.json({ data: await container.settingsService.getPublic() });
     } catch (error) {
       next(error);
     }

@@ -1,4 +1,5 @@
 import { isOnsite, modulesOf } from '../../utils/eventModality.js';
+import { isWithdrawn } from '../../utils/phases.js';
 
 /**
  * Derived state of an event detail, shared by its tabs (no extra requests:
@@ -26,9 +27,14 @@ export function failureReasons(result) {
   return reasons.length ? ` Motivo: ${reasons.join(' · ')}` : '';
 }
 
-/** Module B can go to candidates with a published Module A profile who have not answered it yet. */
+/** Module B can go to candidates with Module A results who have not answered it yet. */
 export function canReceiveModuleB(candidate) {
-  return Boolean(candidate.profileAvailable) && candidate.moduleB?.status !== 'COMPLETED';
+  return Boolean(candidate.profileAvailable) && !['COMPLETED', 'WITHDRAWN'].includes(candidate.moduleB?.status);
+}
+
+/** Module C can go to whoever completed Module B and has not answered it yet. */
+export function canReceiveModuleC(candidate) {
+  return candidate.moduleB?.status === 'COMPLETED' && !['COMPLETED', 'WITHDRAWN'].includes(candidate.moduleC?.status);
 }
 
 /** Whether `startsAt` is today in the browser's calendar. */
@@ -40,18 +46,28 @@ export function isToday(startsAt) {
 export function summarize(event, candidates) {
   const onsite = isOnsite(event);
   const published = event?.status === 'PUBLISHED' || Boolean(event?.evaluationsPublishedAt);
+  const results = event?.moduleResults || {};
+  const hasModuleC = modulesOf(event).includes('C');
+  const stillIn = candidates.filter((candidate) => !isWithdrawn(candidate, 'A'));
   return {
     onsite,
     published,
     hasModuleB: modulesOf(event).includes('B'),
+    hasModuleC,
     total: candidates.length,
-    pending: candidates.filter((candidate) => candidate.status === 'INVITED_PENDING').length,
-    contacted: candidates.filter((candidate) => (onsite ? candidate.citation?.status === 'SENT' : candidate.status !== 'INVITED_PENDING')).length,
-    completed: candidates.filter((candidate) => candidate.status === 'EVALUATION_COMPLETED' || candidate.profileAvailable).length,
+    active: stillIn.length,
+    pending: stillIn.filter((candidate) => candidate.status === 'INVITED_PENDING').length,
+    contacted: stillIn.filter((candidate) => (onsite ? candidate.citation?.status === 'SENT' : candidate.status !== 'INVITED_PENDING')).length,
+    completed: stillIn.filter((candidate) => candidate.status === 'EVALUATION_COMPLETED' || candidate.profileAvailable).length,
     profiles: candidates.filter((candidate) => candidate.profileAvailable).length,
     moduleBEligible: candidates.filter(canReceiveModuleB).length,
     moduleBSent: candidates.filter((candidate) => candidate.moduleB).length,
     moduleBCompleted: candidates.filter((candidate) => candidate.moduleB?.status === 'COMPLETED').length,
+    moduleCEligible: candidates.filter(canReceiveModuleC).length,
+    moduleCSent: candidates.filter((candidate) => candidate.moduleC?.assignedQuestions?.length).length,
+    moduleCCompleted: candidates.filter((candidate) => candidate.moduleC?.status === 'COMPLETED').length,
+    reportAReady: !event?.requiresPhaseReports || Boolean(results.A?.deliveredAt),
+    reportBReady: Boolean(results.B?.deliveredAt),
   };
 }
 
@@ -80,12 +96,21 @@ export function nextAction(state, { pendingAccesses = 0, onsiteToday = false } =
     if (state.onsite && onsiteToday) {
       return { title: 'Aplica la evaluación', description: 'Los accesos se activan solos a la hora de inicio. Registra la asistencia y sigue el avance.', label: 'Ir a aplicar', to: 'presencial?etapa=aplicar' };
     }
-    return state.completed < state.total
-      ? { title: 'Evaluación en curso', description: `${state.completed} de ${state.total} candidatos completaron la evaluación.` }
-      : { title: 'En revisión', description: 'El equipo de NexoPerfil está revisando las evaluaciones. Los resultados aparecerán al publicarse.' };
+    return state.completed < state.active
+      ? { title: 'Evaluación en curso', description: `${state.completed} de ${state.active} candidatos completaron la evaluación.` }
+      : { title: 'En revisión', description: 'El equipo de NexoPerfil está preparando el informe de la Fase A. Aparecerá en Resultados cuando se entregue.' };
   }
-  if (state.hasModuleB && state.moduleBEligible > 0) {
-    return { title: 'Elige quiénes continúan al Módulo B', description: 'Revisa los perfiles publicados y selecciona a los candidatos para la segunda etapa.', label: 'Ver resultados', to: 'resultados' };
+  if (state.hasModuleB && !state.reportAReady) {
+    return { title: 'Esperando el informe de la Fase A', description: 'El Módulo B se habilita cuando recibas el PDF de resultados.' };
   }
-  return { title: 'Resultados publicados', description: `${state.profiles} perfiles disponibles para consultar.`, label: 'Ver resultados', to: 'resultados' };
+  if (state.hasModuleB && state.moduleBEligible > 0 && state.moduleBSent === 0) {
+    return { title: 'Elige quiénes continúan al Módulo B', description: 'Revisa el informe y selecciona a los candidatos para la segunda etapa.', label: 'Ver resultados', to: 'resultados' };
+  }
+  if (state.moduleBSent > 0 && !state.reportBReady) {
+    return { title: 'Módulo B en curso', description: `${state.moduleBCompleted} de ${state.moduleBSent} candidatos respondieron. El informe llegará al cerrar la fase.`, label: 'Ver resultados', to: 'resultados' };
+  }
+  if (state.hasModuleC && state.reportBReady && state.moduleCEligible > 0) {
+    return { title: 'Configura la Fase C', description: 'Elige las habilidades y a quienes continúan a la tercera etapa.', label: 'Ver resultados', to: 'resultados' };
+  }
+  return { title: 'Resultados disponibles', description: 'Consulta y descarga los informes de cada fase.', label: 'Ver resultados', to: 'resultados' };
 }

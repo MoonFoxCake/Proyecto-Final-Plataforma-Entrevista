@@ -7,6 +7,7 @@ export function BrandPanel() {
   const [stats, setStats] = useState({
     organizations: null,
     evaluatedCandidates: null,
+    processes: null,
   });
 
   useEffect(() => {
@@ -27,6 +28,7 @@ export function BrandPanel() {
           evaluatedCandidates: Number(
             result?.data?.evaluatedCandidates ?? 0
           ),
+          processes: Number(result?.data?.processes ?? 0),
         });
       })
       .catch((error) => {
@@ -34,15 +36,16 @@ export function BrandPanel() {
         setStats({
           organizations: 0,
           evaluatedCandidates: 0,
+          processes: 0,
         });
       });
   }, []);
 
-  const formatCount = (value) => {
+  const formatCount = (value, offset = 1) => {
     if (value === null) return '—';
 
     return `+${new Intl.NumberFormat('es-CR').format(
-      Math.max(0, value - 1)
+      Math.max(0, value - offset)
     )}`;
   };
 
@@ -56,8 +59,8 @@ export function BrandPanel() {
       label: 'Empresas registradas',
     },
     {
-      value: '97%',
-      label: 'Precisión de perfiles',
+      value: formatCount(stats.processes, 2),
+      label: 'Procesos realizados',
     },
   ];
 

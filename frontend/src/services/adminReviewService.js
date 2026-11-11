@@ -20,6 +20,11 @@ export async function saveReview(eventId, anonymousId, payload) {
   return data?.data ?? null;
 }
 
+export async function closePhase(eventId, module) {
+  const { data } = await api.post(`/admin/processes/${eventId}/phases/${module}/close`);
+  return data?.data ?? null;
+}
+
 export async function publishEvaluations(eventId) {
   const { data } = await api.post(`/admin/processes/${eventId}/publish`);
   return data?.data ?? null;

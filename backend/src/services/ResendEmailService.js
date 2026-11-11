@@ -1,5 +1,9 @@
 const { ExternalServiceError } = require('../utils/errors');
 const { entryWindow } = require('../utils/accessCode');
+const { DEFAULT_SETTINGS } = require('../config/defaultSettings');
+
+/** "{empresa} te invita" with the variables filled in; unknown names stay as they are. */
+const fill = (template, values) => template.replace(/\{(\w+)\}/g, (match, name) => values[name] ?? match);
 
 const esc = (value = '') => String(value).replaceAll('&', '&amp;').replaceAll('<', '&lt;')
   .replaceAll('>', '&gt;').replaceAll(/\x22/g, '&quot;').replaceAll(/\x27/g, '&#039;');
@@ -27,26 +31,24 @@ class ResendEmailService {
    * Module A: invitation to the evaluation at the appointment time.
    * Module B: second stage (macrocase), open right away until `expiresAt`.
    */
-  async sendInvitation({ candidate, event, organization, accessUrl, module = 'A', expiresAt }) {
+  async sendInvitation({ candidate, event, organization, accessUrl, module = 'A', expiresAt, templates = DEFAULT_SETTINGS.emails }) {
     const company = companyName(organization);
     const eventName = eventNameOf(event);
     const isModuleB = module === 'B';
     const isModuleC = module === 'C';
+    const values = { empresa: company, evento: eventName };
     const label = isModuleC ? 'TERCERA ETAPA' : isModuleB ? 'SEGUNDA ETAPA' : 'EVALUACIÓN DISPONIBLE';
-    const intro = isModuleB || isModuleC
-      ? `${esc(company)} te invita a continuar con la ${isModuleC ? 'tercera' : 'segunda'} etapa de:`
-      : `${esc(company)} te ha invitado a participar en:`;
+    const intro = esc(fill(isModuleC ? templates.moduleCIntro : isModuleB ? templates.moduleBIntro : templates.invitationIntro, values));
     const dateLine = isModuleB || isModuleC
       ? `Disponible hasta: ${esc(formatDateTime(expiresAt))}`
       : `Fecha y hora: ${esc(formatDateTime(candidate.fechaHoraCita || event.availableFrom))}`;
-    const stageNote = isModuleB
-      ? "<p>En esta etapa leerás un caso y responderás por escrito las preguntas que te hará un asistente virtual. Activa el sonido de tu dispositivo.</p>"
-      : isModuleC ? '<p>Leerás una historia y responderás preguntas de escala Likert sobre las habilidades seleccionadas.</p>' : '';
+    const note = isModuleC ? templates.moduleCNote : isModuleB ? templates.moduleBNote : '';
+    const stageNote = note ? `<p>${esc(fill(note, values))}</p>` : '';
     const html = layout(label, `<h1>Hola, ${esc(candidate.nombreCompleto)}.</h1><p>${intro}</p><div style='background:#f4f8fb;border-radius:12px;padding:18px;margin:18px 0'><strong>${esc(eventName)}</strong><p>${dateLine}</p></div>${stageNote}<a href='${esc(accessUrl)}' style='display:inline-block;background:#0aada8;color:white;text-decoration:none;padding:13px 20px;border-radius:10px;font-weight:bold'>Acceder a la evaluación</a><p style='margin-top:24px;color:#718096;font-size:13px'>Este enlace es personal y temporal.</p>`);
 
     return this.send({
       to: candidate.correo,
-      subject: isModuleC ? `Tercera etapa · ${eventName}` : isModuleB ? `Segunda etapa · ${eventName}` : `Invitación a evaluación · ${eventName}`,
+      subject: fill(isModuleC ? templates.moduleCSubject : isModuleB ? templates.moduleBSubject : templates.invitationSubject, values),
       html,
     });
   }
@@ -58,7 +60,7 @@ class ResendEmailService {
    * @param {{ candidate: object, event: object, organization?: object, module?: 'A'|'B',
    *   appointment: { venue: string, room: string, startsAt: Date, endsAt: Date, instructions?: string } }} params
    */
-  async sendCitation({ candidate, event, organization, module = 'A', appointment }) {
+  async sendCitation({ candidate, event, organization, module = 'A', appointment, templates = DEFAULT_SETTINGS.emails }) {
     const company = companyName(organization);
     const eventName = eventNameOf(event);
     const isModuleB = module === 'B';
@@ -79,7 +81,7 @@ class ResendEmailService {
     const intro = isModuleB || isModuleC
       ? `${esc(company)} te cita a la ${isModuleC ? 'tercera' : 'segunda'} etapa presencial del proceso:`
       : `${esc(company)} te cita a una evaluación presencial:`;
-    const html = layout(isModuleC ? 'CITACIÓN · TERCERA ETAPA' : isModuleB ? 'CITACIÓN · SEGUNDA ETAPA' : 'CITACIÓN PRESENCIAL', `<h1>Hola, ${esc(candidate.nombreCompleto)}.</h1><p>${intro}</p><div style='background:#f4f8fb;border-radius:12px;padding:18px;margin:18px 0'><table style='border-collapse:collapse;font-size:14px'>${details}</table></div>${instructions}<p style='margin-top:18px'>Llega con anticipación y lleva un documento de identidad. Solo podrás iniciar la evaluación dentro del horario de inicio indicado. Tus datos de acceso a la evaluación se te entregarán en la sede.</p><p style='margin-top:24px;color:#718096;font-size:13px'>Este correo es solo una citación: no contiene enlaces, contraseñas ni códigos de acceso.</p>`);
+    const html = layout(isModuleC ? 'CITACIÓN · TERCERA ETAPA' : isModuleB ? 'CITACIÓN · SEGUNDA ETAPA' : 'CITACIÓN PRESENCIAL', `<h1>Hola, ${esc(candidate.nombreCompleto)}.</h1><p>${intro}</p><div style='background:#f4f8fb;border-radius:12px;padding:18px;margin:18px 0'><table style='border-collapse:collapse;font-size:14px'>${details}</table></div>${instructions}<p style='margin-top:18px'>${esc(fill(templates.citationClosing, { empresa: company, evento: eventName }))}</p><p style='margin-top:24px;color:#718096;font-size:13px'>Este correo es solo una citación: no contiene enlaces, contraseñas ni códigos de acceso.</p>`);
 
     return this.send({
       to: candidate.correo,
@@ -94,9 +96,16 @@ class ResendEmailService {
    *
    * @returns {Promise<{ lastEvent: string | null }>}
    */
-  async sendResultNotification({ email, company, eventName, module, url }) {
-    const html = layout('RESULTADOS DISPONIBLES', `<h1>Hola, ${esc(company)}.</h1><p>Ya está disponible el resultado correspondiente a la Fase ${esc(module)} del proceso <strong>${esc(eventName)}</strong>.</p><p><a href='${esc(url)}' style='display:inline-block;background:#0aada8;color:white;text-decoration:none;padding:13px 20px;border-radius:10px;font-weight:bold'>Descargar resultado PDF</a></p>`);
-    return this.send({ to: email, subject: `Resultado de Fase ${module} · ${eventName}`, html });
+  async sendResultNotification({ email, company, eventName, module, url, templates = DEFAULT_SETTINGS.emails }) {
+    const values = { empresa: company, evento: eventName, fase: module };
+    const html = layout('RESULTADOS DISPONIBLES', `<h1>Hola, ${esc(company)}.</h1><p>${esc(fill(templates.resultBody, values))}</p><p><a href='${esc(url)}' style='display:inline-block;background:#0aada8;color:white;text-decoration:none;padding:13px 20px;border-radius:10px;font-weight:bold'>Ver resultado</a></p>`);
+    return this.send({ to: email, subject: fill(templates.resultSubject, values), html });
+  }
+
+  /** Tells the administrators that a phase finished and is waiting for its PDF. */
+  async sendPhaseReady({ email, company, eventName, module, url }) {
+    const html = layout('FASE LISTA PARA ENTREGA', `<h1>Fase ${esc(module)} completada</h1><p>El proceso <strong>${esc(eventName)}</strong> de ${esc(company)} ya terminó la Fase ${esc(module)} y está esperando su PDF de resultados.</p><p><a href='${esc(url)}' style='display:inline-block;background:#0aada8;color:white;text-decoration:none;padding:13px 20px;border-radius:10px;font-weight:bold'>Ir a Resultados</a></p>`);
+    return this.send({ to: email, subject: `Fase ${module} lista para entrega · ${eventName}`, html });
   }
 
   async getEmailStatus(emailId) {

@@ -49,6 +49,7 @@ export const ADMIN_SECTIONS = [
     'Resultados y métricas',
     '⌁',
   ],
+  ['settings', 'Configuración', 'Textos, planes, vigencias y correos', '⚙'],
   ['accounts', 'Accesos y usuarios', 'Administradores, permisos y cuentas', '♙'],
 ].map(([id, label, description, icon]) => ({
   id,

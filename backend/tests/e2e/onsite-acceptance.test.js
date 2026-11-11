@@ -12,6 +12,9 @@ jest.mock('../../src/config/firebase', () => ({
   db: {},
   auth: { verifyIdToken: jest.fn(async (token) => ({ uid: token })) },
 }));
+jest.mock('../../src/config/supabase', () => ({
+  supabase: { storage: { from: () => ({ upload: async () => ({ error: null }) }) } },
+}));
 
 const createApp = require('../../src/app');
 const { createContainer } = require('../../src/container');
@@ -62,12 +65,21 @@ describe('Phase 9 · onsite evaluation, end to end', () => {
     container.onsiteAccessService.sleep = async () => {};
     container.invitationService.sleep = async () => {};
     const { repos } = container;
-    const org1 = await repos.organizationRepo.create({ companyName: 'TechCorp', name: 'TechCorp' });
-    const org2 = await repos.organizationRepo.create({ companyName: 'OtraEmpresa', name: 'OtraEmpresa' });
+    const org1 = await repos.organizationRepo.create({ companyName: 'TechCorp', name: 'TechCorp', subscription: { planId: 'fase-a-b' } });
+    const org2 = await repos.organizationRepo.create({ companyName: 'OtraEmpresa', name: 'OtraEmpresa', subscription: { planId: 'fase-a-b' } });
+    // Macrocase bank: the case is drawn when a process is created.
+    await container.macrocaseService.createMacroCase({
+      name: 'Caperucita', description: 'Caso', instructions: 'Lee cada parte.', defaultTimeLimit: 0, active: true,
+      sections: [
+        { title: 'El encargo', narrative: 'Había una vez una niña.', questions: [{ text: '¿Qué le recomendaría?' }, { text: '¿Qué haría la madre?' }] },
+        { title: 'El bosque', narrative: 'El lobo apareció.', questions: [{ text: '¿Qué haría usted?' }] },
+        { title: 'La casa', narrative: 'La abuela no estaba.', questions: [{ text: '¿Y ahora?' }] },
+      ],
+    });
     await repos.userRepo.create({ uid: 'company-1', role: 'company', orgId: org1.id });
     await repos.userRepo.create({ uid: 'applicator-1', role: 'company', orgId: org1.id });
     await repos.userRepo.create({ uid: 'company-2', role: 'company', orgId: org2.id });
-    await repos.userRepo.create({ uid: 'admin-1', role: 'admin', orgId: null });
+    await repos.userRepo.create({ uid: 'admin-1', role: 'admin', orgId: null, adminAccess: 'owner', status: 'active' });
     app = createApp(container);
   });
 
@@ -225,7 +237,7 @@ describe('Phase 9 · onsite evaluation, end to end', () => {
     const stored = container.repos.invitationRepo.submissions;
     expect(stored).toHaveLength(18);
     group.forEach((candidate, index) => {
-      expect(stored.find((submission) => submission.candidateId === candidate.id).answers).toEqual(LIKERT(index));
+      expect(stored.find((submission) => submission.candidateId === candidate.id).answers).toEqual(LIKERT(index).map((answer) => expect.objectContaining(answer)));
     });
     // A session cannot be used to send someone else's evaluation again.
     const replay = await request(app).post(`${API}/invitations/access/submit`).send({ token: state.tokens[group[0].id], answers: LIKERT(99) });
@@ -313,16 +325,9 @@ describe('Phase 9 · onsite evaluation, end to end', () => {
     await container.repos.candidateRepo.update(state.candidates[19].id, { eventId: 'otro-proceso' });
     expect((await request(app).post(`${API}/admin/processes/${state.eventId}/publish`).set(as('admin-1'))).status).toBe(200);
 
-    // Macrocase bank: three sections.
-    const macrocase = await request(app).post(`${API}/macrocasos`).set(as('admin-1')).send({
-      name: 'Caperucita', description: 'Demo', instructions: 'Lee cada parte.', maxCharacters: 300, defaultTimeLimit: 0, active: true,
-      sections: [
-        { title: 'El encargo', narrative: 'Había una vez una niña.', questions: [{ text: '¿Qué le recomendaría?' }, { text: '¿Qué haría la madre?' }] },
-        { title: 'El bosque', narrative: 'El lobo apareció.', questions: [{ text: '¿Qué haría usted?' }] },
-        { title: 'La casa', narrative: 'La abuela no estaba.', questions: [{ text: '¿Y ahora?' }] },
-      ],
-    });
-    expect(macrocase.status).toBe(201);
+    // The company opens Module B only after receiving Module A's PDF.
+    const report = await request(app).post(`${API}/admin/results/${state.eventId}/A`).set(as('admin-1')).attach('pdf', Buffer.from('%PDF-1.4'), { filename: 'fase-a.pdf', contentType: 'application/pdf' });
+    expect(report.status).toBe(200);
 
     const candidate = state.candidates[0];
     const startsAt = new Date();

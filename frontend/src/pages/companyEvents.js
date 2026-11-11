@@ -4,7 +4,7 @@ export const EVENT_STATES = {
   active: { label: 'Activo', tone: 'info' },
   review: { label: 'En revisión', tone: 'warning' },
   ready: { label: 'Listo para publicar', tone: 'warning' },
-  published: { label: 'Resultados publicados', tone: 'ok' },
+  published: { label: 'Con resultados', tone: 'ok' },
   finished: { label: 'Finalizado', tone: 'muted' },
   draft: { label: 'Borrador', tone: 'muted' },
   cancelled: { label: 'Cancelado', tone: 'error' },

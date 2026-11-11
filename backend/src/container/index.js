@@ -25,7 +25,11 @@ const InMemoryMicrocaseRepository = require('../repositories/in-memory/InMemoryM
 const InMemoryAccessCredentialRepository = require('../repositories/in-memory/InMemoryAccessCredentialRepository');
 const InMemoryAuditLogRepository = require('../repositories/in-memory/InMemoryAuditLogRepository');
 
+const FirestoreSettingsRepository = require('../repositories/firestore/FirestoreSettingsRepository');
+const InMemorySettingsRepository = require('../repositories/in-memory/InMemorySettingsRepository');
+
 // Services
+const SettingsService = require('../services/SettingsService');
 const AuthService = require('../services/AuthService');
 const TenantService = require('../services/TenantService');
 const EventService = require('../services/EventService');
@@ -78,6 +82,7 @@ function buildRepositories(type) {
       microcaseRepo: new InMemoryMicrocaseRepository(),
       accessCredentialRepo: new InMemoryAccessCredentialRepository(),
       auditLogRepo: new InMemoryAuditLogRepository(),
+      settingsRepo: new InMemorySettingsRepository(),
     };
   }
 
@@ -92,6 +97,7 @@ function buildRepositories(type) {
     microcaseRepo: new FirestoreMicrocaseRepository(),
     accessCredentialRepo: new FirestoreAccessCredentialRepository(),
     auditLogRepo: new FirestoreAuditLogRepository(),
+    settingsRepo: new FirestoreSettingsRepository(),
   };
 }
 
@@ -112,8 +118,7 @@ function buildRepositories(type) {
 function createContainer(type = 'firestore') {
   const repos = buildRepositories(type);
   const questionBankService = new QuestionBankService(repos.questionGroupRepo);
-  const eventService = new EventService(repos.eventRepo, repos.organizationRepo, questionBankService);
-  const candidateService = new CandidateService(repos.candidateRepo, eventService);
+  const settingsService = new SettingsService(repos.settingsRepo);
   const emailService = new ResendEmailService({
     apiKey: process.env.RESEND_API_KEY,
     from: process.env.RESEND_FROM,
@@ -128,7 +133,10 @@ function createContainer(type = 'firestore') {
     audioStorage: type === 'memory' ? undefined : supabaseAudioStorage,
     eventRepo: repos.eventRepo,
   });
+  const eventService = new EventService(repos.eventRepo, repos.organizationRepo, questionBankService, { macrocaseService, microcaseService });
+  const candidateService = new CandidateService(repos.candidateRepo, eventService);
   const invitationService = new InvitationService({
+    settingsService,
     invitationRepo: repos.invitationRepo,
     candidateService,
     candidateRepo: repos.candidateRepo,
@@ -177,6 +185,7 @@ function createContainer(type = 'firestore') {
   return {
     repos,
     questionBankService,
+    settingsService,
     adminAccountService: new AdminAccountService({ userRepo: repos.userRepo, auditRepo: repos.auditLogRepo, identity }),
     accessCredentialService,
     onsiteApplicationService,
@@ -187,7 +196,7 @@ function createContainer(type = 'firestore') {
     candidateService,
     invitationService,
     reviewService,
-    resultDeliveryService: new ResultDeliveryService({ eventRepo: repos.eventRepo, candidateRepo: repos.candidateRepo, organizationRepo: repos.organizationRepo, emailService, frontendUrl: process.env.FRONTEND_URL || process.env.CORS_ORIGIN }),
+    resultDeliveryService: new ResultDeliveryService({ eventRepo: repos.eventRepo, candidateRepo: repos.candidateRepo, organizationRepo: repos.organizationRepo, emailService, settingsService, frontendUrl: process.env.FRONTEND_URL || process.env.CORS_ORIGIN }),
     macrocaseService,
     microcaseService,
   };

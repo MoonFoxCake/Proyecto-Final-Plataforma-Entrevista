@@ -11,7 +11,7 @@ const {
   ACCESS_CHANNELS,
 } = require('../utils/constants');
 
-const { ValidationError, ForbiddenError } = require('../utils/errors');
+const { ValidationError, ForbiddenError, NotFoundError } = require('../utils/errors');
 
 const {
   MACROCASE_SCHEMA_VERSION,
@@ -25,14 +25,30 @@ const {
 const {
   isOnsite,
   modulesOf,
-  appointment: toAppointment,
+  toAppointment,
 } = require('../utils/eventModality');
 
-const DAY_MS = 24 * 60 * 60 * 1000;
+const {
+  applyAction: applyTimedAction,
+  canFinish,
+  isExpired,
+  stateView: timedStateView,
+  GRACE_MS,
+} = require('../utils/timedQuestionnaire');
 
-// Module B is sent once Module A results are out, so it is available right
-// away and stays open for a few days.
-const MODULE_B_VALIDITY_MS = 3 * DAY_MS;
+const {
+  WITHDRAWN,
+  hasCompleted,
+  inPhase,
+  isWithdrawn,
+  phaseState,
+} = require('../utils/phases');
+
+const HOUR_MS = 60 * 60 * 1000;
+const DAY_MS = 24 * HOUR_MS;
+
+// Used when no settings service is wired (tests); see SettingsService.
+const DEFAULT_VALIDITY = { moduleAValidityHours: 24, moduleBCValidityDays: 3 };
 
 // Resend allows about 2 requests per second.
 const STATUS_CHECK_DELAY_MS = 600;
@@ -51,7 +67,8 @@ function completedModuleA(candidate) {
 function eligibleForModuleB(candidate) {
   return completedModuleA(candidate)
     && candidate.reviewStatus === 'REVIEWED'
-    && candidate.moduleB?.status !== MODULE_B_STATUSES.COMPLETED;
+    && candidate.moduleB?.status !== MODULE_B_STATUSES.COMPLETED
+    && candidate.moduleB?.status !== WITHDRAWN;
 }
 
 /** Module B progress belongs to the evaluation, not to one link: a resent link resumes it. */
@@ -69,10 +86,12 @@ class InvitationService {
     frontendUrl,
     macrocaseService,
     microcaseService,
+    settingsService,
     sleep = wait,
     now = () => new Date(),
   }) {
     this.now = now;
+    this.settingsService = settingsService;
     this.invitationRepo = invitationRepo;
     this.candidateService = candidateService;
     this.candidateRepo = candidateRepo;
@@ -190,6 +209,13 @@ class InvitationService {
       );
     }
 
+    // Processes created before phase reports existed keep their original rule.
+    if (event.requiresPhaseReports && !event.moduleResults?.A?.deliveredAt) {
+      throw new ValidationError(
+        'El Módulo B se habilita cuando administración entregue el PDF de resultados de la Fase A.'
+      );
+    }
+
     const candidates = await this.candidateRepo.findByEvent(eventId, orgId);
     const byId = new Map(
       candidates.map((candidate) => [candidate.id, candidate])
@@ -269,12 +295,12 @@ class InvitationService {
     if (normalized !== 'completo') throw new ForbiddenError('Tu suscripción no incluye el Módulo C. Necesitas el Plan completo.');
   }
 
-  async sendModuleC(eventId, orgId, candidateIds, sectionIds, citation) {
+  async sendModuleC(eventId, orgId, candidateIds, citation) {
     await this.requireModuleCSubscription(orgId);
     let event = await this.eventService.getEvent(eventId, orgId);
     if (!modulesOf(event).includes(MODULES.C)) throw new ValidationError('Este proceso no incluye el Módulo C.');
-    if (!event.moduleC?.microcase) throw new ValidationError('Selecciona y guarda un microcaso antes de invitar.');
     if (!event.moduleResults?.B?.deliveredAt) throw new ValidationError('La empresa debe recibir primero el PDF de resultados de la Fase B para abrir la Fase C.');
+    if (!event.moduleC?.microcase || !event.moduleC.questions?.length) throw new ValidationError('Selecciona y guarda las habilidades a evaluar antes de invitar.');
     const onsite = isOnsite(event);
     if (onsite && !citation) throw new ValidationError('Indica la sede, ubicación y horario de la Fase C.');
     if (!onsite && citation) throw new ValidationError('Las citaciones solo aplican a procesos presenciales.');
@@ -283,18 +309,17 @@ class InvitationService {
     const byId = new Map(candidates.map((candidate) => [candidate.id, candidate]));
     const selected = [...new Set(candidateIds || [])].map((id) => byId.get(id));
     if (!selected.length || selected.some((candidate) => !candidate)) throw new ValidationError('Selecciona candidatos válidos de este proceso.');
-    const invalid = selected.filter((candidate) => candidate.moduleB?.status !== MODULE_B_STATUSES.COMPLETED || candidate.moduleC?.status === MODULE_C_STATUSES.COMPLETED);
+    const invalid = selected.filter((candidate) => candidate.moduleB?.status !== MODULE_B_STATUSES.COMPLETED || candidate.moduleC?.status === MODULE_C_STATUSES.COMPLETED || candidate.moduleC?.status === WITHDRAWN);
     if (invalid.length) throw new ValidationError(`Solo pueden continuar quienes completaron la Fase B: ${invalid.map((c) => c.nombreCompleto).join(', ')}.`);
     const org = await this.organizationRepo.findById(orgId);
     const appointment = onsite ? toAppointment(citation) : null;
+    // From the first send the skills and questions are frozen for everyone.
+    if (!event.moduleC.lockedAt) {
+      await this.eventService.eventRepo.update(eventId, { moduleC: { ...event.moduleC, lockedAt: new Date() } });
+    }
     const results = [];
     for (const candidate of selected) {
-      const assignedQuestions = event.moduleC.microcase.sections.map((section) => {
-        const pool = section.questions || [];
-        if (!pool.length) throw new ValidationError(`La habilidad ${section.title} no tiene preguntas.`);
-        const question = pool[Math.floor(Math.random() * pool.length)];
-        return { sectionId: section.id, sectionTitle: section.title, questionId: question.id, question: question.text };
-      });
+      const assignedQuestions = event.moduleC.questions.map((question) => ({ ...question }));
       const moduleC = { status: onsite ? 'PENDING_CITATION' : MODULE_C_STATUSES.INVITATION_SENT, invitedAt: new Date(), citation: null, ...(onsite ? { appointment } : {}), assignedQuestions, microcaseId: event.moduleC.microcase.id };
       await this.candidateRepo.update(candidate.id, { moduleC });
       const updatedCandidate = { ...candidate, moduleC };
@@ -315,6 +340,7 @@ class InvitationService {
         organization,
         module,
         appointment,
+        templates: (await this.currentSettings()).emails,
       });
 
       const citation = {
@@ -405,6 +431,13 @@ class InvitationService {
         };
       }
 
+      if (candidate.moduleC?.citation?.providerId) {
+        changes.moduleC = {
+          ...candidate.moduleC,
+          citation: await check(candidate.moduleC.citation),
+        };
+      }
+
       if (Object.keys(changes).length) {
         await this.candidateRepo.update(candidate.id, changes);
       }
@@ -413,8 +446,237 @@ class InvitationService {
     return { checked, failed };
   }
 
+  /**
+   * A timed evaluation whose time ran out is closed here with whatever was
+   * answered, so coming back after the deadline cannot reopen it.
+   */
   async validateAccess(token) {
-    return (await this.resolveAccess(token)).result;
+    const access = await this.resolveAccess(token);
+    if (access.result.state !== 'VALID' || !this.isTimed(access)) return access.result;
+    const definition = this.timedDefinition(access);
+    const progress = await this.invitationRepo.findProgress(progressIdOf(access.invitation));
+    if (isExpired(definition, progress, this.now(), GRACE_MS)) {
+      return this.completeTimed(access, progress, hashToken(token));
+    }
+    return access.result;
+  }
+
+  // ------------------------------------------- timed Likert (A and C)
+
+  /** Module C always has a total time; Module A only if its question group sets one. */
+  isTimed({ invitation, event }) {
+    if (invitation.module === MODULES.C) return true;
+    return invitation.module === MODULES.A && Number(instrumentOf(event).timeLimitMinutes) > 0;
+  }
+
+  timedDefinition({ invitation, event, candidate }) {
+    if (invitation.module === MODULES.C) {
+      return {
+        limitSeconds: Number(event.moduleC.microcase.timeLimitMinutes || 15) * 60,
+        hasStory: true,
+        questions: (candidate.moduleC?.assignedQuestions || []).map((question) => ({ id: question.questionId })),
+      };
+    }
+    const instrument = instrumentOf(event);
+    return {
+      limitSeconds: Number(instrument.timeLimitMinutes) * 60,
+      hasStory: false,
+      questions: instrument.questions.map((question) => ({ id: question.id })),
+    };
+  }
+
+  /** Resolves a VALID timed access, closing it first if its time is over. */
+  async resolveTimedAccess(token) {
+    const access = await this.resolveAccess(token);
+    if (access.result.state !== 'VALID') return { closed: access.result };
+    if (!this.isTimed(access)) throw new ValidationError('Esta invitación no corresponde a esta evaluación.');
+    const definition = this.timedDefinition(access);
+    const progress = await this.invitationRepo.findProgress(progressIdOf(access.invitation));
+    if (isExpired(definition, progress, this.now(), GRACE_MS)) {
+      return { closed: await this.completeTimed(access, progress, hashToken(token)) };
+    }
+    return { ...access, definition, progress };
+  }
+
+  /** The stage and remaining time of a timed evaluation (resumes after a reload). */
+  async getTimedState(token) {
+    const access = await this.resolveTimedAccess(token);
+    if (access.closed) return access.closed;
+    return timedStateView(access.definition, access.progress, this.now());
+  }
+
+  /** One candidate action (`START`, `STORY_DONE`, `ANSWER`); returns the resulting stage. */
+  async advanceTimed(token, action) {
+    const access = await this.resolveTimedAccess(token);
+    if (access.closed) return access.closed;
+    const { invitation, definition } = access;
+    const now = this.now();
+    const progress = await this.invitationRepo.updateProgress(progressIdOf(invitation), (current) => ({
+      ...applyTimedAction(definition, current, action, now),
+      invitationId: invitation.id,
+      candidateId: invitation.candidateId,
+      eventId: invitation.eventId,
+      orgId: invitation.orgId,
+      module: invitation.module,
+      updatedAt: now,
+    }));
+    return timedStateView(definition, progress, now);
+  }
+
+  /** Stores the answers given so far; questions left unanswered go as timed out. */
+  async completeTimed({ invitation, event, candidate }, progress, tokenHash) {
+    const byId = new Map((progress?.answers || []).map((answer) => [answer.questionId, answer.value]));
+    const valueOf = (id) => (byId.has(id) ? { value: byId.get(id) } : { value: null, timedOut: true });
+    const isC = invitation.module === MODULES.C;
+    const instrument = isC ? null : instrumentOf(event);
+    const answers = isC
+      ? (candidate.moduleC?.assignedQuestions || []).map((question) => ({ ...question, ...valueOf(question.questionId) }))
+      : instrument.questions.map((question, index) => ({
+        questionId: question.id,
+        ...valueOf(question.id),
+        ...(event.moduleA?.instrument ? { text: question.text, dimension: question.dimension || '', number: index + 1 } : {}),
+      }));
+    const result = await this.invitationRepo.completeWithSubmission(tokenHash, {
+      module: invitation.module,
+      instrumentVersion: isC ? `MICROCASE:${candidate.moduleC.microcaseId}` : instrument.instrumentVersion,
+      answers,
+    });
+    if (result.state === 'COMPLETED' && !result.alreadySubmitted) {
+      await this.candidateRepo.update(candidate.id, isC
+        ? { moduleC: { ...candidate.moduleC, status: MODULE_C_STATUSES.COMPLETED, submittedAt: result.submittedAt } }
+        : { status: CANDIDATE_STATUSES.EVALUATION_COMPLETED, submittedAt: result.submittedAt });
+      await this.notifyIfPhaseReady(invitation.eventId, invitation.orgId, invitation.module);
+    }
+    return result;
+  }
+
+  // ----------------------------------------------------- phases
+
+  async currentSettings() {
+    if (!this.settingsService) return { evaluation: DEFAULT_VALIDITY, emails: undefined };
+    return this.settingsService.get();
+  }
+
+  /**
+   * Tells the administrators that a phase is ready for its PDF, once.
+   * Best effort: the phase is listed in "Resultados" either way.
+   */
+  async notifyIfPhaseReady(eventId, orgId, module) {
+    if (!this.settingsService) return;
+    try {
+      const [event, candidates, settings] = await Promise.all([
+        this.eventService.getEvent(eventId, orgId),
+        this.candidateRepo.findByEvent(eventId, orgId),
+        this.settingsService.get(),
+      ]);
+      if (!phaseState(module, candidates).complete) return;
+      if (event.moduleResults?.[module]?.deliveredAt || event.phaseReadyNotifiedAt?.[module]) return;
+      const email = settings.notifications?.adminEmail;
+      if (!email) return;
+      const organization = await this.organizationRepo.findById(orgId);
+      await this.emailService.sendPhaseReady({
+        email,
+        company: organization?.companyName || organization?.name || 'Empresa',
+        eventName: event.name || event.title || 'Proceso',
+        module,
+        url: `${(this.frontendUrl || '').replace(/\/$/, '')}/admin-dashboard?section=results`,
+      });
+      await this.eventService.eventRepo.update(eventId, {
+        phaseReadyNotifiedAt: { ...(event.phaseReadyNotifiedAt || {}), [module]: new Date() },
+      });
+    } catch (error) {
+      console.error(`No se pudo avisar que la Fase ${module} está lista:`, error.message);
+    }
+  }
+
+  async requireCandidate(eventId, orgId, candidateId) {
+    const candidate = await this.candidateRepo.findById(candidateId);
+    if (!candidate || candidate.eventId !== eventId || candidate.orgId !== orgId) {
+      throw new NotFoundError('Candidato no encontrado.');
+    }
+    return candidate;
+  }
+
+  /** Module A: sends a new link or citation to someone who has not answered yet. */
+  async resendModuleA(eventId, orgId, candidateId) {
+    const event = await this.eventService.getEvent(eventId, orgId);
+    const candidate = await this.requireCandidate(eventId, orgId, candidateId);
+    if (event.evaluationsPublishedAt || event.status === 'PUBLISHED') throw new ValidationError('Esta fase ya se cerró: los resultados están publicados.');
+    if (hasCompleted(candidate, MODULES.A)) throw new ValidationError('Este candidato ya respondió la evaluación.');
+    if (isWithdrawn(candidate, MODULES.A)) throw new ValidationError('Este candidato fue retirado de la fase.');
+    if (candidate.status === CANDIDATE_STATUSES.INVITED_PENDING) throw new ValidationError('Este candidato todavía no ha sido convocado: usa el envío general.');
+    const organization = await this.organizationRepo.findById(orgId);
+    if (isOnsite(event)) {
+      if (new Date(event.onsite.endsAt) <= this.now()) throw new ValidationError('La cita presencial ya terminó. Puedes retirar al candidato de la fase.');
+      return this.summarize([await this.citeOne({ candidate, event, organization, module: MODULES.A, appointment: event.onsite })]);
+    }
+    this.requireFrontendUrl();
+    return this.summarize([await this.publishOne({ candidate, event, organization, orgId, module: MODULES.A })]);
+  }
+
+  /** Takes a candidate out of a phase so it does not wait for them. Their link stops working. */
+  async withdrawOne(event, candidate, module, actorUid) {
+    const now = this.now();
+    const session = await this.invitationRepo.findActiveByCandidate(candidate.id, event.id, module);
+    if (session) {
+      await this.invitationRepo.update(session.id, { status: INVITATION_STATUSES.CANCELLED, cancelledAt: now, cancelledBy: actorUid });
+    }
+    const mark = { status: WITHDRAWN, withdrawnAt: now, withdrawnBy: actorUid };
+    await this.candidateRepo.update(candidate.id, module === MODULES.A
+      ? mark
+      : { [`module${module}`]: { ...candidate[`module${module}`], ...mark } });
+  }
+
+  requirePhaseOpen(event, module) {
+    if (!modulesOf(event).includes(module)) throw new ValidationError(`Este proceso no incluye el Módulo ${module}.`);
+    if (event.moduleResults?.[module]?.deliveredAt) throw new ValidationError(`La Fase ${module} ya se entregó.`);
+  }
+
+  async withdrawCandidate(eventId, orgId, candidateId, module, actorUid) {
+    const event = await this.eventService.getEvent(eventId, orgId);
+    this.requirePhaseOpen(event, module);
+    const candidate = await this.requireCandidate(eventId, orgId, candidateId);
+    if (!inPhase(candidate, module)) throw new ValidationError(`Este candidato no participa en el Módulo ${module}.`);
+    if (hasCompleted(candidate, module)) throw new ValidationError('Este candidato ya respondió esta fase.');
+    if (isWithdrawn(candidate, module)) return { withdrawn: false };
+    await this.withdrawOne(event, candidate, module, actorUid);
+    await this.notifyIfPhaseReady(eventId, orgId, module);
+    return { withdrawn: true };
+  }
+
+  /**
+   * Closes a phase with whoever answered: candidates whose time already ran
+   * out are submitted with what they answered; everyone else still open is
+   * withdrawn.
+   */
+  async closePhase(eventId, orgId, module, actorUid) {
+    const event = await this.eventService.getEvent(eventId, orgId);
+    this.requirePhaseOpen(event, module);
+    const candidates = await this.candidateRepo.findByEvent(eventId, orgId);
+    const open = candidates.filter((candidate) => inPhase(candidate, module)
+      && !hasCompleted(candidate, module) && !isWithdrawn(candidate, module));
+    let submitted = 0;
+    for (const candidate of open) {
+      if (await this.submitIfTimedOut(event, candidate, module)) submitted += 1;
+      else await this.withdrawOne(event, candidate, module, actorUid);
+    }
+    const state = phaseState(module, await this.candidateRepo.findByEvent(eventId, orgId));
+    if (!state.completed) throw new ValidationError('Nadie respondió esta fase: no hay resultados que entregar.');
+    await this.notifyIfPhaseReady(eventId, orgId, module);
+    return { closed: open.length - submitted, submitted, ...state };
+  }
+
+  /** @returns {Promise<boolean>} whether a timed evaluation left open past its deadline was closed */
+  async submitIfTimedOut(event, candidate, module) {
+    if (module === MODULES.B) return false;
+    const invitation = await this.invitationRepo.findActiveByCandidate(candidate.id, event.id, module);
+    if (!invitation) return false;
+    const access = { invitation: { ...invitation, module }, event, candidate };
+    if (!this.isTimed(access)) return false;
+    const progress = await this.invitationRepo.findProgress(progressIdOf(access.invitation));
+    if (!isExpired(this.timedDefinition(access), progress, this.now(), GRACE_MS)) return false;
+    const result = await this.completeTimed(access, progress, invitation.tokenHash);
+    return result.state === 'COMPLETED';
   }
 
   /**
@@ -460,20 +722,14 @@ class InvitationService {
       return closed({ state: 'EXPIRED' });
     }
 
-    const candidate = await this.candidateRepo.findById(
-      invitation.candidateId
-    );
+    // Independent reads, at once: every candidate action goes through here.
+    const [candidate, event, organization] = await Promise.all([
+      this.candidateRepo.findById(invitation.candidateId),
+      this.eventService.getEvent(invitation.eventId, invitation.orgId).catch(() => null),
+      this.organizationRepo.findById(invitation.orgId),
+    ]);
 
-    let event;
-
-    try {
-      event = await this.eventService.getEvent(
-        invitation.eventId,
-        invitation.orgId
-      );
-    } catch {
-      return closed({ state: 'INVALID' });
-    }
+    if (!event) return closed({ state: 'INVALID' });
 
     if (
       !candidate
@@ -507,10 +763,6 @@ class InvitationService {
     if (Number.isNaN(availableFrom.getTime())) {
       return closed({ state: 'INVALID' });
     }
-
-    const organization = await this.organizationRepo.findById(
-      invitation.orgId
-    );
 
     const context = {
       module,
@@ -656,21 +908,14 @@ class InvitationService {
     const tokenHash = hashToken(token);
     const { invitation, candidate } = access;
 
-    if (invitation.module === MODULES.C) {
-      const questions = candidate.moduleC?.assignedQuestions || [];
-      if (!Array.isArray(answers) || answers.some((a) => !questions.some((q) => q.questionId === a.questionId) || !Number.isInteger(Number(a.value)) || Number(a.value) < 1 || Number(a.value) > 5) || new Set(answers.map((a) => a.questionId)).size !== answers.length) throw new ValidationError('Las respuestas del microcaso no son válidas.');
-      const normalized = questions.filter((q) => answers.some((a) => a.questionId === q.questionId)).map((q) => ({ ...q, value: Number(answers.find((a) => a.questionId === q.questionId).value) }));
-      const result = await this.invitationRepo.completeWithSubmission(tokenHash, { module: MODULES.C, instrumentVersion: `MICROCASE:${candidate.moduleC.microcaseId}`, answers: normalized });
-      if (result.state === 'COMPLETED' && !result.alreadySubmitted) {
-        await this.candidateRepo.update(candidate.id, { moduleC: { ...candidate.moduleC, status: MODULE_C_STATUSES.COMPLETED, submittedAt: result.submittedAt } });
-        const all = await this.candidateRepo.findByEvent(invitation.eventId, invitation.orgId);
-        const assigned = all.filter((item) => item.moduleC?.assignedQuestions?.length);
-        if (assigned.length && assigned.every((item) => item.moduleC?.status === MODULE_C_STATUSES.COMPLETED)) {
-          const currentEvent = await this.eventService.getEvent(invitation.eventId, invitation.orgId);
-          await this.eventService.eventRepo.update(invitation.eventId, { moduleC: { ...currentEvent.moduleC, status: 'COMPLETED', completedAt: result.submittedAt } });
-        }
+    if (this.isTimed(access)) {
+      if (finalize !== true) throw new ValidationError('Confirma el envío de tu evaluación.');
+      const definition = this.timedDefinition(access);
+      const progress = await this.invitationRepo.findProgress(progressIdOf(invitation));
+      if (!canFinish(definition, progress, this.now())) {
+        throw new ValidationError('Debes responder todas las preguntas antes de enviar la evaluación.');
       }
-      return result;
+      return this.completeTimed(access, progress, tokenHash);
     }
 
     if (invitation.module === MODULES.B) {
@@ -713,6 +958,7 @@ class InvitationService {
             submittedAt: result.submittedAt,
           },
         });
+        await this.notifyIfPhaseReady(invitation.eventId, invitation.orgId, MODULES.B);
       }
 
       return result;
@@ -749,6 +995,7 @@ class InvitationService {
         status: CANDIDATE_STATUSES.EVALUATION_COMPLETED,
         submittedAt: result.submittedAt,
       });
+      await this.notifyIfPhaseReady(invitation.eventId, invitation.orgId, MODULES.A);
     }
 
     return result;
@@ -758,6 +1005,10 @@ class InvitationService {
     let invitation;
 
     try {
+      const settings = await this.currentSettings();
+      const laterPhaseValidityMs = settings.evaluation.moduleBCValidityDays * DAY_MS;
+      const moduleAValidityMs = settings.evaluation.moduleAValidityHours * HOUR_MS;
+
       const previous = await this.invitationRepo.findActiveByCandidate(
         candidate.id,
         event.id,
@@ -782,8 +1033,8 @@ class InvitationService {
 
       const expiresAt = new Date(
         module === MODULES.B || module === MODULES.C
-          ? now + MODULE_B_VALIDITY_MS
-          : Math.max(now, availableAt) + DAY_MS
+          ? now + laterPhaseValidityMs
+          : Math.max(now, availableAt) + moduleAValidityMs
       );
 
       invitation = await this.invitationRepo.create({
@@ -811,6 +1062,7 @@ class InvitationService {
         accessUrl: accessUrl.toString(),
         module,
         expiresAt,
+        templates: settings.emails,
       });
 
       await this.candidateRepo.update(

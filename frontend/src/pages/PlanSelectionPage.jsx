@@ -1,51 +1,19 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import * as subscriptionService from '../services/subscriptionService.js';
-import {
-  SUBSCRIPTION_PLANS,
-  normalizePlanId,
-} from '../utils/subscriptionPlans.js';
+import { useAuth } from '../hooks/useAuth.js';
+import { usePublicSettings } from '../hooks/usePublicSettings.js';
+import { normalizePlanId } from '../utils/subscriptionPlans.js';
 
-const plans = [
-  {
-    id: 'fase-a',
-    name: 'Fase A',
-    price: '₡XXX',
-    features: [
-      'Cuestionario Likert',
-      'Perfil inicial',
-      'Comparación con perfil ideal',
-      'Reporte descargable',
-    ],
-  },
-  {
-    id: 'fase-a-b',
-    name: 'Fase A + B',
-    price: '₡XXX',
-    features: [
-      'Todo lo incluido en Fase A',
-      'Macrocaso profesional',
-      'Evaluación por criterios',
-      'Resultados por fase',
-    ],
-  },
-  {
-    id: 'completo',
-    name: 'Plan completo',
-    price: '₡XXX',
-    features: [
-      'Todo lo incluido en A + B',
-      'Microcasos (Fase C)',
-      'Perfil final integral',
-      'Comparación multidimensional',
-    ],
-  },
-];
+const PLAN_IDS = ['fase-a', 'fase-a-b', 'completo'];
 
 export function PlanSelectionPage() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const managing = params.get('mode') === 'manage';
+  const { loading: authLoading } = useAuth();
+  const settings = usePublicSettings();
+  const plans = PLAN_IDS.map((id) => ({ id, ...settings.plans[id] }));
 
   const [currentPlan, setCurrentPlan] = useState(null);
   const [loading, setLoading] = useState(managing);
@@ -54,7 +22,8 @@ export function PlanSelectionPage() {
   const [success, setSuccess] = useState('');
 
   useEffect(() => {
-    if (!managing) return;
+    // Public route: after a reload the session is restored a moment later.
+    if (!managing || authLoading) return;
 
     subscriptionService.getSubscription()
       .then((data) => {
@@ -65,7 +34,7 @@ export function PlanSelectionPage() {
         setError('No se pudo consultar tu suscripción actual.');
       })
       .finally(() => setLoading(false));
-  }, [managing]);
+  }, [managing, authLoading]);
 
   async function choosePlan(planId) {
     if (!managing) {
@@ -190,12 +159,6 @@ export function PlanSelectionPage() {
             );
           })}
         </div>
-
-        <p className="mt-8 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-900">
-          La contratación y los cambios de plan son simulados. No se realiza
-          ningún cobro real. El precio definitivo debe configurarse antes de
-          producción.
-        </p>
 
         {managing && (
           <div className="mt-5 text-center">

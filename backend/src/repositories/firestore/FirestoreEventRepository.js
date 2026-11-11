@@ -60,16 +60,16 @@ class FirestoreEventRepository extends IEventRepository {
       ['processes', 'orgId'],
     ];
 
-    for (const [collectionName, field] of lookups) {
-      const snapshot = await db.collection(collectionName).where(field, '==', orgId).get();
-      snapshot.docs.forEach((doc) => {
+    const snapshots = await Promise.all(lookups.map(([collectionName, field]) => db.collection(collectionName).where(field, '==', orgId).get()));
+    lookups.forEach(([collectionName], index) => {
+      snapshots[index].docs.forEach((doc) => {
         const key = `${collectionName}:${doc.id}`;
         if (!seen.has(key)) {
           seen.add(key);
           matches.push(serializeEvent(doc, collectionName));
         }
       });
-    }
+    });
     return matches;
   }
 

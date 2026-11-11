@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { EvaluationHeader } from '../components/evaluation/EvaluationHeader.jsx';
 import { LikertQuestionnaire } from '../components/evaluation/LikertQuestionnaire.jsx';
+import { MicrocaseQuestionnaire } from '../components/evaluation/MicrocaseQuestionnaire.jsx';
+import { instrumentAsTimedEvaluation } from '../components/evaluation/timedSources.js';
 import { MacrocaseEvaluation } from '../components/evaluation/macrocase/MacrocaseEvaluation.jsx';
 import { createRemoteMacrocaseSource } from '../components/evaluation/macrocase/macrocaseSources.js';
 import { validateInvitationAccess } from '../services/invitationService.js';
@@ -209,7 +211,11 @@ export function OnsiteAccessPage() {
       {phase === 'welcome' && access && <WelcomeScreen access={access} onStart={() => setPhase('evaluation')} />}
       {phase === 'evaluation' && access && (access.module === 'B'
         ? <MacrocaseEvaluation source={macrocaseSource} onCompleted={handleCompleted} onClosed={handleClosed} />
-        : <LikertQuestionnaire token={token} questionnaire={access.questionnaire} onCompleted={handleCompleted} onClosed={handleClosed} />)}
+        : access.module === 'C'
+          ? <MicrocaseQuestionnaire token={token} microcase={access.microcase} onCompleted={handleCompleted} onClosed={handleClosed} />
+          : access.questionnaire?.timeLimitMinutes > 0
+            ? <MicrocaseQuestionnaire token={token} microcase={instrumentAsTimedEvaluation(access.questionnaire)} onCompleted={handleCompleted} onClosed={handleClosed} />
+            : <LikertQuestionnaire token={token} questionnaire={access.questionnaire} onCompleted={handleCompleted} onClosed={handleClosed} />)}
       {(phase === 'finished' || phase === 'closed') && <EndScreen key={phase} variant={phase} onReset={reset} />}
     </div>
   );

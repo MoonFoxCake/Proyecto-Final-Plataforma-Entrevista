@@ -6,6 +6,7 @@ import { EvaluationHeader } from '../components/evaluation/EvaluationHeader.jsx'
 import { MacrocaseEvaluation } from '../components/evaluation/macrocase/MacrocaseEvaluation.jsx';
 import { createRemoteMacrocaseSource } from '../components/evaluation/macrocase/macrocaseSources.js';
 import { MicrocaseQuestionnaire } from '../components/evaluation/MicrocaseQuestionnaire.jsx';
+import { instrumentAsTimedEvaluation } from '../components/evaluation/timedSources.js';
 
 function formatDate(value) {
   if (!value) return '';
@@ -65,11 +66,15 @@ export function EvaluationAccessPage() {
   // stage, Module B (macrocase); the invitation says which.
   const isModuleB = access.module === 'B';
   const isModuleC = access.module === 'C';
+  const timedQuestionnaire = !isModuleB && !isModuleC && access.questionnaire?.timeLimitMinutes > 0;
   if (started) {
     return (
       <div className='min-h-screen bg-[#F6F9FC]'>
         <EvaluationHeader />
-        {isModuleB ? <MacrocaseEvaluation source={macrocaseSource} /> : isModuleC ? <MicrocaseQuestionnaire token={token} microcase={access.microcase} /> : <LikertQuestionnaire token={token} questionnaire={access.questionnaire} />}
+        {isModuleB ? <MacrocaseEvaluation source={macrocaseSource} />
+          : isModuleC ? <MicrocaseQuestionnaire token={token} microcase={access.microcase} />
+            : timedQuestionnaire ? <MicrocaseQuestionnaire token={token} microcase={instrumentAsTimedEvaluation(access.questionnaire)} />
+              : <LikertQuestionnaire token={token} questionnaire={access.questionnaire} />}
       </div>
     );
   }
@@ -93,7 +98,7 @@ export function EvaluationAccessPage() {
           </div>
 
           <h2 className='mt-6 font-semibold text-[#10233A]'>Antes de comenzar</h2>
-          <ul className='mt-4 space-y-3 text-sm text-[#56677B]'>{isModuleC && <li>✎ &nbsp;Leerás una historia y responderás preguntas mediante una escala Likert.</li>}{isModuleB && <li>✎ &nbsp;Leerás un caso por secciones y responderás por escrito las preguntas del asistente virtual.</li>}{isModuleB && <li>↻ &nbsp;Tus respuestas se guardan a medida que avanzas: si se interrumpe la conexión, continuarás donde te quedaste.</li>}<li>◷ &nbsp;Realiza la evaluación en una sola sesión.</li><li>→ &nbsp;Solo podrás avanzar; no podrás regresar a preguntas anteriores.</li><li>▣ &nbsp;Al finalizar, confirma el envío de tu evaluación.</li><li>♙ &nbsp;El enlace es personal. No lo compartas.</li></ul>
+          <ul className='mt-4 space-y-3 text-sm text-[#56677B]'>{isModuleC && <li>✎ &nbsp;Leerás una historia y responderás preguntas mediante una escala Likert.</li>}{isModuleB && <li>✎ &nbsp;Leerás un caso por secciones y responderás, con una escala del 1 al 5, las preguntas del asistente virtual.</li>}{isModuleB && <li>↻ &nbsp;Tus respuestas se guardan a medida que avanzas: si se interrumpe la conexión, continuarás donde te quedaste.</li>}<li>◷ &nbsp;Realiza la evaluación en una sola sesión.</li><li>→ &nbsp;Solo podrás avanzar; no podrás regresar a preguntas anteriores.</li><li>▣ &nbsp;Al finalizar, confirma el envío de tu evaluación.</li><li>♙ &nbsp;El enlace es personal. No lo compartas.</li></ul>
 
           {waiting && <p className='mt-6 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800'>Podrás comenzar a partir del {formatDate(access.event.availableFrom)}.</p>}
           <button type='button' disabled={waiting} onClick={() => setStarted(true)} className='mt-6 w-full rounded-xl bg-[#168D89] px-5 py-3.5 text-sm font-semibold text-white hover:bg-[#117A76] disabled:cursor-not-allowed disabled:bg-[#AAB7C4]'>{waiting ? 'Aún no disponible' : isModuleB ? 'Continuar →' : 'Comenzar evaluación →'}</button>

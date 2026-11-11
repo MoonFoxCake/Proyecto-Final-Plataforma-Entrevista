@@ -10,7 +10,7 @@ export const canAny = (profile, permissions) => permissions.some((permission) =>
 const SECTIONS = {
   dashboard: ['dashboard.view'], companies: ['companies.view'], processes: ['processes.view', 'evaluations.review', 'evaluations.publish'],
   'question-bank': ['questions.manage'], macrocasos: ['macrocases.manage'], microcasos: ['microcases.manage'],
-  results: ['results.view', 'results.deliver'], accounts: ['admins.view', 'admins.create', 'admins.manage', 'admins.delete', 'users.view', 'users.delete'],
+  results: ['results.view', 'results.deliver'], settings: ['settings.manage'], accounts: ['admins.view', 'admins.create', 'admins.manage', 'admins.delete', 'users.view', 'users.delete'],
 };
 export const canSection = (profile, section) => canAny(profile, SECTIONS[section] || []);
 export function canManageAccount(actor, target) {

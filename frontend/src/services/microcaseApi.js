@@ -16,5 +16,3 @@ export const activateMicrocase = (id) => request(`/microcasos/${id}/activate`, {
 export const deactivateMicrocase = (id) => request(`/microcasos/${id}/deactivate`, { method: 'POST' });
 export const deleteMicrocase = (id) => request(`/microcasos/${id}`, { method: 'DELETE' });
 export const previewMicrocase = (id, sectionIds) => request(`/microcasos/${id}/preview`, { method: 'POST', body: JSON.stringify({ sectionIds }) });
-
-export const listAvailableMicrocases = () => request('/microcasos/available');

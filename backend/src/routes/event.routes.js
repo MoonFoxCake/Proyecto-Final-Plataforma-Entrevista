@@ -1,7 +1,10 @@
 const { Router } = require('express');
 const { checkPersistedRole } = require('../middleware/checkPersistedRole');
 const { validateInput } = require('../middleware/validateInput');
-const { candidateSchema, eventSchema, moduleBInvitationSchema } = require('../validators/event.schema');
+const {
+  candidateSchema, eventSchema, moduleBInvitationSchema, moduleCConfigSchema, moduleCInvitationSchema, withdrawSchema, phaseParamSchema,
+} = require('../validators/event.schema');
+const { validateParams } = require('../middleware/validateParams');
 
 function createEventRoutes(eventController, authService) {
   const router = Router();
@@ -14,8 +17,13 @@ function createEventRoutes(eventController, authService) {
   // Online events: access links. Onsite events: citations without access.
   router.post('/:eventId/invitations/publish', companyOnly, eventController.publishInvitations);
   router.post('/:eventId/citations/status', companyOnly, eventController.refreshCitations);
-  router.put('/:eventId/module-c/configure', companyOnly, eventController.configureModuleC);
-  router.post('/:eventId/module-c/invitations', companyOnly, eventController.sendModuleC);
+  router.post('/:eventId/module-c/assign', companyOnly, eventController.assignModuleC);
+  router.put('/:eventId/module-c/configure', companyOnly, validateInput(moduleCConfigSchema), eventController.configureModuleC);
+  router.post('/:eventId/module-c/invitations', companyOnly, validateInput(moduleCInvitationSchema), eventController.sendModuleC);
+  router.get('/:eventId/results/:module/download', companyOnly, validateParams(phaseParamSchema), eventController.downloadResult);
+  router.post('/:eventId/phases/:module/close', companyOnly, validateParams(phaseParamSchema), eventController.closePhase);
+  router.post('/:eventId/candidates/:candidateId/resend', companyOnly, eventController.resendModuleA);
+  router.post('/:eventId/candidates/:candidateId/withdraw', companyOnly, validateInput(withdrawSchema), eventController.withdrawCandidate);
   router.post(
     '/:eventId/module-b/invitations',
     companyOnly,

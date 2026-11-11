@@ -1,8 +1,6 @@
 class MicrocaseController {
   constructor(service) { this.service = service; }
-  listActive = async (req, res, next) => { try { const items = await this.service.list(); res.json({ data: items.filter((item) => item.active).map(({ id, name, description, sections }) => ({ id, name, description, sections: sections.map(({ id: sectionId, title, questions }) => ({ id: sectionId, title, questionCount: questions.length })) })) }); } catch (error) { next(error); } };
-
-  list = async (req,res,next) => { try { res.json(await this.service.list()); } catch(e) { next(e); } };
+  list =async (req,res,next) => { try { res.json(await this.service.list()); } catch(e) { next(e); } };
   get = async (req,res,next) => { try { res.json(await this.service.get(req.params.id)); } catch(e) { next(e); } };
   create = async (req,res,next) => { try { res.status(201).json(await this.service.create(req.body)); } catch(e) { next(e); } };
   update = async (req,res,next) => { try { res.json(await this.service.update(req.params.id, req.body)); } catch(e) { next(e); } };

@@ -30,7 +30,7 @@ test('combines search, modality, modules and state without extra requests and cl
   change('Módulos incluidos', 'C');
   change('Estado', 'published');
   expect(eventLinks()).toHaveLength(1);
-  expect(eventLinks()[0].textContent).toContain('Resultados publicados');
+  expect(eventLinks()[0].textContent).toContain('Con resultados');
   expect(screen.queryByText('Publicado · Activo')).toBeNull();
   expect(getEvents).toHaveBeenCalledTimes(1);
   fireEvent.click(screen.getByRole('button', { name: 'Limpiar filtros' }));

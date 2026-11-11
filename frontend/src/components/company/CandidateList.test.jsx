@@ -9,7 +9,7 @@ test('online: identity, appointment and general status', () => {
   ]} />);
 
   expect(screen.getByText('Invitación enviada')).toBeTruthy();
-  expect(screen.getByText('Perfil disponible')).toBeTruthy();
+  expect(screen.getByText('Evaluado')).toBeTruthy();
   expect(screen.getByText('En revisión')).toBeTruthy();
   expect(screen.getByRole('columnheader', { name: 'Estado' })).toBeTruthy();
   // Module B and profiles live in "Resultados".

@@ -23,6 +23,10 @@ vi.mock('../components/evaluation/macrocase/MacrocaseEvaluation.jsx', () => ({
   MacrocaseEvaluation: ({ onCompleted }) => <button type='button' onClick={onCompleted}>Enviar macrocaso</button>,
 }));
 
+vi.mock('../components/evaluation/MicrocaseQuestionnaire.jsx', () => ({
+  MicrocaseQuestionnaire: ({ microcase, onCompleted }) => <button type='button' onClick={onCompleted}>Enviar microcaso {microcase.name}</button>,
+}));
+
 const TOKEN = 't'.repeat(43);
 const ACCESS = {
   state: 'VALID',
@@ -156,4 +160,15 @@ test('a closed session is forgotten and the code screen is shown', async () => {
 
   expect(await screen.findByRole('heading', { name: 'Ingresa tu código de acceso' })).toBeTruthy();
   await waitFor(() => expect(clearSession).toHaveBeenCalled());
+});
+
+test('Module C opens the microcase, not the questionnaire', async () => {
+  loginWithCode.mockResolvedValue({ ...ACCESS, module: 'C', microcase: { name: 'Caso', questions: [] } });
+  render(<OnsiteAccessPage />);
+  await screen.findByLabelText('Código de acceso');
+  typeCode('K7M2P9QX4R');
+  fireEvent.click(screen.getByRole('button', { name: 'Ingresar' }));
+  fireEvent.click(await screen.findByRole('button', { name: /Comenzar evaluación/ }));
+  expect(screen.getByRole('button', { name: 'Enviar microcaso Caso' })).toBeTruthy();
+  expect(screen.queryByRole('button', { name: /Enviar cuestionario/ })).toBeNull();
 });

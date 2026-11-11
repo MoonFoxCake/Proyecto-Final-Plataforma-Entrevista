@@ -4,8 +4,9 @@ export const CANDIDATE_STATES = {
   pending: { label: 'Pendiente de invitación', tone: 'muted' },
   invited: { label: 'Invitación enviada', tone: 'info' },
   review: { label: 'En revisión', tone: 'warning' },
-  published: { label: 'Perfil disponible', tone: 'ok' },
+  published: { label: 'Evaluado', tone: 'ok' },
   completed: { label: 'Completado', tone: 'ok' },
+  withdrawn: { label: 'Retirado', tone: 'muted' },
   failed: { label: 'Error de envío', tone: 'error' },
   unknown: { label: 'Estado por confirmar', tone: 'muted' },
 };
@@ -27,6 +28,7 @@ export function moduleIncluded(row, module) {
 export function candidateState(row, module = 'A') {
   const { candidate } = row;
   const stage = module === 'A' ? candidate : candidate[`module${module}`];
+  if (stage?.status === 'WITHDRAWN') return 'withdrawn';
   if (module === 'A' && candidate.profileAvailable) return 'published';
   if (stage?.status === 'COMPLETED' || stage?.status === 'EVALUATION_COMPLETED' || stage?.submittedAt) return module === 'A' ? 'review' : 'completed';
   if (stage?.status === 'INVITATION_FAILED' || stage?.citation?.status === 'FAILED' || ['bounced', 'failed', 'complained', 'canceled'].includes(stage?.citation?.delivery?.status)) return 'failed';

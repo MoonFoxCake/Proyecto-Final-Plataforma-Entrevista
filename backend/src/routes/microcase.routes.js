@@ -4,7 +4,6 @@ const { checkPersistedRole } = require('../middleware/checkPersistedRole');
 function createMicrocaseRoutes(controller, authService) {
   const router = Router();
   const admin = checkPersistedRole(authService, 'admin');
-  router.get('/available', checkPersistedRole(authService, 'company'), controller.listActive);
   router.use(admin, adminPermission('microcases.manage'));
   router.get('/', controller.list);
   router.post('/', controller.create);

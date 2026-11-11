@@ -6,12 +6,14 @@ import { getSubscription } from '../services/subscriptionService.js';
 
 vi.mock('../services/eventService.js', () => ({ createEvent: vi.fn() }));
 vi.mock('../services/subscriptionService.js', () => ({ getSubscription: vi.fn() }));
+vi.mock('../services/settingsService.js', () => ({ getPublicSettings: vi.fn(async () => null) }));
 vi.mock('../components/company/CompanySidebar.jsx', () => ({ CompanySidebar: () => <nav /> }));
 
 const fill = (label, value) => fireEvent.change(screen.getByLabelText(label), { target: { value } });
 
-function renderPage() {
+async function renderPage() {
   render(<MemoryRouter><NewEventPage /></MemoryRouter>);
+  await screen.findByText(/Tu plan permite/);
   fill('Nombre del concurso', 'Concurso Presencial 2026');
   fill('Puesto', 'Analista');
 }
@@ -23,7 +25,7 @@ beforeEach(() => {
 });
 
 test('creates an onsite event with venue, session and only Module A', async () => {
-  renderPage();
+  await renderPage();
   fireEvent.click(screen.getByLabelText(/Presencial/));
   expect(screen.queryByLabelText('Fecha y hora de habilitación')).toBeNull();
 
@@ -42,6 +44,7 @@ test('creates an onsite event with venue, session and only Module A', async () =
     puesto: 'Analista',
     descripcion: undefined,
     incluirModuloB: false,
+    incluirModuloC: false,
     modalidad: 'presencial',
     presencial: {
       sede: 'Campus Central',
@@ -55,7 +58,7 @@ test('creates an onsite event with venue, session and only Module A', async () =
 });
 
 test('does not send an onsite event without location or with a backwards schedule', async () => {
-  renderPage();
+  await renderPage();
   fireEvent.click(screen.getByLabelText(/Presencial/));
   fill('Sede', 'Campus Central');
   fill('Fecha', '2026-11-05');
@@ -71,7 +74,7 @@ test('does not send an onsite event without location or with a backwards schedul
 });
 
 test('a virtual event keeps the original availability date and includes Module B', async () => {
-  renderPage();
+  await renderPage();
   fill('Fecha y hora de habilitación', '2026-10-10T09:00');
   fireEvent.click(screen.getByRole('button', { name: 'Crear evento' }));
 
