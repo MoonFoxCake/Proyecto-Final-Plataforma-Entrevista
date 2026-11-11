@@ -28,9 +28,8 @@ const settingsSchema = z.object({
     contactText: text(400),
   }).strict(),
   plans: z.object({ 'fase-a': planSchema, 'fase-a-b': planSchema, completo: planSchema }).strict(),
+  // The company sets when each phase opens and closes; only the form default lives here.
   evaluation: z.object({
-    moduleAValidityHours: z.number().int().min(1).max(720),
-    moduleBCValidityDays: z.number().int().min(1).max(60),
     defaultEntryWindowMinutes: z.number().int().refine((value) => [10, 15, 20, 30, 45, 60, 90, 120].includes(value), 'Ventana no disponible.'),
   }).strict(),
   emails: z.object({
@@ -51,9 +50,15 @@ const settingsSchema = z.object({
   }).strict(),
 }).strict();
 
-/** Stored values on top of the defaults, section by section. */
+/**
+ * Stored values on top of the defaults, section by section. Only current
+ * fields are read: values of settings that no longer exist are ignored.
+ */
 function merge(stored) {
-  return Object.fromEntries(Object.entries(DEFAULT_SETTINGS).map(([section, defaults]) => [section, { ...defaults, ...(stored?.[section] || {}) }]));
+  return Object.fromEntries(Object.entries(DEFAULT_SETTINGS).map(([section, defaults]) => [
+    section,
+    Object.fromEntries(Object.entries(defaults).map(([key, value]) => [key, stored?.[section]?.[key] ?? value])),
+  ]));
 }
 
 /**

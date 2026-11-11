@@ -10,7 +10,7 @@ vi.mock('../services/macrocaseApi.js', () => ({
 
 const item = {
   id: 'macro-1', name: 'Decisión ética', description: 'Un dilema', active: true, instructions: 'Reflexiona antes de responder.', maxCharacters: 500, defaultTimeLimit: 180,
-  sections: [{ id: 's1', order: 1, title: 'El encargo', narrative: 'Una historia completa.', narrativeAudio: { audioUrl: '/voice.mp3', audioSource: 'tts', ttsText: 'Una historia completa.' }, questions: [{ id: 'q1', text: '¿Qué harías?', audioSource: 'tts', ttsError: 'Voice unavailable' }] }],
+  sections: [{ id: 's1', order: 1, title: 'El encargo', narrative: 'Una historia completa.', narrativeAudio: { audioUrl: '/voice.mp3', audioSource: 'tts', ttsText: 'Una historia completa.' }, questions: [{ id: 'q1', text: '¿Qué harías?', audioSource: 'tts', ttsError: 'Voice unavailable', options: ['Avisar', 'Esperar', 'Callar', 'Renunciar'].map((text, index) => ({ id: `q1o${index + 1}`, order: index + 1, text })) }] }],
 };
 const blank = { ...item, id: 'macro-2', name: 'Sin contenido', active: false, sections: [] };
 const dialog = () => screen.getByRole('dialog');
@@ -38,6 +38,7 @@ function fillNew() {
   step('Secciones y preguntas');
   change('Texto narrativo de la sección 1', 'Mi nueva historia.');
   change('Texto de la pregunta 1 de la sección 1', '¿Cómo actuarías?');
+  ['A', 'B', 'C', 'D'].forEach((letter) => change(`Opción ${letter} de la pregunta 1 de la sección 1`, `Respuesta ${letter}`));
 }
 
 test('uses accent-insensitive search, content and voice filters, and existing preview links', async () => {
@@ -59,14 +60,14 @@ test('creates through three steps and preserves response settings and section co
   fillNew();
   step('Respuestas');
   expect(screen.queryByLabelText('Máximo de caracteres por respuesta')).toBeNull();
-  expect(screen.getByText('Escala Likert de 5 opciones')).toBeTruthy();
+  expect(within(dialog()).getByText('Marca con X · 4 opciones')).toBeTruthy();
   change(/Tiempo por pregunta/, '0');
   step('Secciones y preguntas');
   step('Crear macrocaso');
   await waitFor(() => expect(api.createMacroCase).toHaveBeenCalledTimes(1));
   expect(api.createMacroCase).toHaveBeenCalledWith(expect.objectContaining({
-    name: 'Nuevo caso', responseType: 'likert', defaultTimeLimit: 0,
-    sections: [expect.objectContaining({ narrative: 'Mi nueva historia.', questions: [expect.objectContaining({ text: '¿Cómo actuarías?' })] })],
+    name: 'Nuevo caso', responseType: 'choice', defaultTimeLimit: 0,
+    sections: [expect.objectContaining({ narrative: 'Mi nueva historia.', questions: [expect.objectContaining({ text: '¿Cómo actuarías?', options: ['A', 'B', 'C', 'D'].map((letter) => expect.objectContaining({ text: `Respuesta ${letter}` })) })] })],
   }));
   expect(await screen.findByRole('article', { name: 'Nuevo caso' })).toBeTruthy();
   expect(screen.queryByRole('dialog')).toBeNull();
@@ -81,6 +82,19 @@ test('validates numeric values and focuses the correct earlier step without subm
   step('Crear macrocaso');
   expect((await screen.findByRole('alert')).textContent).toContain('número entero');
   expect(document.activeElement).toBe(screen.getByLabelText('Tiempo por pregunta (segundos)'));
+  expect(api.createMacroCase).not.toHaveBeenCalled();
+});
+
+test('requires exactly four different options per question', async () => {
+  await renderPage();
+  fillNew();
+  change('Opción C de la pregunta 1 de la sección 1', '');
+  step('Crear macrocaso');
+  expect((await screen.findByRole('alert')).textContent).toContain('necesita sus 4 opciones');
+  expect(document.activeElement).toBe(screen.getByLabelText('Opción C de la pregunta 1 de la sección 1'));
+  change('Opción C de la pregunta 1 de la sección 1', 'respuesta a');
+  step('Crear macrocaso');
+  expect((await screen.findByRole('alert')).textContent).toContain('opciones repetidas');
   expect(api.createMacroCase).not.toHaveBeenCalled();
 });
 
@@ -99,7 +113,7 @@ test('protects unsaved changes and restores deleted questions without losing IDs
   await waitFor(() => expect(api.updateMacroCase).toHaveBeenCalled());
   const [id, payload] = api.updateMacroCase.mock.calls[0];
   expect(id).toBe('macro-1');
-  expect(payload.sections[0]).toMatchObject({ id: 's1', questions: [{ id: 'q1', text: '¿Qué decisión tomarías?' }] });
+  expect(payload.sections[0]).toMatchObject({ id: 's1', questions: [{ id: 'q1', text: '¿Qué decisión tomarías?', options: [{ id: 'q1o1', text: 'Avisar' }, { id: 'q1o2', text: 'Esperar' }, { id: 'q1o3', text: 'Callar' }, { id: 'q1o4', text: 'Renunciar' }] }] });
   // Server-owned audio metadata is intentionally retained by the backend, not overwritten by the form.
   expect(payload.sections[0]).not.toHaveProperty('narrativeAudio');
 });

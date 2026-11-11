@@ -13,6 +13,7 @@ describe('EventService', () => {
       puesto: 'Analista',
       descripcion: 'Evaluación de demostración',
       fechaHoraHabilitacion: '2026-10-10T15:00:00.000Z',
+      fechaHoraCierre: '2026-10-12T15:00:00.000Z',
     });
 
     expect(event).toMatchObject({

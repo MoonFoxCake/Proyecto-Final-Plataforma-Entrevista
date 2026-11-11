@@ -95,6 +95,8 @@ class EventService {
       ...base,
       modality: MODALITIES.ONLINE,
       availableFrom: new Date(data.fechaHoraHabilitacion),
+      // The Module A links stop working at this moment.
+      availableUntil: new Date(data.fechaHoraCierre),
     });
   }
 

@@ -29,7 +29,14 @@ const normalizeSearch = (value) => String(value || '').normalize('NFD').replace(
 
 const newId = (prefix) => `${prefix}-${globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`}`;
 
-const emptyQuestion = () => ({ id: newId('question'), text: '', audioFile: null });
+const OPTIONS_PER_QUESTION = 4;
+const OPTION_LETTERS = ['A', 'B', 'C', 'D'];
+const emptyOptions = () => Array.from({ length: OPTIONS_PER_QUESTION }, () => ({ id: newId('option'), text: '' }));
+/** Always exactly four option slots in the form, keeping the stored ones. */
+const formOptions = (options = []) => [...options].sort(byOrder).slice(0, OPTIONS_PER_QUESTION)
+  .concat(emptyOptions()).slice(0, OPTIONS_PER_QUESTION);
+const emptyQuestion = () => ({ id: newId('question'), text: '', audioFile: null, options: emptyOptions() });
+const completeOptions = (question) => (question.options || []).filter((option) => option.text?.trim()).length === OPTIONS_PER_QUESTION;
 const emptySection = () => ({ id: newId('section'), title: '', narrative: '', narrativeAudio: {}, narrativeAudioFile: null, questions: [emptyQuestion()] });
 
 const ALLOWED_AUDIO = ['audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/webm'];
@@ -108,7 +115,7 @@ function voiceSummary(item) {
     sections: sections.length,
     questions: questions.length,
     incomplete: sections.filter((section) => !section.narrative?.trim() || section.questions.length === 0).length
-      + questions.filter((question) => !question.text?.trim()).length,
+      + questions.filter((question) => !question.text?.trim() || !completeOptions(question)).length,
     total: voiced.length,
     ready: states.filter((state) => state === 'generated' || state === 'uploaded').length,
     errors: states.filter((state) => state === 'error').length,
@@ -221,7 +228,7 @@ function MacrocaseCard({ item, busy, expanded, onToggleExpanded, onToggleActive,
       <div className="flex flex-wrap gap-2 px-5">
         <span className="rounded-lg bg-[#F6F9FC] px-2.5 py-1 text-xs font-medium text-[#475569]">{plural(summary.sections, 'sección', 'secciones')}</span>
         <span className="rounded-lg bg-[#F6F9FC] px-2.5 py-1 text-xs font-medium text-[#475569]">{plural(summary.questions, 'pregunta', 'preguntas')}</span>
-        <span className="rounded-lg bg-[#F6F9FC] px-2.5 py-1 text-xs font-medium text-[#475569]">Likert · 1 a 5</span>
+        <span className="rounded-lg bg-[#F6F9FC] px-2.5 py-1 text-xs font-medium text-[#475569]">Marca con X · 4 opciones</span>
         <span className="rounded-lg bg-[#F6F9FC] px-2.5 py-1 text-xs font-medium text-[#475569]">{formatTimeLimit(item.defaultTimeLimit)}</span>
       </div>
 
@@ -229,7 +236,7 @@ function MacrocaseCard({ item, busy, expanded, onToggleExpanded, onToggleActive,
       <div className="mt-3 flex h-10 items-center px-5">
         {summary.incomplete > 0 || sections.length === 0 ? (
           <p
-            title={unusable ? 'Está activo, pero no se asignará a ningún evento hasta que tenga al menos una sección con texto y preguntas.' : 'Las secciones sin texto o sin preguntas, y las preguntas sin texto, no se muestran a los candidatos.'}
+            title={unusable ? 'Está activo, pero no se asignará a ningún evento hasta que tenga al menos una sección con texto y preguntas completas.' : 'Las secciones sin texto o sin preguntas, y las preguntas sin texto o sin sus 4 opciones, no se muestran a los candidatos.'}
             className="w-full truncate rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs text-amber-800"
           >
             {sections.length === 0 ? 'Sin secciones' : plural(summary.incomplete, 'elemento incompleto', 'elementos incompletos')} · {unusable ? 'no se asignará a eventos' : 'revisa el contenido'}. Edita para completarlo.
@@ -283,6 +290,11 @@ function MacrocaseCard({ item, busy, expanded, onToggleExpanded, onToggleActive,
                           <span className="mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#E8F7F6] text-[11px] font-bold text-[#0A8F8A]">{index + 1}</span>
                           <div className="min-w-0 flex-1">
                             <p className="text-sm leading-6 text-[#10233A]">{question.text || <span className="italic text-[#94A3B8]">Sin texto</span>}</p>
+                            {(question.options || []).length > 0 && (
+                              <ul className="mt-1 grid gap-0.5 text-xs text-[#56677B]">
+                                {[...question.options].sort(byOrder).map((option, optionIndex) => <li key={option.id}><span className="font-semibold text-[#7C8AA0]">{OPTION_LETTERS[optionIndex]}.</span> {option.text}</li>)}
+                              </ul>
+                            )}
                             <div className="mt-1"><VoiceBadge question={question} /></div>
                           </div>
                           {question.audioUrl && (
@@ -458,7 +470,7 @@ export function AdminMacrocasesPage() {
         narrative: section.narrative || '',
         narrativeAudio: section.narrativeAudio || {},
         narrativeAudioFile: null,
-        questions: section.questions.map((question) => ({ ...question, audioFile: null })),
+        questions: section.questions.map((question) => ({ ...question, audioFile: null, options: formOptions(question.options) })),
       })),
     };
     setForm(next);
@@ -526,6 +538,12 @@ export function AdminMacrocasesPage() {
     question.id === questionId ? { ...question, ...changes } : question
   )));
 
+  const updateOption = (sectionId, questionId, optionId, text) => updateQuestions(sectionId, (questions) => questions.map((question) => (
+    question.id === questionId
+      ? { ...question, options: question.options.map((option) => (option.id === optionId ? { ...option, text } : option)) }
+      : question
+  )));
+
   /** `target`: `{ sectionId }` for the narrative, `{ sectionId, questionId }` for a question. */
   const handleAudioChange = ({ sectionId, questionId }, file) => {
     if (!file) return;
@@ -560,6 +578,12 @@ export function AdminMacrocasesPage() {
       if (section.questions.length === 0) return { step: 2, message: `La sección ${index + 1} necesita al menos una pregunta.` };
       const missing = section.questions.find((question) => !question.text?.trim());
       if (missing) return { step: 2, field: `question-${missing.id}`, message: `Cada pregunta de la sección ${index + 1} necesita su texto: es lo que lee el asistente y ve el candidato.` };
+      for (const [questionIndex, question] of section.questions.entries()) {
+        const emptyOption = question.options.find((option) => !option.text.trim());
+        if (emptyOption) return { step: 2, field: `option-${emptyOption.id}`, message: `La pregunta ${questionIndex + 1} de la sección ${index + 1} necesita sus 4 opciones de respuesta, ni más ni menos.` };
+        const texts = question.options.map((option) => option.text.trim().toLocaleLowerCase('es'));
+        if (new Set(texts).size !== OPTIONS_PER_QUESTION) return { step: 2, field: `option-${question.options[0].id}`, message: `La pregunta ${questionIndex + 1} de la sección ${index + 1} tiene opciones repetidas.` };
+      }
     }
     return null;
   };
@@ -580,10 +604,10 @@ export function AdminMacrocasesPage() {
         name: form.name.trim(),
         description: form.description.trim(),
         instructions: form.instructions.trim(),
-        responseType: 'likert',
+        responseType: 'choice',
         defaultTimeLimit: Number(form.defaultTimeLimit),
         // Audio fields are managed by the backend: it generates the voice
-        // of every narrative and question whose text changed.
+        // of every narrative, question and option whose text changed.
         sections: form.sections.map((section) => ({
           id: section.id,
           title: section.title.trim(),
@@ -593,6 +617,7 @@ export function AdminMacrocasesPage() {
             id: question.id,
             text: question.text.trim(),
             ...(question.resetAudio ? { resetAudio: true } : {}),
+            options: question.options.map((option) => ({ id: option.id, text: option.text.trim() })),
           })),
         })),
       };
@@ -788,9 +813,9 @@ export function AdminMacrocasesPage() {
                 </label>
               </FormSection>}
 
-              {step === 1 && <FormSection title="Respuestas" description="Todas las preguntas se responden mediante una única selección en la escala Likert.">
+              {step === 1 && <FormSection title="Respuestas" description="Todas las preguntas se responden marcando con una X una sola de sus opciones.">
                 <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="rounded-xl border border-[#BDE7E3] bg-[#F0FFFE] p-4 text-sm text-[#087D79]"><p className="font-semibold">Escala Likert de 5 opciones</p><p className="mt-2 text-xs leading-6">De totalmente en desacuerdo (1) a totalmente de acuerdo (5), con una opción neutral (3).</p></div>
+                  <div className="rounded-xl border border-[#BDE7E3] bg-[#F0FFFE] p-4 text-sm text-[#087D79]"><p className="font-semibold">Marca con X · 4 opciones</p><p className="mt-2 text-xs leading-6">Cada pregunta lleva exactamente 4 opciones. El asistente lee la pregunta y sus opciones, y cada candidato las ve en un orden aleatorio.</p></div>
                   <label className="block text-xs font-medium text-[#475569]">
                     Tiempo por pregunta (segundos)
                     <input id="macrocase-time" aria-label="Tiempo por pregunta (segundos)" type="number" min="0" step="1" value={form.defaultTimeLimit} onChange={(e) => updateField('defaultTimeLimit', e.target.value)} className={inputClass} />
@@ -801,7 +826,7 @@ export function AdminMacrocasesPage() {
 
               {step === 2 && <FormSection
                 title={`Secciones (${form.sections.length})`}
-                description="Redacta las preguntas como afirmaciones que puedan responderse con un grado de acuerdo. El candidato recorre las secciones en orden: el asistente narra el texto de cada una y luego le hace sus preguntas. Al pasar a las preguntas, el texto de la sección deja de estar visible."
+                description="Cada pregunta lleva 4 opciones de respuesta. El candidato recorre las secciones en orden: el asistente narra el texto de cada una y luego le hace sus preguntas, leyendo también las opciones. Al pasar a las preguntas, el texto de la sección deja de estar visible."
               >
                 {undo && <div role="status" className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-amber-50 p-3 text-xs text-amber-900"><span>Contenido retirado. Puedes recuperar la última eliminación.</span><button type="button" onClick={() => { setForm(undo); setUndo(null); }} className="font-semibold underline">Deshacer</button></div>}
                 <ol className="space-y-5">
@@ -847,7 +872,7 @@ export function AdminMacrocasesPage() {
                           onRestore={() => restoreGeneratedVoice({ sectionId: section.id })}
                         />
 
-                        <p className="mt-5 text-xs font-semibold uppercase tracking-wide text-[#475569]">Afirmaciones de esta sección ({section.questions.length})</p>
+                        <p className="mt-5 text-xs font-semibold uppercase tracking-wide text-[#475569]">Preguntas de esta sección ({section.questions.length})</p>
                         <ol className="mt-2 space-y-3">
                           {section.questions.map((question, index) => (
                             <li key={question.id} className="rounded-xl border border-[#DDE5EC] bg-[#FAFBFC] p-4">
@@ -862,9 +887,28 @@ export function AdminMacrocasesPage() {
                                 maxLength={500}
                                 rows={2}
                                 aria-label={`Texto de la pregunta ${index + 1} de la sección ${sectionIndex + 1}`}
-                                placeholder="Ej.: En esta situación, informaría del riesgo antes de continuar."
+                                placeholder="Ej.: ¿Qué debería hacer Daniel ante la decisión de su supervisor?"
                                 className={`${inputClass} resize-y`}
                               />
+                              <fieldset className="mt-3">
+                                <legend className="text-xs font-medium text-[#475569]">Opciones de respuesta <span className="font-normal text-[#94A3B8]">(exactamente 4 · el candidato marca una)</span></legend>
+                                <div className="mt-1.5 grid gap-2 sm:grid-cols-2">
+                                  {question.options.map((option, optionIndex) => (
+                                    <label key={option.id} className="flex items-center gap-2">
+                                      <span aria-hidden="true" className="grid h-7 w-7 shrink-0 place-items-center rounded-md border border-[#D9E2EA] bg-white text-xs font-bold text-[#7C8AA0]">{OPTION_LETTERS[optionIndex]}</span>
+                                      <input
+                                        id={`option-${option.id}`}
+                                        value={option.text}
+                                        onChange={(e) => updateOption(section.id, question.id, option.id, e.target.value)}
+                                        maxLength={300}
+                                        aria-label={`Opción ${OPTION_LETTERS[optionIndex]} de la pregunta ${index + 1} de la sección ${sectionIndex + 1}`}
+                                        placeholder={`Opción ${OPTION_LETTERS[optionIndex]}`}
+                                        className={`${inputClass} mt-0`}
+                                      />
+                                    </label>
+                                  ))}
+                                </div>
+                              </fieldset>
                               <VoiceControls
                                 voice={question}
                                 file={question.audioFile}
@@ -883,7 +927,7 @@ export function AdminMacrocasesPage() {
                   })}
                 </ol>
                 <button type="button" onClick={addSection} className="w-full rounded-xl border-2 border-dashed border-[#9ED9D5] py-3 text-sm font-semibold text-[#087D79] hover:bg-[#F4FBFB]">+ Agregar sección</button>
-                <p className="text-xs text-[#94A3B8]">Un audio propio reemplaza la voz generada de esa narración o pregunta. MP3, WAV, OGG o WEBM, hasta 10 MB.</p>
+                <p className="text-xs text-[#94A3B8]">Un audio propio reemplaza la voz generada de esa narración o pregunta. MP3, WAV, OGG o WEBM, hasta 10 MB. Las opciones siempre usan la voz generada.</p>
               </FormSection>}
             </fieldset></div>
 

@@ -49,12 +49,17 @@ describe('MacrocaseEvaluation', () => {
       for (const [index, question] of section.questions.entries()) {
         expect(await screen.findByRole('heading', { name: question.text })).toBeTruthy();
         expect(screen.queryByText(section.narrative.slice(0, 40), { exact: false })).toBeNull();
-        await waitFor(() => expect(speak).toHaveBeenLastCalledWith({ text: question.text, audioUrl: '', visemes: null }), { timeout: 2000 });
+        // The avatar reads the question and then each of its four options.
+        await waitFor(() => expect(speak).toHaveBeenCalledWith({ text: question.text, audioUrl: '', visemes: null }), { timeout: 2000 });
+        const shown = screen.getAllByRole('radio').map((radio) => radio.closest('label').textContent.replace(/^✕[A-D]\.\s*/, ''));
+        expect([...shown].sort()).toEqual(question.options.map((option) => option.text).sort());
+        await waitFor(() => expect(speak).toHaveBeenLastCalledWith({ text: shown[3], audioUrl: '', visemes: null }), { timeout: 4000 });
 
         const isLast = sectionIndex === 1 && index === section.questions.length - 1;
         const next = screen.getByRole('button', { name: isLast ? 'Ir al resumen →' : 'Continuar →' });
         expect(next.disabled).toBe(true);
-        fireEvent.click(screen.getByRole('radio', { name: /Totalmente de acuerdo/ }));
+        fireEvent.click(screen.getAllByRole('radio')[1]);
+        expect(screen.getByText(`Seleccionaste: ${shown[1]}`)).toBeTruthy();
         fireEvent.click(next);
       }
     }
@@ -70,7 +75,7 @@ describe('MacrocaseEvaluation', () => {
 
     expect(await screen.findByText('Evaluación completada')).toBeTruthy();
     expect(finalize).toHaveBeenCalledTimes(1);
-  }, 15000);
+  }, 30000);
 
   test('passes the narrative voice and its Azure visemes to the avatar', async () => {
     const macrocase = {
@@ -96,7 +101,7 @@ describe('MacrocaseEvaluation', () => {
     await waitFor(() => expect(speak).toHaveBeenCalledTimes(2));
   });
 
-  test('when the time runs out it keeps the selected Likert option and moves on', async () => {
+  test('when the time runs out it keeps the marked option and moves on', async () => {
     const macrocase = {
       ...DEMO_MACROCASE,
       defaultTimeLimit: 1,
@@ -108,14 +113,27 @@ describe('MacrocaseEvaluation', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Continuar a las preguntas →' }));
 
     // The countdown starts once the question has been read.
-    await waitFor(() => expect(screen.getByRole('timer').getAttribute('aria-label')).toMatch(/Tiempo restante/), { timeout: 2000 });
-    fireEvent.click(screen.getByRole('radio', { name: /Totalmente de acuerdo/ }));
+    await waitFor(() => expect(screen.getByRole('timer').getAttribute('aria-label')).toMatch(/Tiempo restante/), { timeout: 4000 });
+    fireEvent.click(screen.getAllByRole('radio')[0]);
 
     expect(await screen.findByRole('heading', { name: SECTION_2.questions[1].text }, { timeout: 3000 })).toBeTruthy();
     expect(screen.getAllByRole('radio').every((input) => !input.checked)).toBe(true);
-    expect(await screen.findByRole('heading', { name: 'Finalizar evaluación' }, { timeout: 4000 })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'Finalizar evaluación' }, { timeout: 7000 })).toBeTruthy();
     expect(screen.getByText('2 por tiempo')).toBeTruthy();
-  }, 10000);
+  }, 15000);
+
+  test('questions copied before options existed keep the Likert scale', async () => {
+    const legacy = { ...SECTION_2, questions: SECTION_2.questions.map(({ options, ...question }) => question) };
+    const stage = {
+      state: 'VALID', step: 'question', macrocase: { name: 'Caso', defaultTimeLimit: 0, totalSections: 1, totalQuestions: 2 },
+      progress: { sectionIndex: 0, totalSections: 1, questionIndex: 0, sectionQuestions: 2, answered: 0, totalQuestions: 2 },
+      section: { id: legacy.id, order: 1, title: legacy.title }, question: { ...legacy.questions[0], visemes: [] }, draft: null,
+      timer: { limitSeconds: 0, startedAt: null }, serverNow: new Date().toISOString(),
+    };
+    render(<MacrocaseEvaluation source={{ getStage: async () => stage, advance: vi.fn(async () => stage), finalize: vi.fn() }} />);
+    expect(await screen.findByRole('radio', { name: /Totalmente de acuerdo/ })).toBeTruthy();
+    expect(screen.getAllByRole('radio')).toHaveLength(5);
+  });
 
   test('resumes the saved stage with its draft and saves a changed selection', async () => {
     const questionStage = {
@@ -156,12 +174,13 @@ describe('MacrocaseEvaluation', () => {
     });
     render(<MacrocaseEvaluation source={source} />);
 
-    fireEvent.click(await screen.findByRole('radio', { name: /Totalmente de acuerdo/ }));
+    const choice = (await screen.findAllByRole('radio'))[2];
+    fireEvent.click(choice);
     fireEvent.click(screen.getByRole('button', { name: 'Continuar →' }));
 
     expect((await screen.findByRole('alert')).textContent).toBe('Sin conexión con el servidor.');
     expect(screen.getByRole('heading', { name: SECTION_1.questions[0].text })).toBeTruthy();
-    expect(screen.getByRole('radio', { name: /Totalmente de acuerdo/ }).checked).toBe(true);
+    expect(screen.getAllByRole('radio')[2].checked).toBe(true);
   });
 
   test('tells the host page when the session is closed midway', async () => {

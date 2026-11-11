@@ -35,6 +35,10 @@ const SNAPSHOT = {
 
 const tokenFrom = (emailService, call = 0) => new URL(emailService.sendInvitation.mock.calls[call][0].accessUrl).searchParams.get('token');
 
+// Opening and closing of the virtual Module B link, as the company sets them.
+// Read at each send, so it follows the fake clock of the time-limit tests.
+const WINDOW = () => ({ fechaHoraApertura: new Date(Date.now() - 60000).toISOString(), fechaHoraCierre: new Date(Date.now() + 3 * 864e5).toISOString() });
+
 describe('InvitationService · Module B (second stage)', () => {
   let invitationRepo;
   let candidateRepo;
@@ -80,7 +84,7 @@ describe('InvitationService · Module B (second stage)', () => {
 
   async function invite(snapshot = SNAPSHOT) {
     macrocaseService.pickSnapshotForModuleB.mockResolvedValue(snapshot);
-    await service.sendModuleB('event-1', 'org-1', [approved.id]);
+    await service.sendModuleB('event-1', 'org-1', [approved.id], undefined, WINDOW());
     return tokenFrom(emailService, emailService.sendInvitation.mock.calls.length - 1);
   }
 
@@ -99,28 +103,29 @@ describe('InvitationService · Module B (second stage)', () => {
 
   test('is only available once Module A results are published', async () => {
     event = { ...event, status: 'ACTIVE', evaluationsPublishedAt: null };
-    await expect(service.sendModuleB('event-1', 'org-1', [approved.id])).rejects.toBeInstanceOf(ValidationError);
+    await expect(service.sendModuleB('event-1', 'org-1', [approved.id], undefined, WINDOW())).rejects.toBeInstanceOf(ValidationError);
     expect(emailService.sendInvitation).not.toHaveBeenCalled();
   });
 
   test('refuses candidates whose Module A profile was not reviewed', async () => {
-    await expect(service.sendModuleB('event-1', 'org-1', [approved.id, notReviewed.id]))
+    await expect(service.sendModuleB('event-1', 'org-1', [approved.id, notReviewed.id], undefined, WINDOW()))
       .rejects.toThrow('Carlos Pendiente');
-    await expect(service.sendModuleB('event-1', 'org-1', ['otro-evento'])).rejects.toBeInstanceOf(ValidationError);
+    await expect(service.sendModuleB('event-1', 'org-1', ['otro-evento'], undefined, WINDOW())).rejects.toBeInstanceOf(ValidationError);
     expect(emailService.sendInvitation).not.toHaveBeenCalled();
   });
 
   test('sends a Module B link to the selected candidates and copies the macrocase into the event once', async () => {
     const before = Date.now();
-    const result = await service.sendModuleB('event-1', 'org-1', [approved.id, approved.id]);
+    const result = await service.sendModuleB('event-1', 'org-1', [approved.id, approved.id], undefined, WINDOW());
 
     expect(result).toMatchObject({ total: 1, sent: 1, failed: 0 });
     expect(macrocaseService.pickSnapshotForModuleB).toHaveBeenCalledTimes(1);
     expect(event.moduleB.macrocase).toBe(SNAPSHOT);
     const [invitation] = invitationRepo.data;
     expect(invitation).toMatchObject({ module: 'B', status: 'ACTIVE', candidateId: approved.id });
-    expect(invitation.availableAt.getTime()).toBeGreaterThanOrEqual(before);
-    expect(invitation.expiresAt.getTime() - invitation.availableAt.getTime()).toBe(3 * 24 * 60 * 60 * 1000);
+    // The link opens and closes when the company said.
+    expect(invitation.availableAt.getTime()).toBeGreaterThanOrEqual(before - 60000 - 1000);
+    expect(invitation.expiresAt.getTime() - invitation.availableAt.getTime()).toBe(3 * 864e5 + 60000);
     expect(emailService.sendInvitation).toHaveBeenCalledWith(expect.objectContaining({ module: 'B', expiresAt: invitation.expiresAt }));
 
     const stored = await candidateRepo.findById(approved.id);
@@ -128,7 +133,7 @@ describe('InvitationService · Module B (second stage)', () => {
     expect(stored.status).toBe('EVALUATION_COMPLETED'); // Module A untouched
 
     // Resending replaces the previous Module B link and keeps the same macrocase copy.
-    await service.sendModuleB('event-1', 'org-1', [approved.id]);
+    await service.sendModuleB('event-1', 'org-1', [approved.id], undefined, WINDOW());
     expect(macrocaseService.pickSnapshotForModuleB).toHaveBeenCalledTimes(1);
     expect(invitationRepo.data.map((item) => item.status)).toEqual(['CANCELLED', 'ACTIVE']);
   });
@@ -252,9 +257,9 @@ describe('InvitationService · Module B (second stage)', () => {
       instrumentVersion: 'MACROCASE:macro-1:v2',
       candidateId: approved.id,
       answers: [
-        { sectionId: 's1', sectionTitle: 'El encargo', questionId: 'q1', question: SNAPSHOT.sections[0].questions[0].text, value: 4 },
-        { sectionId: 's1', sectionTitle: 'El encargo', questionId: 'q2', question: SNAPSHOT.sections[0].questions[1].text, value: 4 },
-        { sectionId: 's2', sectionTitle: 'El bosque', questionId: 'q3', question: SNAPSHOT.sections[1].questions[0].text, value: 4 },
+        { sectionId: 's1', sectionTitle: 'El encargo', questionId: 'q1', question: SNAPSHOT.sections[0].questions[0].text, value: 4, answerLabel: 'De acuerdo' },
+        { sectionId: 's1', sectionTitle: 'El encargo', questionId: 'q2', question: SNAPSHOT.sections[0].questions[1].text, value: 4, answerLabel: 'De acuerdo' },
+        { sectionId: 's2', sectionTitle: 'El bosque', questionId: 'q3', question: SNAPSHOT.sections[1].questions[0].text, value: 4, answerLabel: 'De acuerdo' },
       ],
     })]);
     const stored = await candidateRepo.findById(approved.id);
@@ -267,7 +272,7 @@ describe('InvitationService · Module B (second stage)', () => {
     await expect(service.advanceMacrocase(token, { type: 'START' })).resolves.toMatchObject({ state: 'COMPLETED' });
     await expect(service.submitEvaluation(token, { finalize: true })).resolves.toMatchObject({ state: 'COMPLETED' });
     expect(invitationRepo.submissions).toHaveLength(1);
-    await expect(service.sendModuleB('event-1', 'org-1', [approved.id])).rejects.toThrow('María Apta');
+    await expect(service.sendModuleB('event-1', 'org-1', [approved.id], undefined, WINDOW())).rejects.toThrow('María Apta');
   });
 
   test('runs a macrocase stored before sections existed as a single section', async () => {
@@ -281,7 +286,7 @@ describe('InvitationService · Module B (second stage)', () => {
     await answerEverything(token);
     await service.submitEvaluation(token, { finalize: true });
     expect(invitationRepo.submissions[0].answers).toEqual([
-      { sectionId: 'section-1', sectionTitle: '', questionId: 'q1', question: '¿Qué haría usted?', value: 4 },
+      { sectionId: 'section-1', sectionTitle: '', questionId: 'q1', question: '¿Qué haría usted?', value: 4, answerLabel: 'De acuerdo' },
     ]);
   });
 

@@ -29,8 +29,9 @@ export async function createEventCandidate(eventId, candidate) {
  * Module B (second stage): sends the macrocase link to the selected
  * candidates, or — onsite events — cites them to the `citacion` session.
  */
-export async function sendModuleBInvitations(eventId, candidateIds, citacion) {
-  const { data } = await api.post(`/events/${eventId}/module-b/invitations`, { candidateIds, ...(citacion ? { citacion } : {}) });
+/** `citacion` for onsite processes; `ventana` (opening and closing of the link) for virtual ones. */
+export async function sendModuleBInvitations(eventId, candidateIds, citacion, ventana) {
+  const { data } = await api.post(`/events/${eventId}/module-b/invitations`, { candidateIds, ...(citacion ? { citacion } : {}), ...(ventana ? { ventana } : {}) });
   return data?.data ?? null;
 }
 
@@ -50,7 +51,7 @@ export async function assignModuleC(eventId) { const { data } = await api.post(`
 
 /** Module C: which skills of the process's microcase are evaluated. */
 export async function configureModuleC(eventId, sectionIds) { const { data } = await api.put(`/events/${eventId}/module-c/configure`, { sectionIds }); return data?.data ?? null; }
-export async function sendModuleCInvitations(eventId, candidateIds, citacion) { const { data } = await api.post(`/events/${eventId}/module-c/invitations`, { candidateIds, ...(citacion ? { citacion } : {}) }); return data?.data ?? null; }
+export async function sendModuleCInvitations(eventId, candidateIds, citacion, ventana) { const { data } = await api.post(`/events/${eventId}/module-c/invitations`, { candidateIds, ...(citacion ? { citacion } : {}), ...(ventana ? { ventana } : {}) }); return data?.data ?? null; }
 
 /** Module A: a new link or citation for someone who has not answered. */
 export async function resendCandidate(eventId, candidateId) { const { data } = await api.post(`/events/${eventId}/candidates/${candidateId}/resend`); return data?.data ?? null; }

@@ -3,7 +3,7 @@ import { useAuth } from '../hooks/useAuth.js';
 import { canSection } from '../utils/adminPermissions.js';
 import { AdminQuestionBankPage } from './AdminQuestionBankPage.jsx';
 import { useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 
 import {
   AdminSidebar,
@@ -13,10 +13,10 @@ import {
 import { CompaniesView } from './AdminCompaniesView.jsx';
 
 import * as authService from '../services/authService';
-import { AdminProcessesView } from './AdminProcessesPage.jsx';
+import { AdminResultsView } from './AdminProcessesPage.jsx';
 import { AdminMacrocasesPage } from './AdminMacrocasesPage.jsx';
 import { AdminMicrocasesPage } from './AdminMicrocasesPage.jsx';
-import { AdminResultsPage } from './AdminResultsPage.jsx';
+import { RESULT_STATES, resultState } from './adminProcesses.js';
 import { AdminSettingsPage } from './AdminSettingsPage.jsx';
 import { BarChart, ChartCard, ColumnChart } from '../components/ui/Charts.jsx';
 import * as adminReviewService from '../services/adminReviewService.js';
@@ -24,7 +24,6 @@ import * as adminReviewService from '../services/adminReviewService.js';
 const PLAN_LABELS = { 'fase-a': 'Fase A', 'fase-a-b': 'Fases A + B', completo: 'Completo' };
 // Firestore timestamps arrive through the API as `{ _seconds, _nanoseconds }`.
 const asDate = (value) => { if (!value) return null; const d = value?.toDate ? value.toDate() : new Date(value._seconds != null || value.seconds != null ? (value._seconds ?? value.seconds) * 1000 : value); return Number.isNaN(d.getTime()) ? null : d; };
-const PROCESS_STATUS_LABELS = { ACTIVE: 'Activos', IN_REVIEW: 'En revisión', READY_TO_PUBLISH: 'Listos para publicar', PUBLISHED: 'Publicados', FINALIZED: 'Finalizados' };
 const MONTH_FORMAT = new Intl.DateTimeFormat('es-CR', { month: 'short' });
 const lastMonths = (count) => Array.from({ length: count }, (_, index) => { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - (count - 1 - index)); return { key: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`, short: MONTH_FORMAT.format(d).replace('.', '') }; });
 const phaseOf = (p) => { const phases = p.summary?.phases; if (!phases) return 'A'; return ['C', 'B'].find((m) => phases[m]?.total > 0) || 'A'; };
@@ -48,6 +47,8 @@ const inRange = (date, filter, future = false) => {
 const dateLabel = (value) => { const d = asDate(value); return d ? d.toLocaleDateString('es-CR', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Sin fecha'; };
 
 function AdminOverviewView() {
+  const { profile } = useAuth();
+  const canOpenResults = canSection(profile, 'results');
   const [companies, setCompanies] = useState([]);
   const [processes, setProcesses] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -74,11 +75,11 @@ function AdminOverviewView() {
   const reductionAB = reduction(phaseSum(reachedB, 'A', 'completed'), phaseSum(reachedB, 'B', 'total'));
   const reductionBC = reduction(phaseSum(reachedC, 'B', 'completed'), phaseSum(reachedC, 'C', 'total'));
   const funnel = [['Fase A', 'A'], ['Fase B', 'B'], ['Fase C', 'C']].map(([label, module]) => ({ label, value: phaseSum(processes, module, 'completed'), hint: `${phaseSum(processes, module, 'total')} participantes` }));
-  const byStatus = Object.entries(PROCESS_STATUS_LABELS).map(([status, label]) => ({ label, value: processes.filter((p) => p.status === status).length }));
+  const byStatus = Object.entries(RESULT_STATES).map(([state, label]) => ({ label, value: processes.filter((p) => resultState(p) === state).length }));
   const byModality = [{ label: 'Virtual', value: processes.filter((p) => p.modality !== 'onsite').length }, { label: 'Presencial', value: processes.filter((p) => p.modality === 'onsite').length }];
   const byPlan = planCounts.map(({ plan, count }) => ({ label: PLAN_LABELS[plan], value: count }));
   const byMonth = lastMonths(6).map(({ key, short }) => ({ label: key, short, value: processes.reduce((sum, p) => sum + (p.summary?.completionsByMonth?.[key] || 0), 0) }));
-  const pendingReports = processes.flatMap((p) => ['A', 'B', 'C'].filter((m) => p.modules?.includes(m) && !p.deliveredModules?.includes(m) && p.summary?.phases?.[m]?.complete).map((m) => ({ id: `${p.id}-${m}`, name: p.name, company: p.company, module: m })));
+  const pendingReports = processes.flatMap((p) => ['A', 'B', 'C'].filter((m) => p.reports?.[m] === 'PENDING').map((m) => ({ id: `${p.id}-${m}`, processId: p.id, name: p.name, company: p.company, module: m })));
 
   const activity = companies.flatMap((c) => {
     const events = [];
@@ -95,7 +96,7 @@ function AdminOverviewView() {
     {error && <p className="mt-5 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</p>}
     {loading ? <div className="mt-8 rounded-2xl bg-white p-10 text-center text-sm text-[#64748B]">Cargando estadísticas reales...</div> : <>
       <section className="mt-7"><h2 className="mb-3 font-display text-lg font-bold text-[#10233A]">Resumen de la plataforma</h2><div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{card('Empresas registradas', companies.length, 'Organizaciones registradas en la plataforma')}{card('Candidatos participantes', candidatesTotal, 'Participantes asociados a procesos registrados')}{card('Procesos', processes.length, 'Procesos registrados en la plataforma')}{card('PDF por entregar', pendingReports.length, 'Fases terminadas esperando su informe')}</div></section>
-      {pendingReports.length > 0 && <section className="mt-8 rounded-2xl border border-[#DDE8F2] bg-white p-5 sm:p-6"><div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-display text-lg font-bold text-[#10233A]">Bandeja de entregas</h2><p className="mt-1 text-sm text-[#64748B]">Fases terminadas que esperan su PDF de resultados.</p></div><a href="/admin-dashboard?section=results" className="rounded-lg border border-[#D9E2EA] px-3.5 py-2 text-xs font-semibold text-[#087D79]">Ir a Resultados</a></div><ul className="mt-4 divide-y divide-[#EEF2F6]">{pendingReports.slice(0, 6).map((r) => <li key={r.id} className="flex flex-wrap items-center justify-between gap-2 py-2.5 text-sm"><span className="font-medium text-[#10233A]">{r.name}</span><span className="text-xs text-[#64748B]">{r.company} · Fase {r.module}</span></li>)}</ul></section>}
+      {pendingReports.length > 0 && <section className="mt-8 rounded-2xl border border-[#DDE8F2] bg-white p-5 sm:p-6"><div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-display text-lg font-bold text-[#10233A]">Bandeja de entregas</h2><p className="mt-1 text-sm text-[#64748B]">Fases terminadas que esperan su PDF de resultados.</p></div>{canOpenResults && <Link to="/admin-dashboard?section=results" className="rounded-lg border border-[#D9E2EA] px-3.5 py-2 text-xs font-semibold text-[#087D79]">Ir a Resultados</Link>}</div><ul className="mt-4 divide-y divide-[#EEF2F6]">{pendingReports.slice(0, 6).map((r) => <li key={r.id}>{canOpenResults ? <Link to={`/admin/processes/${encodeURIComponent(r.processId)}`} className="flex flex-wrap items-center justify-between gap-2 rounded-lg px-2 py-2.5 text-sm hover:bg-[#F6FAFC]"><span className="font-medium text-[#10233A]">{r.name}</span><span className="text-xs text-[#64748B]">{r.company} · Fase {r.module} · <span className="font-semibold text-[#087D79]">Entregar PDF →</span></span></Link> : <div className="flex flex-wrap items-center justify-between gap-2 px-2 py-2.5 text-sm"><span className="font-medium text-[#10233A]">{r.name}</span><span className="text-xs text-[#64748B]">{r.company} · Fase {r.module}</span></div>}</li>)}</ul></section>}
       <section className="mt-8 grid gap-4 lg:grid-cols-2"><ChartCard title="Embudo de evaluación" description="Candidatos que completaron cada fase."><BarChart caption="Candidatos que completaron cada fase" items={funnel} /></ChartCard><ChartCard title="Evaluaciones por mes" description="Evaluaciones enviadas en los últimos 6 meses, en todas las fases."><ColumnChart caption="Evaluaciones por mes" items={byMonth} /></ChartCard><ChartCard title="Procesos por estado"><BarChart caption="Procesos por estado" items={byStatus} /></ChartCard><div className="grid gap-4"><ChartCard title="Empresas por plan"><BarChart caption="Empresas por plan" items={byPlan} /></ChartCard><ChartCard title="Modalidad de los procesos"><BarChart caption="Procesos por modalidad" items={byModality} /></ChartCard></div></section>
       <section className="mt-8 rounded-2xl border border-[#DDE8F2] bg-white p-5 sm:p-6"><h2 className="font-display text-lg font-bold text-[#10233A]">Reducción de candidatos entre fases</h2><p className="mt-1 text-sm text-[#64748B]">De quienes completaron una fase, cuántos no continuaron a la siguiente. Se calcula con los procesos que ya llegaron a esa fase.</p><div className="mt-4 grid gap-4 md:grid-cols-2">{[['A → B', reductionAB, reachedB.length], ['B → C', reductionBC, reachedC.length]].map(([label, value, count]) => <div key={label} className="rounded-xl bg-[#F6FAFC] p-4"><p className="text-sm font-semibold text-[#475569]">Fase {label}</p><p className="mt-2 text-2xl font-bold text-[#10233A]">{value === null ? '—' : `${value}%`}</p><p className="mt-1 text-xs text-[#7C8AA0]">{value === null ? 'Ningún proceso ha llegado todavía a esta fase.' : `${count} proceso(s) comparables.`}</p></div>)}</div></section>
       <section className="mt-8"><div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-display text-lg font-bold text-[#10233A]">Próximos procesos</h2><p className="text-sm text-[#64748B]">Procesos programados y fase activa.</p></div><select className={selectClass} value={futureFilter} onChange={(e)=>setFutureFilter(e.target.value)}><option value="all">Todos</option><option value="month">Próximo mes</option><option value="7days">Próximos 7 días</option><option value="tomorrow">Mañana</option><option value="today">Hoy</option></select></div><div className="mt-4 overflow-x-auto rounded-2xl border border-[#DDE8F2] bg-white"><table className="w-full min-w-[680px] text-left text-sm"><thead className="bg-[#F6F9FC] text-xs uppercase text-[#718096]"><tr><th className="p-4">Proceso</th><th className="p-4">Empresa</th><th className="p-4">Fecha</th><th className="p-4">Invitaciones</th><th className="p-4">Fase</th></tr></thead><tbody>{upcoming.map(p=><tr key={p.id} className="border-t border-[#EEF2F6]"><td className="p-4 font-semibold text-[#10233A]">{p.name}</td><td className="p-4">{p.company}</td><td className="p-4">{dateLabel(p.availableFrom)}</td><td className="p-4">{p.summary?.totalParticipants ?? 0}</td><td className="p-4">{phaseOf(p)}</td></tr>)}{upcoming.length===0&&<tr><td colSpan="5" className="p-8 text-center text-sm text-[#94A3B8]">No hay procesos para este filtro.</td></tr>}</tbody></table></div></section>
@@ -109,7 +110,8 @@ export function AdminDashboardPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { profile } = useAuth();
   const allowedSections = ADMIN_SECTIONS.filter((item) => canSection(profile, item.id));
-  const requested = searchParams.get('section');
+  // "processes" was merged into "results": old links keep working.
+  const requested = searchParams.get('section') === 'processes' ? 'results' : searchParams.get('section');
   const activeSection = requested || allowedSections[0]?.id;
   const allowed = activeSection && canSection(profile, activeSection);
   const selectSection = (id) => { if (canSection(profile, id)) setSearchParams({ section: id }); };
@@ -119,11 +121,10 @@ export function AdminDashboardPage() {
       {!allowed ? <div className="mx-auto max-w-2xl p-8"><h1 className="font-display text-2xl font-bold text-[#10233A]">Acceso restringido</h1><p className="mt-3 text-sm leading-7 text-[#64748B]">{allowedSections.length ? 'Tu cuenta no tiene permiso para esta sección. Selecciona una opción disponible del menú.' : 'Tu cuenta aún no tiene permisos administrativos asignados. El propietario debe configurar tu acceso.'}</p></div> : <>
         {activeSection === 'dashboard' && <AdminOverviewView />}
         {activeSection === 'companies' && <CompaniesView />}
-        {activeSection === 'processes' && <AdminProcessesView />}
         {activeSection === 'question-bank' && <AdminQuestionBankPage />}
         {activeSection === 'macrocasos' && <AdminMacrocasesPage />}
         {activeSection === 'microcasos' && <AdminMicrocasesPage />}
-        {activeSection === 'results' && <AdminResultsPage />}
+        {activeSection === 'results' && <AdminResultsView />}
         {activeSection === 'settings' && <AdminSettingsPage />}
         {activeSection === 'accounts' && <AdminAccountsPage />}
       </>}

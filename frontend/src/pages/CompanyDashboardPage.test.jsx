@@ -34,6 +34,23 @@ test('removes subscription details from routine sections and loads them only on 
   expect(screen.queryByRole('heading', { name: 'Fase A' })).toBeNull();
 });
 
+test('the dashboard puts what needs the company first, with the reports received and the next step of each process', async () => {
+  const deliveredAt = new Date().toISOString();
+  events.getEvents.mockResolvedValue([
+    { id: 'e1', name: 'Concurso Analistas', modality: 'online', modules: ['A', 'B'], position: 'Analista', moduleResults: { A: { deliveredAt } } },
+  ]);
+  events.getEventCandidates.mockResolvedValue([{ id: 'c1', status: 'EVALUATION_COMPLETED', submittedAt: deliveredAt }]);
+  renderPage();
+  const pending = await screen.findByRole('region', { name: 'Pendientes' });
+  expect(within(pending).getByText('Concurso Analistas: recibiste el PDF de la Fase A')).toBeTruthy();
+  expect(within(pending).getByRole('link', { name: 'Elegir →' }).getAttribute('href')).toBe('/company/events/e1/resultados');
+  expect(within(screen.getByRole('region', { name: 'Resultados recientes' })).getByRole('button', { name: 'Descargar PDF' })).toBeTruthy();
+  expect(within(screen.getByRole('region', { name: 'Procesos activos' })).getByRole('link', { name: 'Elige quién continúa a la Fase B' })).toBeTruthy();
+  expect(within(screen.getByRole('region', { name: 'Indicadores' })).getByText('Informes recibidos')).toBeTruthy();
+  // Only virtual processes: no onsite attendance chart.
+  expect(screen.queryByText('Asistencia presencial')).toBeNull();
+});
+
 test('supports direct access to the plan and preserves the existing plan-management route', async () => {
   subscriptions.getSubscription.mockResolvedValue({ ...plan, subscription: { planId: 'COMPLETE', status: 'active' } });
   renderPage('/company-dashboard?section=subscription');

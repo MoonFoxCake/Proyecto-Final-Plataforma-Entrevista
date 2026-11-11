@@ -4,12 +4,12 @@ const { permissionsOf, ALL_PERMISSIONS } = require('../../../src/utils/adminPerm
 
 describe('Administrative account security', () => {
   let users, identity, audit, service;
-  const access = { username: 'evaluador', displayName: 'Ana Evaluadora', adminAccess: 'restricted', permissions: ['evaluations.review'] };
+  const access = { username: 'evaluador', displayName: 'Ana Evaluadora', adminAccess: 'restricted', permissions: ['results.view'] };
   beforeEach(async () => {
     users = new UserRepository();
     await users.initializeOwner('owner', { username: 'owner' });
     await users.create({ uid: 'full', role: 'admin', adminAccess: 'full', revision: 1, status: 'active' });
-    await users.create({ uid: 'limited', role: 'admin', adminAccess: 'restricted', permissions: ['admins.create', 'admins.manage', 'admins.delete', 'evaluations.review'], revision: 1, status: 'active' });
+    await users.create({ uid: 'limited', role: 'admin', adminAccess: 'restricted', permissions: ['admins.create', 'admins.manage', 'admins.delete', 'results.view'], revision: 1, status: 'active' });
     await users.create({ uid: 'company', role: 'company', email: 'person@example.test', orgId: 'org', revision: 0 });
     identity = { createUser: jest.fn(async () => ({ uid: 'new' })), setCustomUserClaims: jest.fn(), deleteUser: jest.fn(), updateUser: jest.fn(), revokeRefreshTokens: jest.fn() };
     audit = { record: jest.fn() };
@@ -18,6 +18,8 @@ describe('Administrative account security', () => {
   test('owner initialization is exclusive and legacy admins have no implicit permissions', async () => {
     await expect(users.initializeOwner('another', {})).rejects.toMatchObject({ statusCode: 403 });
     expect(permissionsOf({ role: 'admin' })).toEqual([]);
+    // Ids from before Procesos and Resultados were merged keep their access.
+    expect(permissionsOf({ role: 'admin', permissions: ['evaluations.review', 'processes.view', 'evaluations.publish'] })).toEqual(['results.view', 'results.deliver']);
     expect(permissionsOf(await users.findById('owner'))).toEqual(ALL_PERMISSIONS);
     expect(permissionsOf({ role: 'admin', adminAccess: 'full', status: 'disabled' })).toEqual([]);
   });
@@ -25,7 +27,7 @@ describe('Administrative account security', () => {
     const result = await service.create('limited', access);
     expect(identity.createUser).toHaveBeenCalledWith(expect.objectContaining({ email: 'evaluador@admin.nexoperfil.invalid', password: result.temporaryPassword }));
     expect(result.temporaryPassword.length).toBeGreaterThanOrEqual(24);
-    expect(await users.findById('new')).toMatchObject({ adminAccess: 'restricted', permissions: ['evaluations.review'] });
+    expect(await users.findById('new')).toMatchObject({ adminAccess: 'restricted', permissions: ['results.view'] });
     expect(JSON.stringify(await users.findAll())).not.toContain(result.temporaryPassword);
     expect(JSON.stringify(audit.record.mock.calls)).not.toContain(result.temporaryPassword);
   });
@@ -55,7 +57,7 @@ describe('Administrative account security', () => {
     await expect(service.update('limited', 'full', { displayName: 'Changed', adminAccess: 'restricted', permissions: [], revision: 1 })).rejects.toMatchObject({ statusCode: 403 });
   });
   test('detects stale revisions and applies suspension before calling the identity provider', async () => {
-    await service.update('owner', 'limited', { displayName: 'Changed', adminAccess: 'restricted', permissions: ['evaluations.review'], revision: 1 });
+    await service.update('owner', 'limited', { displayName: 'Changed', adminAccess: 'restricted', permissions: ['results.view'], revision: 1 });
     await expect(service.setStatus('owner', 'limited', { status: 'disabled', revision: 1 })).rejects.toMatchObject({ statusCode: 409 });
     identity.updateUser.mockRejectedValueOnce(new Error('Provider offline'));
     await expect(service.setStatus('owner', 'limited', { status: 'disabled', revision: 2 })).rejects.toThrow('Provider offline');

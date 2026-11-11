@@ -68,12 +68,13 @@ describe('Phase 9 · onsite evaluation, end to end', () => {
     const org1 = await repos.organizationRepo.create({ companyName: 'TechCorp', name: 'TechCorp', subscription: { planId: 'fase-a-b' } });
     const org2 = await repos.organizationRepo.create({ companyName: 'OtraEmpresa', name: 'OtraEmpresa', subscription: { planId: 'fase-a-b' } });
     // Macrocase bank: the case is drawn when a process is created.
+    const choices = () => ['Avisar a un adulto', 'Seguir el camino', 'Hablar con el lobo', 'Volver a casa'].map((text) => ({ text }));
     await container.macrocaseService.createMacroCase({
       name: 'Caperucita', description: 'Caso', instructions: 'Lee cada parte.', defaultTimeLimit: 0, active: true,
       sections: [
-        { title: 'El encargo', narrative: 'Había una vez una niña.', questions: [{ text: '¿Qué le recomendaría?' }, { text: '¿Qué haría la madre?' }] },
-        { title: 'El bosque', narrative: 'El lobo apareció.', questions: [{ text: '¿Qué haría usted?' }] },
-        { title: 'La casa', narrative: 'La abuela no estaba.', questions: [{ text: '¿Y ahora?' }] },
+        { title: 'El encargo', narrative: 'Había una vez una niña.', questions: [{ text: '¿Qué le recomendaría?', options: choices() }, { text: '¿Qué haría la madre?', options: choices() }] },
+        { title: 'El bosque', narrative: 'El lobo apareció.', questions: [{ text: '¿Qué haría usted?', options: choices() }] },
+        { title: 'La casa', narrative: 'La abuela no estaba.', questions: [{ text: '¿Y ahora?', options: choices() }] },
       ],
     });
     await repos.userRepo.create({ uid: 'company-1', role: 'company', orgId: org1.id });
@@ -316,18 +317,22 @@ describe('Phase 9 · onsite evaluation, end to end', () => {
   });
 
   test('18 & 14. Module B by sections, onsite: narration per section, answers, interruption and resume, final submission', async () => {
-    // The admin reviews everyone who answered Module A and publishes; the absent candidate never answered.
+    // The admin reviews everyone who answered Module A; the absent candidate never answered.
     const process = (await request(app).get(`${API}/admin/processes/${state.eventId}`).set(as('admin-1'))).body.data;
     for (const participant of process.participants.filter((item) => item.status !== 'NO_RESPONSE')) {
       await request(app).patch(`${API}/admin/processes/${state.eventId}/participants/${participant.anonymousId}`).set(as('admin-1')).send({ observations: 'Revisado', reviewed: true });
     }
     // Absent candidate 20 is rescheduled out of this process (D10 keeps their code unused).
     await container.repos.candidateRepo.update(state.candidates[19].id, { eventId: 'otro-proceso' });
-    expect((await request(app).post(`${API}/admin/processes/${state.eventId}/publish`).set(as('admin-1'))).status).toBe(200);
+    const ready = (await request(app).get(`${API}/admin/processes/${state.eventId}`).set(as('admin-1'))).body.data;
+    expect(ready.reports).toMatchObject({ A: 'PENDING', B: 'NOT_STARTED' });
 
-    // The company opens Module B only after receiving Module A's PDF.
+    // The company opens Module B only after receiving Module A's PDF, which the admin uploads from Resultados.
     const report = await request(app).post(`${API}/admin/results/${state.eventId}/A`).set(as('admin-1')).attach('pdf', Buffer.from('%PDF-1.4'), { filename: 'fase-a.pdf', contentType: 'application/pdf' });
     expect(report.status).toBe(200);
+    const delivered = (await request(app).get(`${API}/admin/processes/${state.eventId}`).set(as('admin-1'))).body.data;
+    expect(delivered.reports.A).toBe('DELIVERED');
+    expect(delivered.results.A).toMatchObject({ fileName: 'fase-a.pdf' });
 
     const candidate = state.candidates[0];
     const startsAt = new Date();
@@ -353,11 +358,13 @@ describe('Phase 9 · onsite evaluation, end to end', () => {
     expect(current).toMatchObject({ step: 'narrative', section: { title: 'El encargo', narrative: 'Había una vez una niña.' } });
     current = await advance({ type: 'FINISH_NARRATIVE', sectionId: current.section.id });
     expect(current.section).not.toHaveProperty('narrative');
-    current = await advance({ type: 'ANSWER', questionId: current.question.id, value: 4 });
-    await advance({ type: 'SAVE_DRAFT', questionId: current.question.id, value: 5 });
+    expect(current.question.options).toHaveLength(4);
+    current = await advance({ type: 'ANSWER', questionId: current.question.id, value: current.question.options[3].id });
+    const draftOption = current.question.options[0].id;
+    await advance({ type: 'SAVE_DRAFT', questionId: current.question.id, value: draftOption });
 
     // 14. The connection drops; on reconnecting the same stage and draft come back.
-    expect(await stage()).toMatchObject({ step: 'question', question: { text: '¿Qué haría la madre?' }, draft: 5, progress: { answered: 1 } });
+    expect(await stage()).toMatchObject({ step: 'question', question: { text: '¿Qué haría la madre?' }, draft: draftOption, progress: { answered: 1 } });
 
     // Then the browser closes: the supervisor recovers the session on the same computer.
     const roster = await request(app).get(`${API}/events/${state.eventId}/onsite?modulo=B`).set(as('applicator-1'));
@@ -371,12 +378,12 @@ describe('Phase 9 · onsite evaluation, end to end', () => {
     const go = (action) => request(app).post(`${API}/invitations/access/macrocase/advance`).send({ token: resumedToken, action }).then((res) => res.body.data);
 
     current = (await request(app).post(`${API}/invitations/access/macrocase/stage`).send({ token: resumedToken })).body.data;
-    expect(current).toMatchObject({ question: { text: '¿Qué haría la madre?' }, draft: 5 });
-    current = await go({ type: 'ANSWER', questionId: current.question.id, value: 5 });
-    for (const value of [2, 3]) {
+    expect(current).toMatchObject({ question: { text: '¿Qué haría la madre?' }, draft: draftOption });
+    current = await go({ type: 'ANSWER', questionId: current.question.id, value: draftOption });
+    for (const pick of [1, 2]) {
       expect(current.step).toBe('narrative');
       current = await go({ type: 'FINISH_NARRATIVE', sectionId: current.section.id });
-      current = await go({ type: 'ANSWER', questionId: current.question.id, value });
+      current = await go({ type: 'ANSWER', questionId: current.question.id, value: current.question.options[pick].id });
     }
     expect(current).toMatchObject({ step: 'review', progress: { answered: 4 } });
 
@@ -392,11 +399,15 @@ describe('Phase 9 · onsite evaluation, end to end', () => {
       .find((participant) => participant.moduleBStatus === 'COMPLETED').anonymousId;
     const review = (await request(app).get(`${API}/admin/processes/${state.eventId}/participants/${anonymousId}`).set(as('admin-1'))).body.data;
     expect(review.moduleB.sections.map((section) => [section.title, section.answers.length])).toEqual([['El encargo', 2], ['El bosque', 1], ['La casa', 1]]);
+    // The admin sees the option chosen, as text, among the four offered.
+    const firstAnswer = review.moduleB.sections[0].answers[0];
+    expect(firstAnswer.options).toEqual(['Avisar a un adulto', 'Seguir el camino', 'Hablar con el lobo', 'Volver a casa']);
+    expect(firstAnswer.options).toContain(firstAnswer.label);
     expect(JSON.stringify(review)).not.toContain(candidate.nombreCompleto);
   });
 
   test('19. the online (link) flow still works', async () => {
-    const event = await company('post', '/events', { nombre: 'Proceso virtual', puesto: 'Analista', fechaHoraHabilitacion: new Date(Date.now() - 60000).toISOString() });
+    const event = await company('post', '/events', { nombre: 'Proceso virtual', puesto: 'Analista', fechaHoraHabilitacion: new Date(Date.now() - 60000).toISOString(), fechaHoraCierre: new Date(Date.now() + 7 * 864e5).toISOString() });
     expect(event.body.data.modality).toBe('online');
     const candidate = (await company('post', `/events/${event.body.data.id}/candidates`, { nombreCompleto: 'Virtual Uno', cedula: 'V-1', correo: 'virtual@example.test' })).body.data;
     expect((await company('post', `/events/${event.body.data.id}/invitations/publish`)).body.data).toMatchObject({ sent: 1 });

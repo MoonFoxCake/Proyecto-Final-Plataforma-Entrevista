@@ -1,19 +1,28 @@
+const crypto = require('crypto');
 const { ValidationError } = require('./errors');
 
 /**
  * Macrocase content model (v2) and Module B stage machine.
  *
  * A macrocase is a list of ordered sections; each one has a narrative text
- * and one or more Likert statements:
+ * and one or more multiple-choice questions with exactly four options:
  *
- *   { schemaVersion: 2, name, description, instructions, responseType: "likert",
+ *   { schemaVersion: 2, name, description, instructions, responseType: "choice",
  *     defaultTimeLimit, sections: [{ id, order, title, narrative,
- *     narrativeAudio?, questions: [{ id, order, text, audioUrl, visemes … }] }] }
+ *     narrativeAudio?, questions: [{ id, order, text, audioUrl, visemes …,
+ *     options: [{ id, text, audioUrl, visemes … }] }] }] }
+ *
+ * The candidate picks one option; each candidate sees the options in their
+ * own random order. Questions copied into a process before options existed
+ * have none and keep the five-point Likert scale.
  *
  * Documents saved before sections existed (`introduction` + flat
  * `questions`) are read as a single section, so neither the bank nor the
  * copies already stored in events need a migration.
  */
+
+const OPTIONS_PER_QUESTION = 4;
+const RESPONSE_TYPE = 'choice';
 
 const MACROCASE_SCHEMA_VERSION = 2;
 
@@ -38,6 +47,47 @@ const ACTIONS = Object.freeze({
 
 const validLikert = (value) => Number.isInteger(value) && value >= 1 && value <= 5;
 
+const LIKERT_LABELS = Object.freeze({
+  1: 'Totalmente en desacuerdo',
+  2: 'En desacuerdo',
+  3: 'Neutral',
+  4: 'De acuerdo',
+  5: 'Totalmente de acuerdo',
+});
+
+const isChoiceQuestion = (question) => Array.isArray(question?.options) && question.options.length > 0;
+
+/** A selection is an option id of the question (Likert 1–5 for older copies). */
+function validSelection(question, value) {
+  if (isChoiceQuestion(question)) return typeof value === 'string' && question.options.some((option) => option.id === value);
+  return validLikert(value);
+}
+
+function selectionError(question) {
+  return new ValidationError(isChoiceQuestion(question) ? 'Selecciona una de las opciones.' : 'Selecciona una opción de la escala Likert (1 a 5).');
+}
+
+/** Text of the selected option, as the candidate saw it. */
+function selectionLabel(question, value) {
+  if (value === null || value === undefined) return null;
+  if (isChoiceQuestion(question)) return question.options.find((option) => option.id === value)?.text || null;
+  return LIKERT_LABELS[value] || null;
+}
+
+/**
+ * The candidate's own order of a question's options: always the same for
+ * that candidate (`seed`) and question, different between candidates.
+ */
+function shuffledOptions(options, seed, questionId) {
+  const result = [...options];
+  const bytes = crypto.createHash('sha256').update(`${seed || ''}:${questionId}`).digest();
+  for (let index = result.length - 1; index > 0; index -= 1) {
+    const swap = bytes[index % bytes.length] % (index + 1);
+    [result[index], result[swap]] = [result[swap], result[index]];
+  }
+  return result;
+}
+
 const byOrder = (a, b) => (a.order ?? 0) - (b.order ?? 0);
 
 /** Reads any stored macrocase (v1 or v2) as a sectioned one. */
@@ -45,12 +95,12 @@ function toSectionedMacrocase(macrocase) {
   if (!macrocase) return macrocase;
   const { introduction, questions, ...rest } = macrocase;
   if (Array.isArray(macrocase.sections)) {
-    return { ...rest, instructions: rest.instructions || '', responseType: 'likert', schemaVersion: MACROCASE_SCHEMA_VERSION };
+    return { ...rest, instructions: rest.instructions || '', responseType: RESPONSE_TYPE, schemaVersion: MACROCASE_SCHEMA_VERSION };
   }
   return {
     ...rest,
     schemaVersion: MACROCASE_SCHEMA_VERSION,
-    responseType: 'likert',
+    responseType: RESPONSE_TYPE,
     instructions: rest.instructions || '',
     sections: [{
       id: 'section-1',
@@ -85,6 +135,9 @@ function macrocaseAudioPaths(macrocase) {
     if (section.narrativeAudio?.audioPath) paths.push(section.narrativeAudio.audioPath);
     for (const question of section.questions || []) {
       if (question.audioPath) paths.push(question.audioPath);
+      for (const option of question.options || []) {
+        if (option.audioPath) paths.push(option.audioPath);
+      }
     }
   }
   return new Set(paths);
@@ -102,7 +155,7 @@ function publicOverview(macrocase) {
     name: macrocase.name,
     description: macrocase.description || '',
     instructions: macrocase.instructions || '',
-    responseType: 'likert',
+    responseType: sections.some((section) => section.questions.some(isChoiceQuestion)) ? RESPONSE_TYPE : 'likert',
     defaultTimeLimit: timeLimitOf(macrocase),
     totalSections: sections.length,
     totalQuestions: sections.reduce((total, section) => total + section.questions.length, 0),
@@ -168,8 +221,11 @@ function stageView(macrocase, progress, now = new Date()) {
       order: current.questionIndex + 1,
       text: question.text,
       ...publicAudio(question),
+      ...(isChoiceQuestion(question) ? {
+        options: shuffledOptions(question.options, current.seed, question.id).map((option) => ({ id: option.id, text: option.text, ...publicAudio(option) })),
+      } : {}),
     };
-    view.draft = current.draft?.questionId === question.id && validLikert(current.draft.value) ? current.draft.value : null;
+    view.draft = current.draft?.questionId === question.id && validSelection(question, current.draft.value) ? current.draft.value : null;
     view.timer = { limitSeconds: timeLimitOf(macrocase), startedAt: toDate(current.timerStartedAt) };
   }
   if (current.step === STEPS.REVIEW) {
@@ -203,7 +259,7 @@ function nextPosition(sections, { sectionIndex, questionIndex }) {
  * left (a double click, a second tab, a retried request) changes nothing,
  * so an answer can never be rewritten and no stage can be skipped.
  *
- * @throws {ValidationError} for invalid Likert selections
+ * @throws {ValidationError} for invalid selections
  */
 function applyAction(macrocase, progress, action, now = new Date()) {
   const sections = orderedSections(macrocase);
@@ -218,7 +274,9 @@ function applyAction(macrocase, progress, action, now = new Date()) {
   switch (action.type) {
     case ACTIONS.START:
       if (current.step !== STEPS.INTRO) return current;
-      return { ...current, step: STEPS.NARRATIVE, sectionIndex: 0, questionIndex: 0 };
+      return {
+        ...current, step: STEPS.NARRATIVE, sectionIndex: 0, questionIndex: 0, seed: current.seed || crypto.randomBytes(12).toString('hex'),
+      };
 
     case ACTIONS.FINISH_NARRATIVE:
       if (current.step !== STEPS.NARRATIVE || action.sectionId !== section.id) return current;
@@ -230,7 +288,7 @@ function applyAction(macrocase, progress, action, now = new Date()) {
 
     case ACTIONS.SAVE_DRAFT: {
       if (!question || action.questionId !== question.id) return current;
-      if (!validLikert(action.value)) throw new ValidationError('Selecciona una opción de la escala Likert (1 a 5).');
+      if (!validSelection(question, action.value)) throw selectionError(question);
       return { ...current, draft: { questionId: question.id, value: action.value } };
     }
 
@@ -241,9 +299,7 @@ function applyAction(macrocase, progress, action, now = new Date()) {
       const timeIsUp = Boolean(limit && startedAt && elapsed >= limit * 1000 - TIMER_GRACE_MS);
       const lateAnswer = Boolean(limit && startedAt && elapsed > limit * 1000 + TIMER_GRACE_MS);
       const timedOut = (action.timedOut === true && timeIsUp) || lateAnswer;
-      if (!validLikert(action.value) && !(action.value === null && timedOut)) {
-        throw new ValidationError('Selecciona una opción de la escala Likert (1 a 5).');
-      }
+      if (!validSelection(question, action.value) && !(action.value === null && timedOut)) throw selectionError(question);
       const answer = {
         sectionId: section.id,
         questionId: question.id,
@@ -282,13 +338,14 @@ function finalAnswers(macrocase, progress) {
     const { text, value, timedOut } = answer;
     // Keep locked written answers recorded before the Likert migration.
     const legacy = Object.prototype.hasOwnProperty.call(answer, 'text') && !Object.prototype.hasOwnProperty.call(answer, 'value');
-    if (!legacy && !validLikert(value) && !(value === null && timedOut)) throw new ValidationError('La respuesta Likert guardada no es válida.');
+    if (!legacy && !validSelection(question, value) && !(value === null && timedOut)) throw new ValidationError('La respuesta guardada no es válida.');
     return {
       sectionId: question.sectionId,
       sectionTitle: question.sectionTitle,
       questionId: question.id,
       question: question.text,
-      ...(legacy ? { text } : { value }),
+      ...(legacy ? { text } : { value, answerLabel: selectionLabel(question, value) }),
+      ...(isChoiceQuestion(question) ? { options: question.options.map((option) => option.text) } : {}),
       ...(timedOut ? { timedOut: true } : {}),
     };
   });
@@ -296,6 +353,11 @@ function finalAnswers(macrocase, progress) {
 
 module.exports = {
   MACROCASE_SCHEMA_VERSION,
+  OPTIONS_PER_QUESTION,
+  RESPONSE_TYPE,
+  LIKERT_LABELS,
+  isChoiceQuestion,
+  shuffledOptions,
   TIMER_GRACE_MS,
   STEPS,
   ACTIONS,

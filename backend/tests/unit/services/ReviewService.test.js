@@ -132,16 +132,30 @@ describe('ReviewService', () => {
     expect(detail.answers[2]).toMatchObject({ text: 'Texto histórico.' });
   });
 
-  test('blocks publication until every response is reviewed', async () => {
-    await expect(service.publish(event.id, 'admin-1')).rejects.toThrow('Debes revisar a todos los participantes antes de publicar.');
+  test('shows the four options of a multiple-choice answer with the one marked', () => {
+    const detail = service.moduleBDetail({ moduleB: { macrocase: { name: 'Caso' } } }, { moduleB: { status: 'COMPLETED' } }, {
+      answers: [{ questionId: 'q1', sectionId: 's1', question: '¿Qué harías?', value: 'o2', answerLabel: 'Esperar', options: ['Avisar', 'Esperar', 'Denunciar', 'Ignorar'] }],
+    });
+    expect(detail.answers[0]).toMatchObject({ value: 'o2', label: 'Esperar', options: ['Avisar', 'Esperar', 'Denunciar', 'Ignorar'] });
   });
 
-  test('saves observations, marks reviewed and publishes the process', async () => {
+  test('saves observations and marks the participant as reviewed', async () => {
     const reviewed = await service.saveReview(event.id, 'P-001', { observations: 'Revisión manual.', reviewed: true }, 'admin-1');
     expect(reviewed).toMatchObject({ status: 'REVIEWED', observations: 'Revisión manual.' });
-    const published = await service.publish(event.id, 'admin-1');
-    expect(published.status).toBe('PUBLISHED');
-    expect(published.evaluationsPublishedAt).toBeInstanceOf(Date);
-    expect((await candidateRepo.findById(candidate.id)).profilePublishedAt).toBeInstanceOf(Date);
+  });
+
+  test('tells where the result of each phase stands, and which PDFs were delivered', async () => {
+    await eventRepo.update(event.id, { modules: ['A', 'B'], moduleB: { macrocase: { id: 'macro-1', name: 'Caso ingeniería' } } });
+    let process = await service.getProcess(event.id);
+    expect(process.reports).toEqual({ A: 'PENDING', B: 'NOT_STARTED' });
+    expect(process.macrocaseName).toBe('Caso ingeniería');
+
+    const deliveredAt = new Date();
+    await eventRepo.update(event.id, { moduleResults: { A: { fileName: 'fase-a.pdf', path: 'x', deliveredAt, status: 'DELIVERED' } } });
+    await candidateRepo.update(candidate.id, { moduleB: { status: 'INVITATION_SENT' } });
+    process = await service.getProcess(event.id);
+    expect(process.reports).toEqual({ A: 'DELIVERED', B: 'IN_PROGRESS' });
+    expect(process.results).toEqual({ A: { fileName: 'fase-a.pdf', deliveredAt } });
+    expect(JSON.stringify(process)).not.toContain('"path"');
   });
 });

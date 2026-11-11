@@ -1,0 +1,5 @@
+{
+  "processes.view": "results.view",
+  "evaluations.review": "results.view",
+  "evaluations.publish": "results.deliver"
+}

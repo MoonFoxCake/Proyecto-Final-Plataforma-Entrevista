@@ -6,6 +6,7 @@ import { getProcesses } from '../services/adminReviewService.js';
 
 vi.mock('../services/authService.js', () => ({ getCompanies: vi.fn() }));
 vi.mock('../services/adminReviewService.js', () => ({ getProcesses: vi.fn() }));
+vi.mock('../hooks/useAuth.js', () => ({ useAuth: () => ({ profile: { role: 'admin', adminAccess: 'owner', status: 'active' } }) }));
 
 const companies = [
   { id: 'org-1', companyName: 'Empresa Uno', subscription: { planId: 'fase-a' }, users: [{ id: 'u1', displayName: 'María Jiménez', email: 'maria@uno.com' }] },
@@ -13,7 +14,7 @@ const companies = [
 ];
 const processes = [
   { id: 'p1', orgId: 'org-1', name: 'Selección actual', status: 'IN_REVIEW', summary: { totalParticipants: 4 } },
-  { id: 'p2', orgId: 'org-1', name: 'Selección publicada', status: 'PUBLISHED' },
+  { id: 'p2', orgId: 'org-1', name: 'Selección publicada', status: 'PUBLISHED', reports: { A: 'DELIVERED' } },
   { id: 'p3', orgId: 'org-1', name: 'Selección vencida', status: 'ACTIVE', endDate: '2020-01-01' },
   { id: 'p4', orgId: 'org-2', name: 'Otro proceso', status: 'ACTIVE' },
 ];
@@ -55,7 +56,7 @@ test('separates current processes from published and expired ones and opens thei
   expect(screen.getByText('Selección vencida')).toBeTruthy();
   expect(screen.queryByText('Selección actual')).toBeNull();
   fireEvent.click(screen.getByRole('button', { name: 'Activos 1' }));
-  fireEvent.click(screen.getByRole('link', { name: 'Ver proceso' }));
+  fireEvent.click(screen.getByRole('link', { name: 'Ver resultados' }));
   expect(await screen.findByRole('heading', { name: 'Detalle del proceso' })).toBeTruthy();
 });
 

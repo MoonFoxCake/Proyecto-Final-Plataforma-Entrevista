@@ -1,10 +1,19 @@
 import { formatDuration } from './timeLimit.js';
 
-const STEPS = [
-  ['Lee cada parte del caso', 'El caso se presenta por secciones. Un asistente virtual narra cada una, y puedes leerla en pantalla sin esperar a que termine.'],
-  ['Escucha las preguntas de esa parte', 'Después de cada sección, el asistente te hará sus preguntas en voz alta, una a la vez.'],
-  ['Selecciona tu respuesta', 'Indica qué tan de acuerdo estás con cada afirmación en una escala del 1 al 5. Tu selección se guarda automáticamente.'],
-];
+const READ_STEP = ['Lee cada parte del caso', 'El caso se presenta por secciones. Un asistente virtual narra cada una, y puedes leerla en pantalla sin esperar a que termine.'];
+const STEPS = {
+  choice: [
+    READ_STEP,
+    ['Escucha las preguntas de esa parte', 'Después de cada sección, el asistente te hará sus preguntas en voz alta, una a la vez, y leerá sus cuatro opciones.'],
+    ['Marca tu respuesta', 'Marca con una X la opción que mejor represente lo que harías. Tu selección se guarda automáticamente.'],
+  ],
+  // Processes whose case was copied before the options existed.
+  likert: [
+    READ_STEP,
+    ['Escucha las preguntas de esa parte', 'Después de cada sección, el asistente te hará sus preguntas en voz alta, una a la vez.'],
+    ['Selecciona tu respuesta', 'Indica qué tan de acuerdo estás con cada afirmación en una escala del 1 al 5. Tu selección se guarda automáticamente.'],
+  ],
+};
 
 /**
  * First screen of Module B: general instructions before the first section.
@@ -23,7 +32,7 @@ export function MacrocaseIntro({ macrocase, busy, onStart }) {
         {macrocase.instructions && <p className='mt-4 whitespace-pre-line rounded-xl bg-[#F6F9FC] p-4 text-sm leading-6 text-[#334E68]'>{macrocase.instructions}</p>}
 
         <ol className='mt-6 space-y-4'>
-          {STEPS.map(([title, description], index) => (
+          {(STEPS[macrocase.responseType] || STEPS.choice).map(([title, description], index) => (
             <li key={title} className='flex gap-4'>
               <span className='flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#E8F7F6] text-sm font-bold text-[#0A8F8A]'>{index + 1}</span>
               <div><p className='text-sm font-semibold text-[#10233A]'>{title}</p><p className='mt-0.5 text-sm text-[#64748B]'>{description}</p></div>

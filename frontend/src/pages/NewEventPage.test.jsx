@@ -27,7 +27,7 @@ beforeEach(() => {
 test('creates an onsite event with venue, session and only Module A', async () => {
   await renderPage();
   fireEvent.click(screen.getByLabelText(/Presencial/));
-  expect(screen.queryByLabelText('Fecha y hora de habilitación')).toBeNull();
+  expect(screen.queryByLabelText('Apertura del enlace')).toBeNull();
 
   fill('Sede', 'Campus Central');
   fill('Ubicación específica', 'Aula 204');
@@ -73,14 +73,22 @@ test('does not send an onsite event without location or with a backwards schedul
   expect(createEvent).not.toHaveBeenCalled();
 });
 
-test('a virtual event keeps the original availability date and includes Module B', async () => {
+test('a virtual event sets when its Module A link opens and closes, and includes Module B', async () => {
   await renderPage();
-  fill('Fecha y hora de habilitación', '2026-10-10T09:00');
+  fill('Apertura del enlace', '2099-10-10T09:00');
   fireEvent.click(screen.getByRole('button', { name: 'Crear evento' }));
+  expect((await screen.findByRole('alert')).textContent).toMatch(/cierre del enlace/);
+  fill('Cierre del enlace', '2099-10-09T09:00');
+  fireEvent.click(screen.getByRole('button', { name: 'Crear evento' }));
+  expect((await screen.findByRole('alert')).textContent).toMatch(/posterior a la apertura/);
+  expect(createEvent).not.toHaveBeenCalled();
 
+  fill('Cierre del enlace', '2099-10-12T18:00');
+  fireEvent.click(screen.getByRole('button', { name: 'Crear evento' }));
   await waitFor(() => expect(createEvent).toHaveBeenCalledWith(expect.objectContaining({
     modalidad: 'virtual',
     incluirModuloB: true,
-    fechaHoraHabilitacion: new Date('2026-10-10T09:00').toISOString(),
+    fechaHoraHabilitacion: new Date('2099-10-10T09:00').toISOString(),
+    fechaHoraCierre: new Date('2099-10-12T18:00').toISOString(),
   })));
 });

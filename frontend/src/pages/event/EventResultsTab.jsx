@@ -8,6 +8,9 @@ import {
   sessionProblem,
   toCitationPayload,
 } from '../../components/company/SessionFields.jsx';
+import {
+  AccessWindowFields, EMPTY_WINDOW, toWindowPayload, windowProblem,
+} from '../../components/company/AccessWindowFields.jsx';
 import { Button, Dialog, StatusBadge } from '../../components/ui';
 import * as eventService from '../../services/eventService.js';
 import * as settingsService from '../../services/settingsService.js';
@@ -16,6 +19,11 @@ import { isOpenIn, phaseState } from '../../utils/phases.js';
 import { canReceiveModuleB, canReceiveModuleC, failureReasons } from './eventState.js';
 
 const errorMessage = (error, fallback) => error.response?.data?.error?.message || fallback;
+
+const DATE_TIME = new Intl.DateTimeFormat('es-CR', { dateStyle: 'medium', timeStyle: 'short' });
+const asDate = (value) => new Date(value?._seconds != null ? value._seconds * 1000 : value);
+/** "Abre 12 nov 2026, 8:00 · cierra 14 nov 2026, 18:00" */
+const formatWindow = ({ opensAt, closesAt }) => `Abre ${DATE_TIME.format(asDate(opensAt))} · cierra ${DATE_TIME.format(asDate(closesAt))}`;
 
 function StageStatus({ stage }) {
   if (stage?.status === 'COMPLETED') return <StatusBadge tone='ok'>Respondido</StatusBadge>;
@@ -29,7 +37,14 @@ function StageStatus({ stage }) {
       </span>
     );
   }
-  if (stage?.status === 'INVITATION_SENT') return <StatusBadge tone='info'>Enviado</StatusBadge>;
+  if (stage?.status === 'INVITATION_SENT') {
+    return (
+      <span className='flex flex-col items-start gap-1'>
+        <StatusBadge tone='info'>Enviado</StatusBadge>
+        {stage.accessWindow && <span className='text-[11px] text-[#64748B]'>{formatWindow(stage.accessWindow)}</span>}
+      </span>
+    );
+  }
   if (stage?.status === 'INVITATION_FAILED') return <StatusBadge tone='error'>Error de envío</StatusBadge>;
   return <span className='text-xs text-[#94A3B8]'>No enviado</span>;
 }
@@ -66,6 +81,9 @@ export function EventResultsTab() {
   const [citing, setCiting] = useState(false);
   const [session, setSession] = useState(() => ({ ...EMPTY_SESSION, sede: event?.onsite?.venue || '', ubicacion: event?.onsite?.room || '' }));
   const [sessionError, setSessionError] = useState('');
+  // Virtual phases: when each one's link opens and closes, chosen per phase.
+  const [windowB, setWindowB] = useState(EMPTY_WINDOW);
+  const [windowC, setWindowC] = useState(EMPTY_WINDOW);
   const [sectionIds, setSectionIds] = useState([]);
   const [selectedC, setSelectedC] = useState(() => new Set());
   const [sendingC, setSendingC] = useState(false);
@@ -115,11 +133,11 @@ export function EventResultsTab() {
     return next;
   });
 
-  const sendModuleB = async (citation) => {
+  const sendModuleB = async (citation, ventana) => {
     setSending(true);
     setError('');
     try {
-      const result = await eventService.sendModuleBInvitations(eventId, [...selected], citation);
+      const result = await eventService.sendModuleBInvitations(eventId, [...selected], citation, ventana);
       await reload();
       setSelected(new Set());
       setCiting(false);
@@ -136,11 +154,11 @@ export function EventResultsTab() {
 
   const resent = candidates.filter((candidate) => selected.has(candidate.id) && ['INVITATION_SENT', 'CITED'].includes(candidate.moduleB?.status)).length;
 
+  // Both modalities ask for the details first: the venue and time, or when the link opens and closes.
   const startSending = () => {
     if (!moduleBAvailable || selected.size === 0) return;
-    if (state.onsite) { setSessionError(''); setCiting(true); return; }
-    const message = `Se enviará el Módulo B a ${selected.size} candidato(s).${resent ? ` ${resent} ya lo había(n) recibido: tendrán un enlace nuevo y el anterior dejará de funcionar.` : ''} ¿Deseas continuar?`;
-    if (window.confirm(message)) sendModuleB();
+    setSessionError('');
+    setCiting(true);
   };
 
   const toggleC = (id) => setSelectedC((previous) => { const next = new Set(previous); if (next.has(id)) next.delete(id); else next.add(id); return next; });
@@ -148,12 +166,15 @@ export function EventResultsTab() {
   const sendModuleC = async () => {
     if (!sectionIds.length || !selectedC.size) { setError('Selecciona al menos una habilidad y participantes.'); return; }
     if (state.onsite && sessionProblem(session)) { setError(sessionProblem(session)); return; }
+    if (!state.onsite && windowProblem(windowC)) { setError(windowProblem(windowC)); return; }
     if (!window.confirm(`${state.onsite ? 'Se enviará la citación presencial' : 'Se enviará el enlace'} de Fase C a ${selectedC.size} participante(s). Las habilidades quedarán fijas para todo el proceso. ¿Deseas continuar?`)) return;
     setSendingC(true);
     setError('');
     try {
       await eventService.configureModuleC(eventId, sectionIds);
-      const result = await eventService.sendModuleCInvitations(eventId, [...selectedC], state.onsite ? toCitationPayload(session) : null);
+      const result = state.onsite
+        ? await eventService.sendModuleCInvitations(eventId, [...selectedC], toCitationPayload(session))
+        : await eventService.sendModuleCInvitations(eventId, [...selectedC], null, toWindowPayload(windowC));
       await reload();
       setSelectedC(new Set());
       if (result.failed) setError(`Se envió la Fase C a ${result.sent} de ${result.total} participantes.${failureReasons(result)}`);
@@ -166,9 +187,10 @@ export function EventResultsTab() {
   };
 
   const confirmCitation = () => {
-    const problem = sessionProblem(session);
+    const problem = state.onsite ? sessionProblem(session) : windowProblem(windowB);
     if (problem) { setSessionError(problem); return; }
-    sendModuleB(toCitationPayload(session));
+    if (state.onsite) sendModuleB(toCitationPayload(session));
+    else sendModuleB(undefined, toWindowPayload(windowB));
   };
 
   const download = async (module) => {
@@ -318,7 +340,9 @@ export function EventResultsTab() {
               {eligibleC.length === 0 && <p className='text-sm text-slate-500'>No hay participantes disponibles para esta fase.</p>}
             </div>
           </div>
-          {state.onsite && <div className='mt-5'><p className='mb-2 text-sm font-semibold text-[#334E68]'>Sesión presencial de la Fase C</p><SessionFields value={session} onChange={setSession} idPrefix='modulo-c' /></div>}
+          {state.onsite
+            ? <div className='mt-5'><p className='mb-2 text-sm font-semibold text-[#334E68]'>Sesión presencial de la Fase C</p><SessionFields value={session} onChange={setSession} idPrefix='modulo-c' /></div>
+            : <div className='mt-5'><p className='mb-2 text-sm font-semibold text-[#334E68]'>Disponibilidad del enlace de la Fase C</p><AccessWindowFields value={windowC} onChange={setWindowC} idPrefix='modulo-c' /></div>}
           <div className='mt-5 flex justify-end'>
             <Button type='button' variant='accent' disabled={sendingC || !eligibleC.length || !moduleCAvailable || !reportBReady} onClick={sendModuleC}>{sendingC ? 'Procesando…' : state.onsite ? `Citar a Fase C (${selectedC.size})` : `Enviar Fase C (${selectedC.size})`}</Button>
           </div>
@@ -327,13 +351,17 @@ export function EventResultsTab() {
 
       {citing && (
         <Dialog
-          title={`Citar al Módulo B (${selected.size})`}
-          description={`Indica la sesión presencial.${resent ? ` ${resent} candidato(s) ya habían sido citados y recibirán la nueva citación.` : ''} La citación no incluye enlaces ni códigos.`}
+          title={state.onsite ? `Citar al Módulo B (${selected.size})` : `Enviar Módulo B (${selected.size})`}
+          description={state.onsite
+            ? `Indica la sesión presencial.${resent ? ` ${resent} candidato(s) ya habían sido citados y recibirán la nueva citación.` : ''} La citación no incluye enlaces ni códigos.`
+            : `Indica cuándo se abre y se cierra el enlace.${resent ? ` ${resent} candidato(s) ya lo habían recibido: tendrán un enlace nuevo y el anterior dejará de funcionar.` : ''}`}
           busy={sending}
           onClose={() => setCiting(false)}
-          footer={<><Button type='button' variant='outline' className='h-10 px-4' onClick={() => setCiting(false)} disabled={sending}>Cancelar</Button><Button type='button' variant='accent' className='h-10 px-5' onClick={confirmCitation} disabled={sending}>{sending ? 'Enviando...' : 'Enviar citaciones'}</Button></>}
+          footer={<><Button type='button' variant='outline' className='h-10 px-4' onClick={() => setCiting(false)} disabled={sending}>Cancelar</Button><Button type='button' variant='accent' className='h-10 px-5' onClick={confirmCitation} disabled={sending}>{sending ? 'Enviando...' : state.onsite ? 'Enviar citaciones' : 'Enviar enlaces'}</Button></>}
         >
-          <SessionFields value={session} onChange={setSession} idPrefix='modulo-b' />
+          {state.onsite
+            ? <SessionFields value={session} onChange={setSession} idPrefix='modulo-b' />
+            : <AccessWindowFields value={windowB} onChange={setWindowB} idPrefix='modulo-b' />}
           {sessionError && <p role='alert' className='mt-4 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700'>{sessionError}</p>}
         </Dialog>
       )}

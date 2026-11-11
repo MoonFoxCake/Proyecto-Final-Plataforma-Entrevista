@@ -21,11 +21,25 @@ export function createRemoteMacrocaseSource(token) {
 const byOrder = (a, b) => (a.order ?? 0) - (b.order ?? 0);
 const publicAudio = (audio = {}) => ({ audioUrl: audio.audioUrl || '', visemes: audio.visemes || [] });
 
-/** Sections a candidate would get: with narrative and at least one question with text. */
+const OPTIONS_PER_QUESTION = 4;
+const completeQuestion = (question) => question.text?.trim()
+  && (question.options || []).filter((option) => option.text?.trim()).length === OPTIONS_PER_QUESTION;
+
+/** Sections a candidate would get: with narrative and at least one complete question (text and four options). */
 export function usableSections(macrocase) {
   return [...(macrocase.sections || [])].sort(byOrder)
-    .map((section) => ({ ...section, questions: [...(section.questions || [])].sort(byOrder).filter((question) => question.text?.trim()) }))
+    .map((section) => ({ ...section, questions: [...(section.questions || [])].sort(byOrder).filter(completeQuestion) }))
     .filter((section) => section.narrative?.trim() && section.questions.length);
+}
+
+/** A random order of the options, like each candidate gets. */
+function shuffle(items) {
+  const result = [...items];
+  for (let index = result.length - 1; index > 0; index -= 1) {
+    const swap = Math.floor(Math.random() * (index + 1));
+    [result[index], result[swap]] = [result[swap], result[index]];
+  }
+  return result;
 }
 
 /**
@@ -37,6 +51,7 @@ export function createLocalMacrocaseSource(macrocase) {
   const timeLimit = Number(macrocase.defaultTimeLimit) > 0 ? Math.round(Number(macrocase.defaultTimeLimit)) : 0;
   const totalQuestions = sections.reduce((total, section) => total + section.questions.length, 0);
   let progress = { step: 'intro', sectionIndex: 0, questionIndex: 0, answers: [], draft: null, timerStartedAt: null };
+  const optionOrder = new Map(sections.flatMap((section) => section.questions).map((question) => [question.id, shuffle(question.options)]));
 
   const view = () => {
     const section = sections[progress.sectionIndex];
@@ -47,7 +62,7 @@ export function createLocalMacrocaseSource(macrocase) {
         name: macrocase.name,
         description: macrocase.description || '',
         instructions: macrocase.instructions || '',
-        responseType: 'likert',
+        responseType: 'choice',
         defaultTimeLimit: timeLimit,
         totalSections: sections.length,
         totalQuestions,
@@ -70,7 +85,13 @@ export function createLocalMacrocaseSource(macrocase) {
     if (progress.step === 'question') {
       const question = section.questions[progress.questionIndex];
       stage.section = { id: section.id, order: progress.sectionIndex + 1, title: section.title || '' };
-      stage.question = { id: question.id, order: progress.questionIndex + 1, text: question.text, ...publicAudio(question) };
+      stage.question = {
+        id: question.id,
+        order: progress.questionIndex + 1,
+        text: question.text,
+        ...publicAudio(question),
+        options: optionOrder.get(question.id).map((option) => ({ id: option.id, text: option.text, ...publicAudio(option) })),
+      };
       stage.draft = progress.draft;
       stage.timer = { limitSeconds: timeLimit, startedAt: progress.timerStartedAt };
     }
@@ -95,13 +116,13 @@ export function createLocalMacrocaseSource(macrocase) {
     } else if (action.type === 'START_TIMER' && question?.id === action.questionId && timeLimit && !progress.timerStartedAt) {
       progress = { ...progress, timerStartedAt: new Date().toISOString() };
     } else if (action.type === 'SAVE_DRAFT' && question?.id === action.questionId) {
-      if (!Number.isInteger(action.value) || action.value < 1 || action.value > 5) throw new Error('Selecciona una opción de la escala Likert (1 a 5).');
+      if (!question.options.some((option) => option.id === action.value)) throw new Error('Selecciona una de las opciones.');
       progress = { ...progress, draft: action.value };
     } else if (action.type === 'ANSWER' && question?.id === action.questionId) {
       const value = action.value;
       const elapsed = progress.timerStartedAt ? Date.now() - new Date(progress.timerStartedAt).getTime() : 0;
       const timedOut = Boolean(timeLimit && progress.timerStartedAt && ((action.timedOut && elapsed >= timeLimit * 1000) || elapsed > timeLimit * 1000 + 5000));
-      if (!(Number.isInteger(value) && value >= 1 && value <= 5) && !(value === null && timedOut)) throw new Error('Selecciona una opción para continuar.');
+      if (!question.options.some((option) => option.id === value) && !(value === null && timedOut)) throw new Error('Selecciona una opción para continuar.');
       const answers = [...progress.answers, { sectionId: section.id, questionId: question.id, value, ...(timedOut ? { timedOut: true } : {}) }];
       const next = progress.questionIndex + 1 < section.questions.length
         ? { step: 'question', questionIndex: progress.questionIndex + 1 }

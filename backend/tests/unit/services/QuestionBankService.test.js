@@ -36,7 +36,7 @@ describe('Question bank and process snapshots', () => {
     await bank.setActive(group.id, { active: true, baseVersion: 1 });
     const events = new EventRepo();
     const service = new EventService(events, null, bank);
-    const input = { nombre: 'Proceso', puesto: 'Analista', fechaHoraHabilitacion: '2026-01-01T10:00:00Z' };
+    const input = { nombre: 'Proceso', puesto: 'Analista', fechaHoraHabilitacion: '2026-01-01T10:00:00Z', fechaHoraCierre: '2026-01-03T10:00:00Z' };
     const first = await service.createEvent('org-1', input);
     expect(first.moduleA.instrument).toMatchObject({ groupId: group.id, version: 1, questions: content.questions });
     await bank.update(group.id, { ...content, baseVersion: 1, questions: [{ id: 'custom-1', text: 'Texto nuevo.' }] });
@@ -54,7 +54,7 @@ describe('Question bank and process snapshots', () => {
     await deactivateInitial(); await bank.setActive(group.id, { active: true, baseVersion: 1 });
     const events = new EventRepo();
     const eventService = new EventService(events, null, bank);
-    const event = await eventService.createEvent('org-1', { nombre: 'Proceso', puesto: 'Analista', fechaHoraHabilitacion: '2020-01-01T10:00:00Z' });
+    const event = await eventService.createEvent('org-1', { nombre: 'Proceso', puesto: 'Analista', fechaHoraHabilitacion: '2020-01-01T10:00:00Z', fechaHoraCierre: '2099-01-03T10:00:00Z' });
     const candidates = new CandidateRepo(); const invitations = new InvitationRepo();
     const org = { findById: async () => ({ companyName: 'Empresa' }) };
     const service = new InvitationService({ eventService, candidateRepo: candidates, invitationRepo: invitations, organizationRepo: org });
@@ -94,7 +94,7 @@ describe('Question bank and process snapshots', () => {
     expect((await bank.pickSnapshot()).groupId).toBe(group.id);
     const events = new EventRepo(); const candidates = new CandidateRepo(); const invitations = new InvitationRepo();
     const eventService = new EventService(events, null, bank);
-    const event = await eventService.createEvent('org-1', { nombre: 'Proceso', puesto: 'Analista', fechaHoraHabilitacion: new Date(Date.now() - 60000).toISOString() });
+    const event = await eventService.createEvent('org-1', { nombre: 'Proceso', puesto: 'Analista', fechaHoraHabilitacion: new Date(Date.now() - 60000).toISOString(), fechaHoraCierre: new Date(Date.now() + 7 * 864e5).toISOString() });
     const email = { sendInvitation: jest.fn(async () => ({ id: 'email-1' })) };
     const service = new InvitationService({ eventService, candidateRepo: candidates, invitationRepo: invitations,
       candidateService: { listByEvent: (id, org) => candidates.findByEvent(id, org) },

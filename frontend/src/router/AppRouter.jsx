@@ -1,4 +1,5 @@
 import { RequirePermission } from './RequirePermission.jsx';
+import { RESULTS_PERMISSIONS } from '../utils/adminPermissions.js';
 
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 
@@ -82,14 +83,12 @@ export function AppRouter() {
               element={<AdminDashboardPage />}
             />
 
-            <Route element={<RequirePermission permissions={['processes.view', 'companies.view', 'evaluations.review', 'evaluations.publish']} />}>
+            {/* Resultados: a process with its anonymous participants, their answers and the PDF of each phase. */}
+            <Route element={<RequirePermission permissions={RESULTS_PERMISSIONS} />}>
             <Route
               path="/admin/processes/:eventId"
               element={<AdminProcessDetailPage />}
             />
-            </Route>
-
-            <Route element={<RequirePermission permissions={['evaluations.review', 'evaluations.publish']} />}>
             <Route
               path="/admin/processes/:eventId/participants/:anonymousId"
               element={<AdminParticipantReviewPage />}

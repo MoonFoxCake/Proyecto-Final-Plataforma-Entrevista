@@ -14,6 +14,7 @@ const EMPTY_FORM = {
   puesto: '',
   modalidad: 'virtual',
   fechaHoraHabilitacion: '',
+  fechaHoraCierre: '',
   presencial: EMPTY_SESSION,
   incluirModuloB: true,
   incluirModuloC: false,
@@ -76,7 +77,10 @@ const onsite = form.modalidad === 'presencial';
     if (form.nombre.trim().length < 3) return 'Indica el nombre del concurso (al menos 3 caracteres).';
     if (form.puesto.trim().length < 2) return 'Indica el puesto.';
     if (onsite) return sessionProblem(form.presencial);
-    if (!form.fechaHoraHabilitacion) return 'Indica la fecha y hora de habilitación.';
+    if (!form.fechaHoraHabilitacion) return 'Indica la fecha y hora de apertura del enlace.';
+    if (!form.fechaHoraCierre) return 'Indica la fecha y hora de cierre del enlace.';
+    if (new Date(form.fechaHoraCierre) <= new Date(form.fechaHoraHabilitacion)) return 'El cierre debe ser posterior a la apertura.';
+    if (new Date(form.fechaHoraCierre) <= new Date()) return 'El cierre debe ser una fecha futura.';
     return '';
   };
 
@@ -99,7 +103,7 @@ const onsite = form.modalidad === 'presencial';
       };
       const created = await eventService.createEvent(onsite
         ? { ...base, modalidad: 'presencial', presencial: toCitationPayload(form.presencial) }
-        : { ...base, modalidad: 'virtual', fechaHoraHabilitacion: new Date(form.fechaHoraHabilitacion).toISOString() });
+        : { ...base, modalidad: 'virtual', fechaHoraHabilitacion: new Date(form.fechaHoraHabilitacion).toISOString(), fechaHoraCierre: new Date(form.fechaHoraCierre).toISOString() });
       navigate(`/company/events/${created.id}`, { replace: true });
     } catch (requestError) {
       setError(requestError.response?.data?.error?.message || 'No se pudo crear el evento.');
@@ -141,17 +145,33 @@ const onsite = form.modalidad === 'presencial';
                 <SessionFields value={form.presencial} onChange={(presencial) => set({ presencial })} idPrefix='presencial' />
               </section>
             ) : (
-              <FormField label='Fecha y hora de habilitación' htmlFor='fechaHoraHabilitacion'>
-                <input
-                  id='fechaHoraHabilitacion'
-                  type='datetime-local'
-                  value={form.fechaHoraHabilitacion}
-                  onChange={update('fechaHoraHabilitacion')}
-                  className='w-full rounded-xl border border-[#E5E7EB] px-4 py-3 text-sm text-[#101828] focus:border-[#0AADA8] focus:outline-none focus:ring-2 focus:ring-[#0AADA8]/30'
-                  required
-                />
-                <p className='mt-2 text-xs text-[#64748B]'>Esta cita aplica a todos los candidatos. La prueba estará disponible a partir de este momento.</p>
-              </FormField>
+              <section className='rounded-xl border border-[#DDE5EC] bg-[#FAFBFC] p-5'>
+                <h2 className='text-sm font-semibold text-[#101828]'>Disponibilidad de la Fase A</h2>
+                <div className='mt-4 grid gap-4 sm:grid-cols-2'>
+                  <FormField label='Apertura del enlace' htmlFor='fechaHoraHabilitacion'>
+                    <input
+                      id='fechaHoraHabilitacion'
+                      type='datetime-local'
+                      value={form.fechaHoraHabilitacion}
+                      onChange={update('fechaHoraHabilitacion')}
+                      className='w-full rounded-xl border border-[#E5E7EB] bg-white px-4 py-3 text-sm text-[#101828] focus:border-[#0AADA8] focus:outline-none focus:ring-2 focus:ring-[#0AADA8]/30'
+                      required
+                    />
+                  </FormField>
+                  <FormField label='Cierre del enlace' htmlFor='fechaHoraCierre'>
+                    <input
+                      id='fechaHoraCierre'
+                      type='datetime-local'
+                      value={form.fechaHoraCierre}
+                      min={form.fechaHoraHabilitacion || undefined}
+                      onChange={update('fechaHoraCierre')}
+                      className='w-full rounded-xl border border-[#E5E7EB] bg-white px-4 py-3 text-sm text-[#101828] focus:border-[#0AADA8] focus:outline-none focus:ring-2 focus:ring-[#0AADA8]/30'
+                      required
+                    />
+                  </FormField>
+                </div>
+                <p className='mt-3 text-xs leading-5 text-[#64748B]'>Aplica a todos los candidatos: el enlace de cada uno funciona solo entre la apertura y el cierre. Las fechas de las Fases B y C se eligen al enviarlas.</p>
+              </section>
             )}
 
             <FormField label='Descripción (opcional)' htmlFor='descripcion'>

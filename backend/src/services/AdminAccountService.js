@@ -1,7 +1,9 @@
 const { randomBytes } = require('crypto');
 const { z } = require('zod');
 const { ForbiddenError, NotFoundError, ValidationError } = require('../utils/errors');
-const { ALL_PERMISSIONS, catalog, adminEmail, permissionsOf, requirePermission, canDelegate } = require('../utils/adminPermissions');
+const {
+  ALL_PERMISSIONS, catalog, adminEmail, normalizePermissions, permissionsOf, requirePermission, canDelegate,
+} = require('../utils/adminPermissions');
 
 const accessSchema = z.object({
   displayName: z.string().trim().min(2).max(120),
@@ -18,7 +20,7 @@ const parse = (schema, data) => {
 const safeAccount = (user) => ({
   id: user.id, username: user.username || '', email: user.email || '', displayName: user.displayName || '',
   role: user.role, companyName: user.companyName || '', status: user.status || 'active',
-  adminAccess: user.adminAccess || 'restricted', permissions: user.permissions || [], revision: user.revision || 0,
+  adminAccess: user.adminAccess || 'restricted', permissions: normalizePermissions(user.permissions || []), revision: user.revision || 0,
   createdAt: user.createdAt || null,
 });
 

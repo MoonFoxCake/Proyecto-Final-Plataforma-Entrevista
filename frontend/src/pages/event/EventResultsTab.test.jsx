@@ -60,19 +60,28 @@ test('onsite Module B: picks who continues and asks for the session in a dialog'
 
   await waitFor(() => expect(eventService.sendModuleBInvitations).toHaveBeenCalledWith('event-1', ['c1'], expect.objectContaining({
     sede: 'Campus Central', ubicacion: 'Aula 204', fechaHoraInicio: new Date('2026-11-20T09:00').toISOString(),
-  })));
+  }), undefined));
   expect(await screen.findByText('Se envió la citación al Módulo B a 1 candidato(s).')).toBeTruthy();
 });
 
-test('online Module B keeps its confirmation before sending links', async () => {
+test('online Module B asks when its link opens and closes before sending', async () => {
   eventService.getEvent.mockResolvedValue({ ...PUBLISHED, modality: 'online', onsite: undefined });
   eventService.sendModuleBInvitations.mockResolvedValue({ total: 1, sent: 1, failed: 0 });
   renderEvent('/company/events/event-1/resultados');
 
   fireEvent.click(await screen.findByRole('checkbox', { name: 'Seleccionar a María López para el Módulo B' }));
   fireEvent.click(screen.getByRole('button', { name: 'Enviar Módulo B (1)' }));
-  expect(window.confirm).toHaveBeenCalled();
-  await waitFor(() => expect(eventService.sendModuleBInvitations).toHaveBeenCalledWith('event-1', ['c1'], undefined));
+  const dialog = within(screen.getByRole('dialog', { name: 'Enviar Módulo B (1)' }));
+  fireEvent.click(dialog.getByRole('button', { name: 'Enviar enlaces' }));
+  expect(dialog.getByRole('alert').textContent).toMatch(/apertura del enlace/);
+  fireEvent.change(dialog.getByLabelText('Apertura del enlace'), { target: { value: '2099-11-20T08:00' } });
+  fireEvent.change(dialog.getByLabelText('Cierre del enlace'), { target: { value: '2099-11-22T18:00' } });
+  fireEvent.click(dialog.getByRole('button', { name: 'Enviar enlaces' }));
+  await waitFor(() => expect(eventService.sendModuleBInvitations).toHaveBeenCalledWith('event-1', ['c1'], undefined, {
+    fechaHoraApertura: new Date('2099-11-20T08:00').toISOString(),
+    fechaHoraCierre: new Date('2099-11-22T18:00').toISOString(),
+  }));
+  expect(await screen.findByText('Se envió el Módulo B a 1 candidato(s).')).toBeTruthy();
 });
 
 test('events without Module B only list the phase A status', async () => {

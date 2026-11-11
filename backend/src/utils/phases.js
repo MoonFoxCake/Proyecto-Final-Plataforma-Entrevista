@@ -30,4 +30,25 @@ function phaseState(module, candidates) {
   return { total: participants.length, completed, open, withdrawn, complete: completed > 0 && open === 0 };
 }
 
-module.exports = { WITHDRAWN, hasResponse, isWithdrawn, hasCompleted, inPhase, phaseState };
+/** A phase is ready for its PDF when everyone still in it answered (older processes: Module A once published). */
+function isPhaseReady(event, module, candidates) {
+  if (module === 'A' && (event.evaluationsPublishedAt || event.status === 'PUBLISHED')) return true;
+  if (module === 'B' && !event.moduleB?.macrocase) return false;
+  if (module === 'C' && !event.moduleC?.microcase) return false;
+  return phaseState(module, candidates).complete;
+}
+
+/**
+ * Where the result of each phase stands for the admin:
+ * DELIVERED (PDF sent), PENDING (finished, waiting for its PDF),
+ * IN_PROGRESS (someone was invited) or NOT_STARTED.
+ */
+function reportState(event, module, candidates) {
+  if (event.moduleResults?.[module]?.deliveredAt) return 'DELIVERED';
+  if (isPhaseReady(event, module, candidates)) return 'PENDING';
+  return phaseState(module, candidates).total > 0 ? 'IN_PROGRESS' : 'NOT_STARTED';
+}
+
+module.exports = {
+  WITHDRAWN, hasResponse, isWithdrawn, hasCompleted, inPhase, phaseState, isPhaseReady, reportState,
+};

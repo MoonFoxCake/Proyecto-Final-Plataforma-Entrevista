@@ -38,7 +38,7 @@ describe('evaluation phases, through the HTTP API', () => {
     const start = new Date();
     return { sede: 'Campus', ubicacion: 'Aula', fechaHoraInicio: start.toISOString(), fechaHoraFin: new Date(start.getTime() + 180 * 60000).toISOString(), ventanaInicioMinutos: minutes };
   };
-  const virtualEvent = (extra = {}) => asCompany('post', '/events', { nombre: 'Proceso', puesto: 'Analista', modalidad: 'virtual', fechaHoraHabilitacion: new Date(Date.now() - 60000).toISOString(), incluirModuloB: true, incluirModuloC: true, ...extra });
+  const virtualEvent = (extra = {}) => asCompany('post', '/events', { nombre: 'Proceso', puesto: 'Analista', modalidad: 'virtual', fechaHoraHabilitacion: new Date(Date.now() - 60000).toISOString(), fechaHoraCierre: new Date(Date.now() + 7 * 864e5).toISOString(), incluirModuloB: true, incluirModuloC: true, ...extra });
   const addCandidate = async (eventId, name) => (await asCompany('post', `/events/${eventId}/candidates`, { nombreCompleto: name, cedula: name, correo: `${name}@example.test` })).body.data;
 
   const answerModuleA = async (token) => {
@@ -51,7 +51,7 @@ describe('evaluation phases, through the HTTP API', () => {
       if (stage.step === 'review') return request(app).post(`${API}/invitations/access/submit`).send({ token, finalize: true });
       const action = stage.step === 'intro' ? { type: 'START' }
         : stage.step === 'narrative' ? { type: 'FINISH_NARRATIVE', sectionId: stage.section.id }
-          : { type: 'ANSWER', questionId: stage.question.id, value: 5 };
+          : { type: 'ANSWER', questionId: stage.question.id, value: stage.question.options[0].id };
       await request(app).post(`${API}/invitations/access/macrocase/advance`).send({ token, action });
     }
     throw new Error('El macrocaso no terminó.');
@@ -84,7 +84,7 @@ describe('evaluation phases, through the HTTP API', () => {
     company = 'company-1';
     await repos.userRepo.create({ uid: company, role: 'company', orgId: org.id });
     await repos.userRepo.create({ uid: 'admin-1', role: 'admin', orgId: null, adminAccess: 'owner', status: 'active' });
-    await container.macrocaseService.createMacroCase({ name: 'Macro', defaultTimeLimit: 0, active: true, sections: [{ title: 'S1', narrative: 'Texto', questions: [{ text: 'P1' }] }] });
+    await container.macrocaseService.createMacroCase({ name: 'Macro', defaultTimeLimit: 0, active: true, sections: [{ title: 'S1', narrative: 'Texto', questions: [{ text: 'P1', options: ['A', 'B', 'C', 'D'].map((text) => ({ text })) }] }] });
     const micro = await container.microcaseService.create({ name: 'Micro', story: 'Historia', timeLimitMinutes: 5, sections: [{ title: 'Habilidad 1', questions: [{ text: 'a1' }, { text: 'a2' }, { text: 'a3' }] }, { title: 'Habilidad 2', questions: [{ text: 'b1' }] }] });
     await container.microcaseService.setActive(micro.id, true);
     app = createApp(container);
@@ -121,22 +121,22 @@ describe('evaluation phases, through the HTTP API', () => {
 
     // Finished: the phase is waiting for its PDF, and the next one is closed.
     expect((await asAdmin('get', '/admin/results/pending')).body.data).toEqual([expect.objectContaining({ eventId: event.id, module: 'A', completed: 2 })]);
-    expect((await asCompany('post', `/events/${event.id}/module-b/invitations`, { candidateIds: ids })).status).toBe(400);
+    expect((await asCompany('post', `/events/${event.id}/module-b/invitations`, { candidateIds: ids, ventana: { fechaHoraApertura: new Date(Date.now() - 60000).toISOString(), fechaHoraCierre: new Date(Date.now() + 3 * 864e5).toISOString() } })).status).toBe(400);
 
     await publishA(event.id);
     expect((await asCompany('get', `/events/${event.id}/results/A/download`)).body.data.url).toBe('https://storage.test/result.pdf');
     expect(emails.at(-1)).toMatchObject({ to: ['rrhh@example.test'], subject: expect.stringContaining('Resultado de Fase A') });
 
-    expect((await asCompany('post', `/events/${event.id}/module-b/invitations`, { candidateIds: ids })).body.data.sent).toBe(2);
+    expect((await asCompany('post', `/events/${event.id}/module-b/invitations`, { candidateIds: ids, ventana: { fechaHoraApertura: new Date(Date.now() - 60000).toISOString(), fechaHoraCierre: new Date(Date.now() + 3 * 864e5).toISOString() } })).body.data.sent).toBe(2);
     for (const candidate of [ana, beto]) expect((await runMacrocase(tokenFor(candidate.correo))).body.data.state).toBe('COMPLETED');
 
     const sections = event.moduleC.microcase.sections.map((section) => section.id);
     expect((await asCompany('put', `/events/${event.id}/module-c/configure`, { sectionIds: [sections[0]] })).status).toBe(200);
-    expect((await asCompany('post', `/events/${event.id}/module-c/invitations`, { candidateIds: ids })).status).toBe(400);
+    expect((await asCompany('post', `/events/${event.id}/module-c/invitations`, { candidateIds: ids, ventana: { fechaHoraApertura: new Date(Date.now() - 60000).toISOString(), fechaHoraCierre: new Date(Date.now() + 3 * 864e5).toISOString() } })).status).toBe(400);
     expect((await deliver(event.id, 'B')).status).toBe(200);
 
     // Only the skills the company chose, and the same question for everyone.
-    expect((await asCompany('post', `/events/${event.id}/module-c/invitations`, { candidateIds: ids })).body.data.sent).toBe(2);
+    expect((await asCompany('post', `/events/${event.id}/module-c/invitations`, { candidateIds: ids, ventana: { fechaHoraApertura: new Date(Date.now() - 60000).toISOString(), fechaHoraCierre: new Date(Date.now() + 3 * 864e5).toISOString() } })).body.data.sent).toBe(2);
     const accesses = [];
     for (const candidate of [ana, beto]) accesses.push((await request(app).get(`${API}/invitations/access`).query({ token: tokenFor(candidate.correo) })).body.data);
     expect(accesses[0].microcase.questions).toHaveLength(1);
@@ -220,12 +220,12 @@ describe('evaluation phases, through the HTTP API', () => {
       await asCompany('post', `/events/${event.id}/invitations/publish`);
       await answerModuleA(tokenFor(ana.correo));
       await publishA(event.id);
-      await asCompany('post', `/events/${event.id}/module-b/invitations`, { candidateIds: [ana.id] });
+      await asCompany('post', `/events/${event.id}/module-b/invitations`, { candidateIds: [ana.id], ventana: { fechaHoraApertura: new Date(Date.now() - 60000).toISOString(), fechaHoraCierre: new Date(Date.now() + 3 * 864e5).toISOString() } });
       await runMacrocase(tokenFor(ana.correo));
       await deliver(event.id, 'B');
       const sections = event.moduleC.microcase.sections.map((section) => section.id);
       await asCompany('put', `/events/${event.id}/module-c/configure`, { sectionIds: sections });
-      await asCompany('post', `/events/${event.id}/module-c/invitations`, { candidateIds: [ana.id] });
+      await asCompany('post', `/events/${event.id}/module-c/invitations`, { candidateIds: [ana.id], ventana: { fechaHoraApertura: new Date(Date.now() - 60000).toISOString(), fechaHoraCierre: new Date(Date.now() + 3 * 864e5).toISOString() } });
       const token = tokenFor(ana.correo);
       return { event, ana, token };
     };
@@ -297,11 +297,14 @@ describe('evaluation phases, through the HTTP API', () => {
       ...current,
       landing: { ...current.landing, heroTitle: 'Título propio' },
       plans: { ...current.plans, completo: { ...current.plans.completo, price: '₡50.000' } },
-      evaluation: { ...current.evaluation, moduleAValidityHours: 48 },
+      evaluation: { ...current.evaluation, defaultEntryWindowMinutes: 45 },
       emails: { ...current.emails, invitationSubject: 'Hola de {empresa} · {evento}' },
       notifications: { adminEmail: 'admin@example.test' },
     });
     expect(saved.status).toBe(200);
+    // The opening and closing of the links are no longer an admin setting.
+    expect(current.evaluation).toEqual({ defaultEntryWindowMinutes: 30 });
+    expect((await asAdmin('put', '/admin/settings', { ...current, evaluation: { ...current.evaluation, moduleAValidityHours: 48 } })).status).toBe(400);
 
     const open = (await request(app).get(`${API}/public/settings`)).body.data;
     expect(open.landing.heroTitle).toBe('Título propio');
@@ -317,6 +320,38 @@ describe('evaluation phases, through the HTTP API', () => {
     // Finishing a phase tells the administrators, once.
     await answerModuleA(tokenFor(ana.correo));
     expect(emails.at(-1)).toMatchObject({ to: ['admin@example.test'], subject: 'Fase A lista para entrega · Proceso' });
+  });
+
+  test('the company sets when each virtual phase opens and closes', async () => {
+    // Module A: the process needs its closing, after its opening.
+    const missingClose = await asCompany('post', '/events', { nombre: 'P', puesto: 'Analista', modalidad: 'virtual', fechaHoraHabilitacion: new Date().toISOString() });
+    expect(missingClose.status).toBe(400);
+    const backwards = await asCompany('post', '/events', { nombre: 'P', puesto: 'Analista', modalidad: 'virtual', fechaHoraHabilitacion: new Date(Date.now() + 864e5).toISOString(), fechaHoraCierre: new Date().toISOString() });
+    expect(backwards.status).toBe(400);
+
+    const event = (await virtualEvent()).body.data;
+    expect(new Date(event.availableUntil).getTime()).toBeGreaterThan(Date.now());
+    const ana = await addCandidate(event.id, 'ana');
+    await asCompany('post', `/events/${event.id}/invitations/publish`);
+    const invitationA = container.repos.invitationRepo.data.find((item) => item.candidateId === ana.id);
+    expect(new Date(invitationA.expiresAt).getTime()).toBe(new Date(event.availableUntil).getTime());
+    await answerModuleA(tokenFor(ana.correo));
+    await publishA(event.id);
+
+    // Module B: its own opening and closing, required and checked.
+    const url = `/events/${event.id}/module-b/invitations`;
+    expect((await asCompany('post', url, { candidateIds: [ana.id] })).body.error.message).toMatch(/apertura y de cierre/);
+    const closed = { fechaHoraApertura: new Date(Date.now() - 2 * 864e5).toISOString(), fechaHoraCierre: new Date(Date.now() - 864e5).toISOString() };
+    expect((await asCompany('post', url, { candidateIds: [ana.id], ventana: closed })).body.error.message).toMatch(/fecha futura/);
+    const opensAt = new Date(Date.now() + 2 * 3600e3);
+    const closesAt = new Date(Date.now() + 5 * 3600e3);
+    const ventana = { fechaHoraApertura: opensAt.toISOString(), fechaHoraCierre: closesAt.toISOString() };
+    expect((await asCompany('post', url, { candidateIds: [ana.id], ventana })).body.data.sent).toBe(1);
+    expect(emails.at(-1).html).toContain('Disponible desde');
+    // Before its opening the link only says when it opens.
+    const access = (await request(app).get(`${API}/invitations/access`).query({ token: tokenFor(ana.correo) })).body.data;
+    expect(access.state).toBe('NOT_YET_AVAILABLE');
+    expect(new Date(access.expiresAt).getTime()).toBe(closesAt.getTime());
   });
 
   test('a macrocase with invalid data is rejected', async () => {

@@ -3,33 +3,53 @@ import { AUTOPLAY_BLOCKED, TalkingAvatarView } from '../../avatar/TalkingAvatarV
 import { NO_SPANISH_VOICE } from '../../../services/speechSynthesis.js';
 import { fromMicrosoftVisemes } from '../../../lib/talking-avatar/index.js';
 
+// Pause between the parts read in a row (a question and each of its options).
+const PAUSE_BETWEEN_PARTS_MS = 450;
+
 /**
- * Speech of one piece of content (a section narrative or a question) by the
- * avatar. Each stage mounts its own avatar, and unmounting it cuts whatever
- * it was saying, so audio from different stages never overlaps.
+ * Speech of one piece of content (a section narrative, or a question followed
+ * by its options) by the avatar. Each stage mounts its own avatar, and
+ * unmounting it cuts whatever it was saying, so audio from different stages
+ * never overlaps.
  *
- * `speak()` always starts from the beginning (repeat); `stop()` cuts it.
+ * `parts` are read one after the other, each with its own audio; without it
+ * the content itself is the only part. `speak()` always starts from the
+ * beginning (repeat); `stop()` cuts it.
  */
-export function useAvatarSpeech({ text, audioUrl, visemes }) {
+export function useAvatarSpeech({ text, audioUrl, visemes, parts }) {
   const avatarRef = useRef(null);
+  const runRef = useRef(0);
   const [speaking, setSpeaking] = useState(false);
   const [ready, setReady] = useState(false);
   const [played, setPlayed] = useState(false);
   const [voiceUnavailable, setVoiceUnavailable] = useState(false);
   const [autoplayBlocked, setAutoplayBlocked] = useState(false);
+  const sequence = parts?.length ? parts : [{ text, audioUrl, visemes }];
 
   const speak = useCallback(async () => {
     setPlayed(true);
-    // Generated voices come with Azure viseme ids for exact lip-sync; uploaded
-    // audio has none and the mouth follows the volume instead.
-    const timeline = visemes?.length ? fromMicrosoftVisemes(visemes) : null;
-    const result = await avatarRef.current?.speak({ text, audioUrl: audioUrl || '', visemes: timeline });
-    setVoiceUnavailable(result?.reason === NO_SPANISH_VOICE);
-    setAutoplayBlocked(result?.reason === AUTOPLAY_BLOCKED);
+    runRef.current += 1;
+    const run = runRef.current;
+    let result;
+    for (const [index, part] of sequence.entries()) {
+      if (index > 0) await new Promise((resolve) => { setTimeout(resolve, PAUSE_BETWEEN_PARTS_MS); });
+      if (run !== runRef.current) return { completed: false };
+      // Generated voices come with Azure viseme ids for exact lip-sync; uploaded
+      // audio has none and the mouth follows the volume instead.
+      const timeline = part.visemes?.length ? fromMicrosoftVisemes(part.visemes) : null;
+      result = await avatarRef.current?.speak({ text: part.text, audioUrl: part.audioUrl || '', visemes: timeline });
+      setVoiceUnavailable(result?.reason === NO_SPANISH_VOICE);
+      setAutoplayBlocked(result?.reason === AUTOPLAY_BLOCKED);
+      if (!result?.completed || run !== runRef.current) return result;
+    }
     return result;
-  }, [text, audioUrl, visemes]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [JSON.stringify(sequence.map((part) => [part.text, part.audioUrl]))]);
 
-  const stop = useCallback(() => avatarRef.current?.stop(), []);
+  const stop = useCallback(() => {
+    runRef.current += 1;
+    avatarRef.current?.stop();
+  }, []);
   const whenReady = useCallback(() => avatarRef.current?.whenReady() ?? Promise.resolve(), []);
 
   return {

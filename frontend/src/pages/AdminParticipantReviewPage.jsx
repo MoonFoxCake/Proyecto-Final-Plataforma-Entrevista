@@ -28,7 +28,20 @@ function ModuleCAnswers({ moduleC }) {
 }
 
 function ModuleBAnswer({ answer }) {
-  return <article className='p-5'><span className='text-xs font-bold uppercase tracking-wide text-[#0A8F8A]'>Pregunta {String(answer.number).padStart(2, '0')}</span><p className='mt-3 text-sm leading-6 text-[#10233A]'>“{answer.question}”</p><div className='mt-4 rounded-xl bg-[#F6F9FC] p-4'><div className='flex flex-wrap items-center justify-between gap-2'><p className='text-[11px] uppercase tracking-wide text-[#7C8AA0]'>Respuesta del candidato</p>{answer.timedOut && <span className='rounded bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700'>Enviada al agotarse el tiempo</span>}</div><p className={`mt-1 whitespace-pre-line text-sm leading-6 ${answer.label || answer.text ? 'text-[#334E68]' : 'italic text-[#94A3B8]'}`}>{answer.label ? `${answer.value} / 5 · ${answer.label}` : answer.text || 'Sin respuesta: el tiempo se agotó.'}</p></div></article>;
+  const timedOutTag = answer.timedOut && <span className='rounded bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700'>Enviada al agotarse el tiempo</span>;
+  // Multiple choice: the four options offered, with the one the candidate marked.
+  if (answer.options?.length) {
+    return <article className='p-5'>
+      <div className='flex flex-wrap items-center justify-between gap-2'><span className='text-xs font-bold uppercase tracking-wide text-[#0A8F8A]'>Pregunta {String(answer.number).padStart(2, '0')}</span>{timedOutTag}</div>
+      <p className='mt-3 text-sm leading-6 text-[#10233A]'>“{answer.question}”</p>
+      <ul className='mt-4 grid gap-2' aria-label='Opciones de respuesta'>{answer.options.map((option) => {
+        const chosen = option === answer.label;
+        return <li key={option} className={`flex items-start gap-3 rounded-xl border p-3 text-sm ${chosen ? 'border-[#18A9A4] bg-[#F0FBFA] font-semibold text-[#10233A]' : 'border-[#E8EDF2] text-[#56677B]'}`}><span aria-hidden='true' className={`grid h-6 w-6 shrink-0 place-items-center rounded-md border-2 text-sm font-bold ${chosen ? 'border-[#18A9A4] bg-[#18A9A4] text-white' : 'border-[#CBD5E1] text-transparent'}`}>✕</span><span>{option}{chosen && <span className='sr-only'> (respuesta del candidato)</span>}</span></li>;
+      })}</ul>
+      {!answer.label && <p className='mt-3 text-sm italic text-[#94A3B8]'>Sin respuesta: el tiempo se agotó.</p>}
+    </article>;
+  }
+  return <article className='p-5'><span className='text-xs font-bold uppercase tracking-wide text-[#0A8F8A]'>Pregunta {String(answer.number).padStart(2, '0')}</span><p className='mt-3 text-sm leading-6 text-[#10233A]'>“{answer.question}”</p><div className='mt-4 rounded-xl bg-[#F6F9FC] p-4'><div className='flex flex-wrap items-center justify-between gap-2'><p className='text-[11px] uppercase tracking-wide text-[#7C8AA0]'>Respuesta del candidato</p>{timedOutTag}</div><p className={`mt-1 whitespace-pre-line text-sm leading-6 ${answer.label || answer.text ? 'text-[#334E68]' : 'italic text-[#94A3B8]'}`}>{answer.label ? `${answer.value} / 5 · ${answer.label}` : answer.text || 'Sin respuesta: el tiempo se agotó.'}</p></div></article>;
 }
 
 /**
@@ -54,7 +67,7 @@ function ModuleBAnswers({ moduleB }) {
 
 export function AdminParticipantReviewPage() {
   const { profile } = useAuth();
-  const canReview = can(profile, 'evaluations.review');
+  const canReview = can(profile, 'results.deliver');
   const { eventId, anonymousId } = useParams();
   const navigate = useNavigate();
   const [participant, setParticipant] = useState(null);
@@ -88,7 +101,7 @@ export function AdminParticipantReviewPage() {
   };
 
   return <div className='min-h-screen bg-[#F7F9FC] lg:flex'>
-    <AdminSidebar activeSection='processes' onSelect={(section) => navigate(`/admin-dashboard?section=${encodeURIComponent(section)}`)} />
+    <AdminSidebar activeSection='results' onSelect={(section) => navigate(`/admin-dashboard?section=${encodeURIComponent(section)}`)} />
     <main className='min-w-0 flex-1 p-5 sm:p-8'><div className='mx-auto max-w-6xl'>
       <button type='button' onClick={() => navigate(`/admin/processes/${eventId}`)} className='text-sm text-[#64748B] hover:text-[#087D79]'>← Volver al proceso</button>
       {loading ? <div className='flex min-h-80 items-center justify-center text-sm text-[#64748B]'>Cargando respuestas...</div> : error && !participant ? <p className='mt-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700'>{error}</p> : participant && <ReviewContent canReview={canReview} participant={participant} observations={observations} setObservations={setObservations} dimensions={dimensions} dimension={dimension} setDimension={setDimension} answers={answers} error={error} success={success} saving={saving} save={save} />}

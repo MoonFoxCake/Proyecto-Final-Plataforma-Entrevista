@@ -1,6 +1,8 @@
 import { AccountPasswordDialog } from './AccountPasswordDialog.jsx';
 import { canSection } from '../../utils/adminPermissions.js';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import * as adminReviewService from '../../services/adminReviewService.js';
+import { pendingReports } from '../../pages/adminProcesses.js';
 import { useNavigate } from 'react-router-dom';
 import { SpinnerIcon } from '../auth/icons.jsx';
 import { useAuth } from '../../hooks/useAuth.js';
@@ -12,12 +14,6 @@ export const ADMIN_SECTIONS = [
     'Dashboard',
     'Resumen general del sistema',
     '▦',
-  ],
-  [
-    'processes',
-    'Procesos',
-    'Gestión de procesos de selección',
-    '▣',
   ],
   [
     'companies',
@@ -46,10 +42,10 @@ export const ADMIN_SECTIONS = [
   [
     'results',
     'Resultados',
-    'Resultados y métricas',
+    'Procesos, respuestas y entrega de PDF',
     '⌁',
   ],
-  ['settings', 'Configuración', 'Textos, planes, vigencias y correos', '⚙'],
+  ['settings', 'Configuración', 'Textos, planes y correos', '⚙'],
   ['accounts', 'Accesos y usuarios', 'Administradores, permisos y cuentas', '♙'],
 ].map(([id, label, description, icon]) => ({
   id,
@@ -67,9 +63,32 @@ const initials = (name = '') =>
     .toUpperCase()
     .slice(0, 2) || 'AD';
 
+// Pending PDFs shown on "Resultados", shared by every admin page for a short while.
+const PENDING_TTL_MS = 30_000;
+let pendingCache = { at: 0, value: null, request: null };
+/** After a delivery the count is read again on the next page. */
+export const refreshPendingResults = () => { pendingCache = { ...pendingCache, at: 0 }; };
+
+function usePendingResults(enabled) {
+  const [count, setCount] = useState(pendingCache.value);
+  useEffect(() => {
+    if (!enabled) return undefined;
+    let cancelled = false;
+    if (Date.now() - pendingCache.at > PENDING_TTL_MS) {
+      pendingCache.request ||= Promise.resolve().then(() => adminReviewService.getProcesses())
+        .then((processes) => { pendingCache = { at: Date.now(), value: (processes || []).reduce((total, process) => total + pendingReports(process), 0), request: null }; })
+        .catch(() => { pendingCache = { ...pendingCache, request: null }; });
+    }
+    Promise.resolve(pendingCache.request).then(() => { if (!cancelled) setCount(pendingCache.value); });
+    return () => { cancelled = true; };
+  }, [enabled]);
+  return enabled ? count : null;
+}
+
 export function AdminSidebar({ activeSection, onSelect }) {
   const { user, profile } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
+  const pendingResults = usePendingResults(canSection(profile, 'results'));
   const navigate = useNavigate();
   const [loggingOut, setLoggingOut] = useState(false);
 
@@ -147,6 +166,11 @@ export function AdminSidebar({ activeSection, onSelect }) {
                 <span className="flex-1 text-left">
                   {item.label}
                 </span>
+                {item.id === 'results' && pendingResults > 0 && (
+                  <span title={`${pendingResults} PDF por entregar`} className="rounded-full bg-amber-400 px-2 py-0.5 text-[10px] font-bold text-[#112C4E]">
+                    {pendingResults}<span className="sr-only"> PDF por entregar</span>
+                  </span>
+                )}
 
               </button>
             ))}

@@ -3,9 +3,11 @@ import { Link } from 'react-router-dom';
 import { ArrowRightIcon, BriefcaseIcon, SpinnerIcon, UserIcon } from '../components/auth/icons.jsx';
 import * as authService from '../services/authService.js';
 import * as adminReviewService from '../services/adminReviewService.js';
+import { useAuth } from '../hooks/useAuth.js';
+import { canSection } from '../utils/adminPermissions.js';
+import { RESULT_STATES, resultState } from './adminProcesses.js';
 
 const PLANS = { 'fase-a': 'Fase A', 'fase-a-b': 'Fases A + B', completo: 'Completo' };
-const STATUSES = { ACTIVE: 'Activo', IN_REVIEW: 'En revisión', READY_TO_PUBLISH: 'Listo para publicar', PUBLISHED: 'Publicado', FINALIZED: 'Finalizado' };
 const PAGE_SIZE = 8;
 const controlClass = 'rounded-xl border border-[#DDE5EC] bg-white px-3 py-2.5 text-sm text-[#475569] focus:outline-none focus:ring-2 focus:ring-[#0AADA8] focus:ring-offset-2';
 const focusClass = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0AADA8] focus-visible:ring-offset-2';
@@ -26,19 +28,21 @@ function dateLabel(value) {
   return date ? new Intl.DateTimeFormat('es-GT', { dateStyle: 'medium' }).format(date) : 'Sin fecha';
 }
 
+/** Previous: every result delivered, finalized, or its closing date passed. */
 export function isPreviousProcess(process, now = new Date()) {
   const end = asDate(process.endDate);
-  return Boolean(process.evaluationsPublishedAt || ['PUBLISHED', 'FINALIZED'].includes(process.status) || (end && end < now));
+  return Boolean(resultState(process) === 'DELIVERED' || process.status === 'FINALIZED' || (end && end < now));
 }
 
 function processLabel(process) {
-  if (STATUSES[process.status] && process.status !== 'ACTIVE') return STATUSES[process.status];
-  if (isPreviousProcess(process)) return 'Finalizado';
-  if (asDate(process.availableFrom) > new Date()) return 'Programado';
-  return STATUSES[process.status] || 'Estado sin especificar';
+  const state = resultState(process);
+  if (state === 'NOT_STARTED' && asDate(process.availableFrom) > new Date()) return 'Programado';
+  return RESULT_STATES[state];
 }
 
 function CompanyDetail({ company, processes, processError, onRetry }) {
+  const { profile } = useAuth();
+  const canOpenResults = canSection(profile, 'results');
   const [filter, setFilter] = useState('active');
   const previous = processes.filter((process) => isPreviousProcess(process));
   const active = processes.filter((process) => !isPreviousProcess(process));
@@ -68,7 +72,7 @@ function CompanyDetail({ company, processes, processError, onRetry }) {
             <div className="flex flex-wrap items-start justify-between gap-2"><h4 className="min-w-0 break-words text-sm font-semibold text-[#10233A]">{process.name}</h4><span className={`rounded-full px-2.5 py-1 text-xs font-medium ${isPreviousProcess(process) ? 'bg-[#EEF2F6] text-[#475569]' : 'bg-[#E0F7F6] text-[#087D79]'}`}>{processLabel(process)}</span></div>
             <p className="mt-1 break-words text-xs text-[#64748B]">{process.position || 'Puesto sin especificar'}</p>
             <dl className="mt-4 grid grid-cols-2 gap-3 text-xs sm:grid-cols-3"><div><dt className="text-[#64748B]">Inicio</dt><dd className="mt-1 font-medium text-[#334155]">{dateLabel(process.availableFrom)}</dd></div><div><dt className="text-[#64748B]">Cierre</dt><dd className="mt-1 font-medium text-[#334155]">{dateLabel(process.endDate)}</dd></div><div><dt className="text-[#64748B]">Participantes</dt><dd className="mt-1 font-medium text-[#334155]">{process.summary?.totalParticipants ?? 0}</dd></div></dl>
-            <div className="mt-4 flex justify-end border-t border-[#EEF2F6] pt-3"><Link to={`/admin/processes/${encodeURIComponent(process.id)}`} className={`inline-flex items-center gap-2 rounded-md text-xs font-semibold text-[#087D79] hover:underline ${focusClass}`}>Ver proceso <ArrowRightIcon aria-hidden="true" className="h-4 w-4" /></Link></div>
+            {canOpenResults && <div className="mt-4 flex justify-end border-t border-[#EEF2F6] pt-3"><Link to={`/admin/processes/${encodeURIComponent(process.id)}`} className={`inline-flex items-center gap-2 rounded-md text-xs font-semibold text-[#087D79] hover:underline ${focusClass}`}>Ver resultados <ArrowRightIcon aria-hidden="true" className="h-4 w-4" /></Link></div>}
           </article>)}
           {visible.length === 0 && <div className="rounded-xl border border-dashed border-[#CBD5E1] p-7 text-center"><BriefcaseIcon aria-hidden="true" className="mx-auto h-6 w-6 text-[#94A3B8]" /><p className="mt-3 text-sm font-medium text-[#475569]">{processes.length === 0 ? 'Esta empresa aún no tiene procesos.' : filter === 'active' ? 'No hay procesos activos.' : 'No hay procesos anteriores.'}</p>{processes.length > 0 && <button type="button" onClick={() => setFilter('all')} className={`mt-3 rounded-md text-xs font-semibold text-[#087D79] hover:underline ${focusClass}`}>Ver todos los procesos</button>}</div>}
         </div>

@@ -28,10 +28,10 @@ class ResendEmailService {
   }
 
   /**
-   * Module A: invitation to the evaluation at the appointment time.
-   * Module B: second stage (macrocase), open right away until `expiresAt`.
+   * A virtual evaluation link, usable from `availableAt` to `expiresAt` (the
+   * opening and closing the company chose for that phase).
    */
-  async sendInvitation({ candidate, event, organization, accessUrl, module = 'A', expiresAt, templates = DEFAULT_SETTINGS.emails }) {
+  async sendInvitation({ candidate, event, organization, accessUrl, module = 'A', availableAt, expiresAt, templates = DEFAULT_SETTINGS.emails }) {
     const company = companyName(organization);
     const eventName = eventNameOf(event);
     const isModuleB = module === 'B';
@@ -39,9 +39,11 @@ class ResendEmailService {
     const values = { empresa: company, evento: eventName };
     const label = isModuleC ? 'TERCERA ETAPA' : isModuleB ? 'SEGUNDA ETAPA' : 'EVALUACIÓN DISPONIBLE';
     const intro = esc(fill(isModuleC ? templates.moduleCIntro : isModuleB ? templates.moduleBIntro : templates.invitationIntro, values));
-    const dateLine = isModuleB || isModuleC
-      ? `Disponible hasta: ${esc(formatDateTime(expiresAt))}`
-      : `Fecha y hora: ${esc(formatDateTime(candidate.fechaHoraCita || event.availableFrom))}`;
+    const opensAt = availableAt || (isModuleB || isModuleC ? null : candidate.fechaHoraCita || event.availableFrom);
+    const dateLine = [
+      opensAt ? `Disponible desde: ${esc(formatDateTime(opensAt))}` : '',
+      expiresAt ? `Disponible hasta: ${esc(formatDateTime(expiresAt))}` : '',
+    ].filter(Boolean).join('<br>');
     const note = isModuleC ? templates.moduleCNote : isModuleB ? templates.moduleBNote : '';
     const stageNote = note ? `<p>${esc(fill(note, values))}</p>` : '';
     const html = layout(label, `<h1>Hola, ${esc(candidate.nombreCompleto)}.</h1><p>${intro}</p><div style='background:#f4f8fb;border-radius:12px;padding:18px;margin:18px 0'><strong>${esc(eventName)}</strong><p>${dateLine}</p></div>${stageNote}<a href='${esc(accessUrl)}' style='display:inline-block;background:#0aada8;color:white;text-decoration:none;padding:13px 20px;border-radius:10px;font-weight:bold'>Acceder a la evaluación</a><p style='margin-top:24px;color:#718096;font-size:13px'>Este enlace es personal y temporal.</p>`);

@@ -41,9 +41,14 @@ const eventBase = {
 const eventSchema = z.preprocess(
   (body) => (body && typeof body === 'object' && body.modalidad === undefined ? { ...body, modalidad: 'virtual' } : body),
   z.discriminatedUnion('modalidad', [
-    z.object({ ...eventBase, modalidad: z.literal('virtual'), fechaHoraHabilitacion: z.string().datetime() }).strict(),
+    // The company sets when the Module A link opens and when it closes.
+    z.object({ ...eventBase, modalidad: z.literal('virtual'), fechaHoraHabilitacion: z.string().datetime(), fechaHoraCierre: z.string().datetime() }).strict(),
     z.object({ ...eventBase, modalidad: z.literal('presencial'), presencial: citationSchema }).strict(),
-  ]),
+  ]).superRefine((data, context) => {
+    if (data.modalidad === 'virtual' && new Date(data.fechaHoraCierre) <= new Date(data.fechaHoraHabilitacion)) {
+      context.addIssue({ code: z.ZodIssueCode.custom, path: ['fechaHoraCierre'], message: 'El cierre debe ser posterior a la apertura.' });
+    }
+  }),
 );
 
 const reviewSchema = z.object({
@@ -73,10 +78,18 @@ const submissionSchema = z.object({
   }
 });
 
+// Virtual phases: when the link opens and when it closes (the service checks the dates).
+const accessWindowSchema = z.object({
+  fechaHoraApertura: z.string().datetime(),
+  fechaHoraCierre: z.string().datetime(),
+}).strict();
+
 // `citacion`: only for onsite events, the appointment of the Module B session.
+// `ventana`: only for virtual events, the opening and closing of the link.
 const moduleBInvitationSchema = z.object({
   candidateIds: z.array(z.string().min(1).max(120)).min(1, 'Selecciona al menos un candidato.').max(500),
   citacion: citationSchema.optional(),
+  ventana: accessWindowSchema.optional(),
 }).strict();
 
 // Onsite access credentials: issue codes for a module, revoke / reissue one.
@@ -92,6 +105,7 @@ const moduleCConfigSchema = z.object({
 const moduleCInvitationSchema = z.object({
   candidateIds: z.array(z.string().min(1).max(120)).min(1, 'Selecciona al menos un candidato.').max(500),
   citacion: citationSchema.optional(),
+  ventana: accessWindowSchema.optional(),
 }).strict();
 
 const withdrawSchema = z.object({ modulo: phaseModule }).strict();
@@ -143,6 +157,8 @@ const timedActionSchema = z.object({
 }).strict();
 
 const stageId = z.string().min(1).max(120);
+// An option id of the question (multiple choice) or 1–5 (older Likert copies).
+const selection = z.union([z.number().int().min(1).max(5), stageId]);
 // `timedOut`: the question's time ran out and the answer goes as it was (it
 // may be null); the service only accepts it once the timer really expired.
 const macrocaseActionSchema = z.object({
@@ -151,9 +167,9 @@ const macrocaseActionSchema = z.object({
     z.object({ type: z.literal('START') }).strict(),
     z.object({ type: z.literal('FINISH_NARRATIVE'), sectionId: stageId }).strict(),
     z.object({ type: z.literal('START_TIMER'), questionId: stageId }).strict(),
-    z.object({ type: z.literal('SAVE_DRAFT'), questionId: stageId, value: z.number().int().min(1).max(5) }).strict(),
+    z.object({ type: z.literal('SAVE_DRAFT'), questionId: stageId, value: selection }).strict(),
     z.object({
-      type: z.literal('ANSWER'), questionId: stageId, value: z.number().int().min(1).max(5).nullable(), timedOut: z.boolean().optional(),
+      type: z.literal('ANSWER'), questionId: stageId, value: selection.nullable(), timedOut: z.boolean().optional(),
     }).strict(),
   ]),
 }).strict();

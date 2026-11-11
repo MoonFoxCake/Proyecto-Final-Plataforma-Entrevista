@@ -39,7 +39,7 @@ describe('event modality', () => {
   };
 
   test('an event without modality is virtual, as before, and includes Module B by default', () => {
-    const result = eventSchema.safeParse({ ...base, fechaHoraHabilitacion: '2026-10-10T15:00:00.000Z' });
+    const result = eventSchema.safeParse({ ...base, fechaHoraHabilitacion: '2026-10-10T15:00:00.000Z', fechaHoraCierre: '2026-10-11T15:00:00.000Z' });
     expect(result.success).toBe(true);
     expect(result.data).toMatchObject({ modalidad: 'virtual', incluirModuloB: true });
   });

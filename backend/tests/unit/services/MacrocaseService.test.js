@@ -10,15 +10,23 @@ const BASE = {
   defaultTimeLimit: 30,
 };
 
+/** Four options with stable ids for a question. */
+const options = (questionId) => ['Primera', 'Segunda', 'Tercera', 'Cuarta'].map((text, index) => ({ id: `${questionId}o${index + 1}`, text }));
+
 /** One section per entry: [narrative, [question texts]] with stable ids. */
 function sections(...parts) {
   return parts.map(([narrative, questions], sectionIndex) => ({
     id: `s${sectionIndex + 1}`,
     title: `Parte ${sectionIndex + 1}`,
     narrative,
-    questions: questions.map((text, questionIndex) => ({ id: `s${sectionIndex + 1}q${questionIndex + 1}`, text })),
+    questions: questions.map((text, questionIndex) => {
+      const id = `s${sectionIndex + 1}q${questionIndex + 1}`;
+      return { id, text, options: options(id) };
+    }),
   }));
 }
+
+const OPTION_VOICES = 4;
 
 function setup({ configured = true, failOn = null } = {}) {
   const repo = new InMemoryMacrocaseRepository();
@@ -54,6 +62,20 @@ describe('MacrocaseService content model', () => {
     expect(created.sections[0].questions.map((question) => [question.id, question.order, question.text])).toEqual([
       ['s1q1', 1, '¿Qué haría usted?'], ['s1q2', 2, '¿Por qué?'],
     ]);
+    expect(created.sections[0].questions[0].options).toEqual([
+      { id: 's1q1o1', order: 1, text: 'Primera' }, { id: 's1q1o2', order: 2, text: 'Segunda' },
+      { id: 's1q1o3', order: 3, text: 'Tercera' }, { id: 's1q1o4', order: 4, text: 'Cuarta' },
+    ]);
+  });
+
+  test('every question needs exactly four different options with text', async () => {
+    const { service } = setup({ configured: false });
+    const withOptions = (list) => [{ id: 's1', narrative: 'Texto', questions: [{ id: 'q1', text: 'Uno', options: list }] }];
+    await expect(service.createMacroCase({ ...BASE, sections: withOptions(options('q1').slice(0, 3)) })).rejects.toThrow('exactamente 4 opciones');
+    await expect(service.createMacroCase({ ...BASE, sections: withOptions([...options('q1'), { id: 'x', text: 'Quinta' }]) })).rejects.toThrow('exactamente 4 opciones');
+    await expect(service.createMacroCase({ ...BASE, sections: withOptions(options('q1').map((option, index) => (index === 2 ? { ...option, text: '  ' } : option))) })).rejects.toThrow('todas con texto');
+    await expect(service.createMacroCase({ ...BASE, sections: withOptions(options('q1').map((option, index) => (index === 3 ? { ...option, text: 'primera' } : option))) })).rejects.toThrow('repetidas');
+    await expect(service.createMacroCase({ ...BASE, sections: [{ id: 's1', narrative: 'Texto', questions: [{ id: 'q1', text: 'Uno' }] }] })).rejects.toThrow('exactamente 4 opciones');
   });
 
   test('reads a macrocase saved before sections existed as a single section', async () => {
@@ -72,7 +94,7 @@ describe('MacrocaseService content model', () => {
     const { repo, service } = setup({ configured: false });
     const legacy = await repo.create({ ...BASE, introduction: 'Había una vez…', questions: [{ id: 'q1', order: 1, text: 'Uno' }] });
 
-    await service.updateMacroCase(legacy.id, { sections: sections(['Había una vez…', ['Uno']]) });
+    await service.updateMacroCase(legacy.id, { sections: sections(['Había una vez…', ['Uno']]).map((section) => ({ ...section, id: 'section-1', questions: [{ ...section.questions[0], id: 'q1' }] })) });
 
     const stored = await repo.findById(legacy.id);
     expect(stored).toMatchObject({ schemaVersion: 2, introduction: null, questions: null });
@@ -81,18 +103,22 @@ describe('MacrocaseService content model', () => {
 
   test('creating with the old introduction + questions shape gives one section', async () => {
     const { service } = setup({ configured: false });
-    const created = await service.createMacroCase({ ...BASE, introduction: 'Había una vez…', questions: [{ id: 'q1', text: 'Uno' }] });
-    expect(created.sections).toEqual([expect.objectContaining({ narrative: 'Había una vez…', questions: [{ id: 'q1', order: 1, text: 'Uno' }] })]);
+    const created = await service.createMacroCase({ ...BASE, introduction: 'Había una vez…', questions: [{ id: 'q1', text: 'Uno', options: options('q1') }] });
+    expect(created.sections).toEqual([expect.objectContaining({ narrative: 'Había una vez…', questions: [expect.objectContaining({ id: 'q1', order: 1, text: 'Uno' })] })]);
   });
 
-  test('generates ids for new sections and questions and rejects repeated ones', async () => {
+  test('generates ids for new sections, questions and options and rejects repeated ones', async () => {
     const { service } = setup({ configured: false });
-    const created = await service.createMacroCase({ ...BASE, sections: [{ narrative: 'Texto', questions: [{ text: 'Uno' }, { text: 'Dos' }] }] });
-    const ids = [created.sections[0].id, ...created.sections[0].questions.map((question) => question.id)];
-    expect(new Set(ids).size).toBe(3);
+    const fresh = () => ['A', 'B', 'C', 'D'].map((text) => ({ text }));
+    const created = await service.createMacroCase({ ...BASE, sections: [{ narrative: 'Texto', questions: [{ text: 'Uno', options: fresh() }, { text: 'Dos', options: fresh() }] }] });
+    const ids = [
+      created.sections[0].id,
+      ...created.sections[0].questions.flatMap((question) => [question.id, ...question.options.map((option) => option.id)]),
+    ];
+    expect(new Set(ids).size).toBe(11);
 
     await expect(service.createMacroCase({
-      ...BASE, sections: [{ id: 's1', narrative: 'A', questions: [{ id: 'q', text: 'Uno' }] }, { id: 's2', narrative: 'B', questions: [{ id: 'q', text: 'Dos' }] }],
+      ...BASE, sections: [{ id: 's1', narrative: 'A', questions: [{ id: 'q', text: 'Uno', options: options('a') }] }, { id: 's2', narrative: 'B', questions: [{ id: 'q', text: 'Dos', options: options('b') }] }],
     })).rejects.toThrow('repetidos');
   });
 
@@ -106,14 +132,16 @@ describe('MacrocaseService content model', () => {
 });
 
 describe('MacrocaseService voice generation', () => {
-  test('create generates the voice and visemes of every narrative and question', async () => {
+  test('create generates the voice and visemes of every narrative, question and option', async () => {
     const { service, speechService } = setup();
     const created = await service.createMacroCase({
       ...BASE,
       sections: sections(['Había una vez…', [' ¿Qué haría usted? ', '¿Y el lobo?']]),
     });
 
-    expect(speechService.synthesize).toHaveBeenCalledTimes(3);
+    expect(speechService.synthesize).toHaveBeenCalledTimes(3 + 2 * OPTION_VOICES);
+    expect(created.sections[0].questions[0].options[0]).toMatchObject({ id: 's1q1o1', text: 'Primera', audioSource: 'tts', ttsText: 'Primera' });
+    expect(created.sections[0].questions[0].options[0].audioUrl).toContain(`${created.id}/s1q1-s1q1o1-voz-`);
     expect(created.sections[0].narrativeAudio).toMatchObject({ audioSource: 'tts', ttsText: 'Había una vez…' });
     expect(created.sections[0].narrativeAudio.audioUrl).toContain(`${created.id}/s1-narracion-voz-`);
     expect(created.sections[0].questions[0]).toMatchObject({
@@ -173,10 +201,10 @@ describe('MacrocaseService voice generation', () => {
     speechService.synthesize.mockClear();
 
     const updated = await service.updateMacroCase(legacy.id, {
-      sections: [{ id: 'section-1', narrative: 'Había una vez…', questions: [{ id: 'q1', text: '¿Qué haría usted?' }] }],
+      sections: [{ id: 'section-1', narrative: 'Había una vez…', questions: [{ id: 'q1', text: '¿Qué haría usted?', options: options('q1') }] }],
     });
 
-    expect(speechService.synthesize).toHaveBeenCalledTimes(1); // only the narrative
+    expect(speechService.synthesize).toHaveBeenCalledTimes(1 + OPTION_VOICES); // the narrative and the options
     expect(audioStorage.remove).not.toHaveBeenCalled();
     expect(updated.sections[0].questions[0]).toMatchObject({
       text: '¿Qué haría usted?', audioSource: 'upload', audioUrl: 'https://cdn/pregunta.ogg', audioName: 'pregunta.ogg',
@@ -206,7 +234,7 @@ describe('MacrocaseService voice generation', () => {
     }));
     await repo.update(created.id, { sections: stale });
     const updated = await service.updateMacroCase(created.id, { sections: sections(['Narrativa', ['Otro']]) });
-    expect(updated.sections[0].questions[0]).toEqual({ id: 's1q1', order: 1, text: 'Otro' });
+    expect(updated.sections[0].questions[0]).toEqual({ id: 's1q1', order: 1, text: 'Otro', options: options('s1q1').map((option, index) => ({ ...option, order: index + 1 })) });
   });
 });
 
@@ -249,7 +277,9 @@ describe('MacrocaseService bank and Module B', () => {
     });
     const snapshot = await service.pickSnapshotForModuleB();
 
-    expect(snapshot).toMatchObject({ id: created.id, schemaVersion: 2, name: BASE.name, instructions: BASE.instructions, responseType: 'likert' });
+    expect(snapshot).toMatchObject({ id: created.id, schemaVersion: 2, name: BASE.name, instructions: BASE.instructions, responseType: 'choice' });
+    expect(snapshot.sections[0].questions[0].options.map((option) => option.text)).toEqual(['Primera', 'Segunda', 'Tercera', 'Cuarta']);
+    expect(snapshot.sections[0].questions[0].options[0].audioUrl).toBe(created.sections[0].questions[0].options[0].audioUrl);
     expect(snapshot.sections.map((section) => [section.id, section.order, section.narrative])).toEqual([
       ['s1', 1, 'Primera parte'], ['s3', 2, 'Tercera parte'],
     ]);
@@ -276,7 +306,7 @@ describe('MacrocaseService bank and Module B', () => {
     const service = new MacrocaseService(repo, { speechService, audioStorage, eventRepo: { findAll: async () => events } });
     const legacy = await repo.create({ ...BASE, introduction: 'X', questions: [{ id: 'q1', order: 1, text: 'Uno', audioUrl: 'u', audioPath: 'm/legacy.mp3', audioSource: 'tts', ttsText: 'Uno' }] });
 
-    await service.updateMacroCase(legacy.id, { sections: [{ id: 'section-1', narrative: 'X', questions: [{ id: 'q1', text: 'Otra', resetAudio: true }] }] });
+    await service.updateMacroCase(legacy.id, { sections: [{ id: 'section-1', narrative: 'X', questions: [{ id: 'q1', text: 'Otra', resetAudio: true, options: options('q1') }] }] });
     expect(audioStorage.remove).not.toHaveBeenCalledWith('m/legacy.mp3');
   });
 });

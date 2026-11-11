@@ -48,7 +48,23 @@ const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
 
 // Used when no settings service is wired (tests); see SettingsService.
-const DEFAULT_VALIDITY = { moduleAValidityHours: 24, moduleBCValidityDays: 3 };
+// Only for processes created before the company chose when each virtual
+// phase closes: how long their links stayed open.
+const LEGACY_VALIDITY = { moduleAHours: 24, laterPhaseDays: 3 };
+
+/**
+ * The opening and closing the company chose for a virtual phase
+ * (`ventana`), checked: it must close after it opens and in the future.
+ */
+function toAccessWindow(ventana, now) {
+  if (!ventana) throw new ValidationError('Indica la fecha y hora de apertura y de cierre del enlace.');
+  const opensAt = new Date(ventana.fechaHoraApertura);
+  const closesAt = new Date(ventana.fechaHoraCierre);
+  if (Number.isNaN(opensAt.getTime()) || Number.isNaN(closesAt.getTime())) throw new ValidationError('Revisa la fecha y hora de apertura y de cierre.');
+  if (closesAt <= opensAt) throw new ValidationError('El cierre debe ser posterior a la apertura.');
+  if (closesAt <= now) throw new ValidationError('El cierre debe ser una fecha futura.');
+  return { opensAt, closesAt };
+}
 
 // Resend allows about 2 requests per second.
 const STATUS_CHECK_DELAY_MS = 600;
@@ -113,7 +129,10 @@ class InvitationService {
     const event = await this.eventService.getEvent(eventId, orgId);
     const onsite = isOnsite(event);
 
-    if (!onsite) this.requireFrontendUrl();
+    if (!onsite) {
+      this.requireFrontendUrl();
+      this.requireOpenWindow(event);
+    }
 
     const candidates = await this.candidateService.listByEvent(eventId, orgId);
     const pending = candidates.filter(
@@ -178,7 +197,7 @@ class InvitationService {
    * (citation: venue and time); Module B needs Module A reviewed and
    * published first, so it cannot share Module A's appointment.
    */
-  async sendModuleB(eventId, orgId, candidateIds, citation) {
+  async sendModuleB(eventId, orgId, candidateIds, citation, ventana) {
     // Validate the organization's subscription before allowing Module B.
     await this.requireModuleBSubscription(orgId);
 
@@ -200,6 +219,9 @@ class InvitationService {
         'Las citaciones solo aplican a eventos presenciales.'
       );
     }
+
+    if (onsite && ventana) throw new ValidationError('La apertura y el cierre del enlace solo aplican a procesos virtuales.');
+    const accessWindow = onsite ? null : toAccessWindow(ventana, this.now());
 
     if (!onsite) this.requireFrontendUrl();
 
@@ -275,6 +297,7 @@ class InvitationService {
               organization,
               orgId,
               module: MODULES.B,
+              accessWindow,
             })
       );
     }
@@ -295,7 +318,7 @@ class InvitationService {
     if (normalized !== 'completo') throw new ForbiddenError('Tu suscripción no incluye el Módulo C. Necesitas el Plan completo.');
   }
 
-  async sendModuleC(eventId, orgId, candidateIds, citation) {
+  async sendModuleC(eventId, orgId, candidateIds, citation, ventana) {
     await this.requireModuleCSubscription(orgId);
     let event = await this.eventService.getEvent(eventId, orgId);
     if (!modulesOf(event).includes(MODULES.C)) throw new ValidationError('Este proceso no incluye el Módulo C.');
@@ -304,6 +327,8 @@ class InvitationService {
     const onsite = isOnsite(event);
     if (onsite && !citation) throw new ValidationError('Indica la sede, ubicación y horario de la Fase C.');
     if (!onsite && citation) throw new ValidationError('Las citaciones solo aplican a procesos presenciales.');
+    if (onsite && ventana) throw new ValidationError('La apertura y el cierre del enlace solo aplican a procesos virtuales.');
+    const accessWindow = onsite ? null : toAccessWindow(ventana, this.now());
     if (!onsite) this.requireFrontendUrl();
     const candidates = await this.candidateRepo.findByEvent(eventId, orgId);
     const byId = new Map(candidates.map((candidate) => [candidate.id, candidate]));
@@ -325,7 +350,7 @@ class InvitationService {
       const updatedCandidate = { ...candidate, moduleC };
       results.push(onsite
         ? await this.citeOne({ candidate: updatedCandidate, event, organization: org, module: MODULES.C, appointment })
-        : await this.publishOne({ candidate: updatedCandidate, event, organization: org, orgId, module: MODULES.C }));
+        : await this.publishOne({ candidate: updatedCandidate, event, organization: org, orgId, module: MODULES.C, accessWindow }));
     }
     return this.summarize(results);
   }
@@ -553,8 +578,15 @@ class InvitationService {
   // ----------------------------------------------------- phases
 
   async currentSettings() {
-    if (!this.settingsService) return { evaluation: DEFAULT_VALIDITY, emails: undefined };
+    if (!this.settingsService) return { emails: undefined };
     return this.settingsService.get();
+  }
+
+  /** Module A of a virtual process: its links stop working when the process closes. */
+  requireOpenWindow(event) {
+    if (event.availableUntil && new Date(event.availableUntil) <= this.now()) {
+      throw new ValidationError('El enlace de la Fase A ya cerró: la fecha y hora de cierre del proceso pasó.');
+    }
   }
 
   /**
@@ -611,6 +643,7 @@ class InvitationService {
       return this.summarize([await this.citeOne({ candidate, event, organization, module: MODULES.A, appointment: event.onsite })]);
     }
     this.requireFrontendUrl();
+    this.requireOpenWindow(event);
     return this.summarize([await this.publishOne({ candidate, event, organization, orgId, module: MODULES.A })]);
   }
 
@@ -1001,13 +1034,17 @@ class InvitationService {
     return result;
   }
 
-  async publishOne({ candidate, event, organization, orgId, module }) {
+  /**
+   * Sends one virtual invitation. The link works from the opening to the
+   * closing the company chose: for Module A, the process's
+   * `availableFrom`–`availableUntil`; for B and C, the `accessWindow` given
+   * when sending them.
+   */
+  async publishOne({ candidate, event, organization, orgId, module, accessWindow }) {
     let invitation;
 
     try {
       const settings = await this.currentSettings();
-      const laterPhaseValidityMs = settings.evaluation.moduleBCValidityDays * DAY_MS;
-      const moduleAValidityMs = settings.evaluation.moduleAValidityHours * HOUR_MS;
 
       const previous = await this.invitationRepo.findActiveByCandidate(
         candidate.id,
@@ -1024,18 +1061,22 @@ class InvitationService {
 
       const token = crypto.randomBytes(32).toString('base64url');
       const now = Date.now();
+      const laterPhase = module === MODULES.B || module === MODULES.C;
 
-      const availableAt = module === MODULES.B || module === MODULES.C
-        ? now
+      const availableAt = laterPhase
+        ? (accessWindow ? accessWindow.opensAt.getTime() : now)
         : new Date(
             candidate.fechaHoraCita || event.availableFrom
           ).getTime();
 
       const expiresAt = new Date(
-        module === MODULES.B || module === MODULES.C
-          ? now + laterPhaseValidityMs
-          : Math.max(now, availableAt) + moduleAValidityMs
+        laterPhase
+          ? (accessWindow ? accessWindow.closesAt.getTime() : now + LEGACY_VALIDITY.laterPhaseDays * DAY_MS)
+          : (event.availableUntil ? new Date(event.availableUntil).getTime() : Math.max(now, availableAt) + LEGACY_VALIDITY.moduleAHours * HOUR_MS)
       );
+      if (Number.isNaN(availableAt) || Number.isNaN(expiresAt.getTime())) {
+        throw new Error('La apertura o el cierre del enlace no son fechas válidas.');
+      }
 
       invitation = await this.invitationRepo.create({
         candidateId: candidate.id,
@@ -1061,16 +1102,18 @@ class InvitationService {
         organization,
         accessUrl: accessUrl.toString(),
         module,
+        availableAt: new Date(availableAt),
         expiresAt,
         templates: settings.emails,
       });
+      const window = { opensAt: new Date(availableAt), closesAt: expiresAt };
 
       await this.candidateRepo.update(
         candidate.id,
         module === MODULES.B
-          ? { moduleB: { status: MODULE_B_STATUSES.INVITATION_SENT, invitationId: invitation.id, invitedAt: new Date(), emailProviderId: delivery.id } }
+          ? { moduleB: { status: MODULE_B_STATUSES.INVITATION_SENT, invitationId: invitation.id, invitedAt: new Date(), emailProviderId: delivery.id, accessWindow: window } }
           : module === MODULES.C
-            ? { moduleC: { ...(candidate.moduleC || {}), status: MODULE_C_STATUSES.INVITATION_SENT, invitationId: invitation.id, invitedAt: new Date(), emailProviderId: delivery.id } }
+            ? { moduleC: { ...(candidate.moduleC || {}), status: MODULE_C_STATUSES.INVITATION_SENT, invitationId: invitation.id, invitedAt: new Date(), emailProviderId: delivery.id, accessWindow: window } }
             : { status: CANDIDATE_STATUSES.INVITATION_SENT, invitationId: invitation.id, invitedAt: new Date(), emailProviderId: delivery.id }
       );
 

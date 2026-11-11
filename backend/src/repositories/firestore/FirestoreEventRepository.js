@@ -11,6 +11,7 @@ function serializeEvent(doc, sourceCollection) {
     date: data.date?.toDate?.() ?? data.date,
     eventDate: data.eventDate?.toDate?.() ?? data.eventDate,
     availableFrom: data.availableFrom?.toDate?.() ?? data.availableFrom,
+    availableUntil: data.availableUntil?.toDate?.() ?? data.availableUntil,
     createdAt: data.createdAt?.toDate?.() ?? data.createdAt,
     evaluationsPublishedAt: data.evaluationsPublishedAt?.toDate?.() ?? data.evaluationsPublishedAt,
     ...(data.onsite ? {

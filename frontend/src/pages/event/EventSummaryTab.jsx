@@ -78,7 +78,10 @@ export function EventSummaryTab() {
               <Fact label='Ubicación'>{event?.onsite?.room || '—'}</Fact>
             </>
           ) : (
-            <Fact label='Disponible desde'>{formatDateTime(event?.availableFrom || event?.date)}</Fact>
+            <>
+              <Fact label='Disponible desde'>{formatDateTime(event?.availableFrom || event?.date)}</Fact>
+              {event?.availableUntil && <Fact label='Disponible hasta'>{formatDateTime(event.availableUntil)}</Fact>}
+            </>
           )}
           <Fact label='Módulos'>{state.hasModuleC ? 'A · Cuestionario, B · Macrocaso y C · Microcaso' : state.hasModuleB ? 'A · Cuestionario y B · Macrocaso' : 'A · Cuestionario'}</Fact>
         </dl>

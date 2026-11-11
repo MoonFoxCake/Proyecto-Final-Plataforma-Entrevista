@@ -60,7 +60,8 @@ class EventController {
         req.params.eventId,
         req.user.orgId,
         req.body.candidateIds,
-        req.body.citacion
+        req.body.citacion,
+        req.body.ventana
       );
       res.json({ data: result });
     } catch (error) {
@@ -92,7 +93,7 @@ class EventController {
 
   sendModuleC = async (req, res, next) => {
     try {
-      const result = await this.invitationService.sendModuleC(req.params.eventId, req.user.orgId, req.body.candidateIds, req.body.citacion);
+      const result = await this.invitationService.sendModuleC(req.params.eventId, req.user.orgId, req.body.candidateIds, req.body.citacion, req.body.ventana);
       res.json({ data: result });
     } catch (error) { next(error); }
   };

@@ -11,6 +11,7 @@ import * as api from '../services/adminAccountsApi.js';
 import { changePassword } from '../services/authService.js';
 vi.mock('../services/adminAccountsApi.js', () => ({ listAdminAccounts: vi.fn(), listUserAccounts: vi.fn(), createAdminAccount: vi.fn(), updateAdminAccount: vi.fn(), setAdminStatus: vi.fn(), resetAdminPassword: vi.fn(), deleteAccount: vi.fn() }));
 vi.mock('../services/authService.js', () => ({ changePassword: vi.fn(), logout: vi.fn() }));
+vi.mock('../services/adminReviewService.js', () => ({ getProcesses: vi.fn(async () => []) }));
 const owner = { id: 'owner', role: 'admin', adminAccess: 'owner', username: 'owner', displayName: 'Propietario', status: 'active', permissions: [], revision: 1 };
 const evaluator = { id: 'reviewer', role: 'admin', adminAccess: 'restricted', username: 'reviewer', displayName: 'Ana Evaluadora', status: 'active', permissions: ['processes.view', 'evaluations.review'], revision: 1 };
 const wrap = (child, profile = owner) => <MemoryRouter><AuthContext.Provider value={{ profile, user: profile, role: profile.role, loading: false }}>{child}</AuthContext.Provider></MemoryRouter>;
@@ -24,10 +25,11 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 test('sidebar exposes only authorized sections for restricted accounts and fails closed for legacy admins', () => {
-  const { unmount } = render(wrap(<AdminSidebar activeSection="processes" onSelect={() => {}} />, evaluator));
+  const { unmount } = render(wrap(<AdminSidebar activeSection="results" onSelect={() => {}} />, evaluator));
   const nav = within(screen.getByRole('navigation'));
-  expect(nav.getByRole('button', { name: /Procesos/ })).toBeTruthy();
-  expect(nav.queryByRole('button', { name: /Empresas|Accesos|Preguntas|Macrocasos|Microcasos|Resultados/ })).toBeNull();
+  // Saved with the old ids, the account keeps its access under Resultados.
+  expect(nav.getByRole('button', { name: /Resultados/ })).toBeTruthy();
+  expect(nav.queryByRole('button', { name: /Procesos|Empresas|Accesos|Preguntas|Macrocasos|Microcasos/ })).toBeNull();
   unmount();
   expect(canSection({ role: 'admin' }, 'dashboard')).toBe(false);
   expect(canSection({ ...owner, status: 'disabled' }, 'accounts')).toBe(false);
@@ -38,7 +40,7 @@ test('protects direct routes even when menu navigation is bypassed', () => {
   expect(screen.queryByText('SECRET CONTENT')).toBeNull();
 });
 test('restricted creators cannot select full access, unknown grants or templates beyond their permissions', async () => {
-  const actor = { ...evaluator, permissions: [...evaluator.permissions, 'admins.create'] };
+  const actor = { ...evaluator, permissions: ['results.view', 'results.deliver', 'admins.create'] };
   const save = vi.fn().mockResolvedValue(undefined);
   render(wrap(<AdminAccountEditor actor={actor} onSave={save} onClose={() => {}} />, actor));
   expect(screen.getByRole('radio', { name: /Control total/ }).disabled).toBe(true);
@@ -49,7 +51,7 @@ test('restricted creators cannot select full access, unknown grants or templates
   fireEvent.change(screen.getByLabelText('Nombre de usuario'), { target: { value: 'maria' } });
   fireEvent.click(screen.getByRole('button', { name: 'Evaluador' }));
   fireEvent.click(screen.getByRole('button', { name: 'Crear cuenta' }));
-  await waitFor(() => expect(save).toHaveBeenCalledWith({ displayName: 'María Nueva', username: 'maria', adminAccess: 'restricted', permissions: ['processes.view', 'evaluations.review'] }));
+  await waitFor(() => expect(save).toHaveBeenCalledWith({ displayName: 'María Nueva', username: 'maria', adminAccess: 'restricted', permissions: ['results.view', 'results.deliver'] }));
 });
 test('creates accounts and shows the temporary password only until the credentials dialog closes', async () => {
   render(wrap(<AdminAccountsPage />));

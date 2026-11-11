@@ -3,7 +3,7 @@ import { CaseBankDialog } from './CaseBankDialog.jsx';
 import { ADMIN_PERMISSION_CATALOG, can } from '../../utils/adminPermissions.js';
 const FIELD = 'mt-1.5 w-full rounded-xl border border-[#D9E2EA] bg-white px-3 py-2.5 text-sm text-[#10233A] focus:outline-none focus:ring-2 focus:ring-[#0AADA8]/30';
 const PRESETS = [
-  ['Evaluador', ['processes.view', 'evaluations.review']],
+  ['Evaluador', ['results.view', 'results.deliver']],
   ['Gestor de contenido', ['questions.manage', 'macrocases.manage', 'microcases.manage']],
   ['Gestor de cuentas', ['admins.view', 'admins.create', 'admins.manage', 'users.view']],
 ];

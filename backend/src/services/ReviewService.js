@@ -1,6 +1,8 @@
 const { instrumentOf } = require('../utils/moduleA');
 const { NotFoundError, ValidationError } = require('../utils/errors');
-const { hasResponse, isWithdrawn, phaseState } = require('../utils/phases');
+const {
+  hasResponse, isWithdrawn, phaseState, reportState,
+} = require('../utils/phases');
 
 const QUESTIONS = Object.freeze({
   'demo-a-1': { number: 1, dimension: 'HBE', text: 'Cuando trabajo con otras personas, comunico mis ideas de forma clara y respetuosa.' },
@@ -28,6 +30,20 @@ function completionsByMonth(candidates) {
     counts[month] = (counts[month] || 0) + 1;
   });
   return counts;
+}
+
+/** Module B answer: the chosen option (or Likert value in older processes) and the options offered. */
+function macrocaseAnswer(answer, index) {
+  const hasValue = Object.prototype.hasOwnProperty.call(answer, 'value');
+  return {
+    questionId: answer.questionId,
+    number: index + 1,
+    question: answer.question,
+    text: answer.text,
+    ...(hasValue ? { value: answer.value, label: answer.answerLabel || ANSWER_LABELS[answer.value] || null } : {}),
+    ...(Array.isArray(answer.options) ? { options: answer.options } : {}),
+    timedOut: Boolean(answer.timedOut),
+  };
 }
 
 const stillIn = (candidates) => candidates.filter((candidate) => !isWithdrawn(candidate, 'A'));
@@ -145,14 +161,7 @@ class ReviewService {
       submittedAt: submission?.submittedAt || candidate.moduleB.submittedAt || null,
       macrocaseName: event.moduleB?.macrocase?.name || 'Macrocaso',
       instrumentVersion: submission?.instrumentVersion || null,
-      answers: (submission?.answers || []).map((answer, index) => ({
-        questionId: answer.questionId,
-        number: index + 1,
-        question: answer.question,
-        text: answer.text,
-        ...(Object.prototype.hasOwnProperty.call(answer, 'value') ? { value: answer.value, label: ANSWER_LABELS[answer.value] || null } : {}),
-        timedOut: Boolean(answer.timedOut),
-      })),
+      answers: (submission?.answers || []).map(macrocaseAnswer),
       sections: this.answersBySection(submission?.answers || []),
     };
   }
@@ -171,14 +180,7 @@ class ReviewService {
         section = { sectionId, number: sections.length + 1, title: answer.sectionTitle || '', answers: [] };
         sections.push(section);
       }
-      section.answers.push({
-        questionId: answer.questionId,
-        number: index + 1,
-        question: answer.question,
-        text: answer.text,
-        ...(Object.prototype.hasOwnProperty.call(answer, 'value') ? { value: answer.value, label: ANSWER_LABELS[answer.value] || null } : {}),
-        timedOut: Boolean(answer.timedOut),
-      });
+      section.answers.push(macrocaseAnswer(answer, index));
     });
     return sections;
   }
@@ -195,23 +197,6 @@ class ReviewService {
       reviewedBy: data.reviewed ? adminUid : candidate.reviewedBy,
     });
     return this.getParticipant(eventId, anonymousId);
-  }
-
-  async publish(eventId, adminUid) {
-    const event = await this.requireEvent(eventId);
-    const candidates = stillIn(await this.candidateRepo.findByEventId(eventId));
-    if (!candidates.length || !candidates.every((candidate) => hasResponse(candidate) && candidate.reviewStatus === 'REVIEWED')) {
-      throw new ValidationError('Debes revisar a todos los participantes antes de publicar.');
-    }
-    if (event.evaluationsPublishedAt) return this.getProcess(eventId);
-    const publishedAt = new Date();
-    await Promise.all(candidates.map((candidate) => this.candidateRepo.update(candidate.id, { profilePublishedAt: publishedAt })));
-    await this.eventRepo.update(eventId, {
-      status: 'PUBLISHED',
-      evaluationsPublishedAt: publishedAt,
-      evaluationsPublishedBy: adminUid,
-    });
-    return this.getProcess(eventId);
   }
 
   async buildProcess(event, includeParticipants = false) {
@@ -236,8 +221,11 @@ class ReviewService {
     const active = stillIn(candidates);
     const responsesReceived = active.filter(hasResponse).length;
     const reviewed = active.filter((candidate) => candidate.reviewStatus === 'REVIEWED').length;
+    const safe = this.safeEvent(event);
     return {
-      ...this.safeEvent(event),
+      ...safe,
+      // Result of each phase of the process: DELIVERED, PENDING, IN_PROGRESS or NOT_STARTED.
+      reports: Object.fromEntries(safe.modules.map((module) => [module, reportState(event, module, candidates)])),
       company: organization?.companyName || organization?.name || 'Empresa sin nombre',
       status: processStatus(event, candidates),
       summary: {
@@ -257,6 +245,11 @@ class ReviewService {
       modality: event.modality === 'onsite' ? 'onsite' : 'online',
       modules: Array.isArray(event.modules) && event.modules.length ? event.modules : ['A', 'B'],
       deliveredModules: Object.keys(event.moduleResults || {}).filter((module) => event.moduleResults[module]?.deliveredAt),
+      results: Object.fromEntries(Object.entries(event.moduleResults || {})
+        .filter(([, result]) => result?.deliveredAt)
+        .map(([module, result]) => [module, { fileName: result.fileName || 'resultado.pdf', deliveredAt: result.deliveredAt }])),
+      macrocaseName: event.moduleB?.macrocase?.name || null,
+      microcaseName: event.moduleC?.microcase?.name || null,
       createdAt: event.createdAt || null,
       questionnaire: (({ groupId, name, version, instrumentVersion }) => ({ groupId, name, version, instrumentVersion }))(instrumentOf(event)),
       orgId: event.orgId ?? event.recruiterOrgId ?? null,

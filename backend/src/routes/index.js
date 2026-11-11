@@ -39,7 +39,7 @@ function createApiRouter(container) {
     container.microcaseService,
     container.resultDeliveryService
   );
-  const adminReviewController = new AdminReviewController(container.reviewService, container.invitationService);
+  const adminReviewController = new AdminReviewController(container.reviewService);
 
   const macrocaseController = new MacrocaseController(
   container.macrocaseService

@@ -6,7 +6,7 @@ import { formatClock } from './timeLimit.js';
 // Short pause between the avatar appearing and its first words.
 const QUESTION_DELAY_MS = 700;
 const LIKERT_OPTIONS = ['Totalmente en desacuerdo', 'En desacuerdo', 'Neutral', 'De acuerdo', 'Totalmente de acuerdo'];
-const isSelection = (value) => Number.isInteger(value) && value >= 1 && value <= 5;
+const LETTERS = ['A', 'B', 'C', 'D'];
 // The countdown starts when the avatar finishes reading; if the audio never
 // reports its end, it starts anyway after this long.
 const MAX_READING_WAIT_MS = 45_000;
@@ -30,18 +30,23 @@ function deadlineFrom(stage) {
 }
 
 /**
- * One question: the avatar asks it aloud and the candidate answers in a
- * five-option Likert scale. The selection is saved, so a reload brings
- * it back. Answering locks it: there is no way back.
+ * One question: the avatar asks it aloud, then reads its four options, and
+ * the candidate marks one (the options come in this candidate's own order).
+ * Questions copied into a process before options existed keep the
+ * five-option Likert scale. The selection is saved, so a reload brings it
+ * back. Answering locks it: there is no way back.
  *
  * With a time limit, the countdown starts on the server once the question
- * has been read (`onStartTimer`), so reloading does not reset it. When it
- * runs out, the current selection is sent as `timedOut`.
+ * and its options have been read (`onStartTimer`), so reloading does not
+ * reset it. When it runs out, the current selection is sent as `timedOut`.
  */
 export function MacrocaseQuestion({ stage, isLast, busy, onAnswer, onSaveDraft, onStartTimer }) {
   const { question, progress } = stage;
+  const options = question.options?.length ? question.options : null;
+  const isSelection = (value) => (options ? options.some((option) => option.id === value) : Number.isInteger(value) && value >= 1 && value <= 5);
+  const selectedLabel = (value) => (options ? options.find((option) => option.id === value)?.text : LIKERT_OPTIONS[value - 1]);
   const timeLimit = stage.timer?.limitSeconds || 0;
-  const speech = useAvatarSpeech(question);
+  const speech = useAvatarSpeech({ ...question, parts: options ? [question, ...options] : null });
   const [draft, setDraft] = useState(isSelection(stage.draft) ? stage.draft : null);
   const [draftStatus, setDraftStatus] = useState(null);
   const savedDraftRef = useRef(isSelection(stage.draft) ? stage.draft : null);
@@ -145,8 +150,28 @@ export function MacrocaseQuestion({ stage, isLast, busy, onAnswer, onSaveDraft, 
               )}
             </div>
             <h1 className='mt-5 text-lg font-semibold leading-8 text-[#10233A]'>{question.text}</h1>
-            <p className='mt-2 text-sm text-[#7C8AA0]'>Selecciona qué tan de acuerdo estás con esta afirmación. Elige una sola opción.</p>
+            <p className='mt-2 text-sm text-[#7C8AA0]'>{options ? 'Marca con una X la opción que mejor represente lo que harías. Elige una sola opción.' : 'Selecciona qué tan de acuerdo estás con esta afirmación. Elige una sola opción.'}</p>
 
+            {options ? (
+              <fieldset disabled={busy} className='mt-7'>
+                <legend className='sr-only'>Elige una de las cuatro opciones</legend>
+                <div className='grid gap-3'>
+                  {options.map((option, index) => {
+                    const selected = draft === option.id;
+                    return (
+                      <label key={option.id} className={`flex cursor-pointer items-start gap-4 rounded-xl border p-4 transition ${selected ? 'border-[#18A9A4] bg-[#F0FBFA] shadow-sm' : 'border-[#D9E2EA] bg-white hover:border-[#9ED9D5] hover:bg-[#F8FCFC]'} ${busy ? 'cursor-not-allowed opacity-70' : ''}`}>
+                        <input type='radio' name={`macrocase-${question.id}`} value={option.id} checked={selected} onChange={() => setDraft(option.id)} className='peer sr-only' />
+                        <span aria-hidden='true' className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg border-2 text-lg font-bold leading-none transition peer-focus-visible:ring-2 peer-focus-visible:ring-[#18A9A4] peer-focus-visible:ring-offset-2 ${selected ? 'border-[#18A9A4] bg-[#18A9A4] text-white' : 'border-[#AEBCCA] bg-white text-transparent'}`}>✕</span>
+                        <span className='min-w-0 pt-1'>
+                          <span className={`mr-2 text-xs font-bold ${selected ? 'text-[#0A8F8A]' : 'text-[#7C8AA0]'}`}>{LETTERS[index]}.</span>
+                          <span className={`text-sm leading-6 ${selected ? 'font-semibold text-[#10233A]' : 'text-[#334E68]'}`}>{option.text}</span>
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </fieldset>
+            ) : (
             <fieldset disabled={busy} role='radiogroup' aria-label='Escala Likert de cinco opciones' className='mt-9'>
               <legend className='sr-only'>Selecciona una opción del 1 al 5</legend>
               <div className='relative mx-3 h-11'>
@@ -168,6 +193,7 @@ export function MacrocaseQuestion({ stage, isLast, busy, onAnswer, onSaveDraft, 
               <div aria-hidden='true' className='mt-3 flex justify-between gap-4 text-xs text-[#8A98A9]'><span>Muy en desacuerdo</span><span className='text-right'>Muy de acuerdo</span></div>
               <p className='mt-6 min-h-6 text-center text-sm font-semibold text-[#0A8F8A]' aria-live='polite'>{draft === null ? 'Selecciona una opción para continuar' : LIKERT_OPTIONS[draft - 1]}</p>
             </fieldset>
+            )}
             {timeLimit > 0 && (
               <div className='mt-3 h-1 overflow-hidden rounded-full bg-[#E5EBF0]' aria-hidden='true'>
                 <div className={`h-full rounded-full transition-[width] duration-300 ease-linear ${timeRunningOut ? 'bg-amber-500' : 'bg-[#17AAA5]'}`} style={{ width: `${(remaining / timeLimit) * 100}%` }} />
@@ -176,7 +202,7 @@ export function MacrocaseQuestion({ stage, isLast, busy, onAnswer, onSaveDraft, 
             <p className='sr-only' aria-live='assertive'>{timeRunningOut ? `Quedan ${TIME_WARNING_SECONDS} segundos o menos` : ''}</p>
             <div className='mt-2 flex justify-between gap-3 text-xs text-[#8A98A9]'>
               <span aria-live='polite' className={draftStatus === 'error' ? 'text-amber-700' : ''}>
-                {isSelection(draft) ? (DRAFT_STATUS[draftStatus] || 'Selección lista para continuar') : 'Selecciona una opción para continuar'}
+                {isSelection(draft) ? (DRAFT_STATUS[draftStatus] || `Seleccionaste: ${selectedLabel(draft)}`) : 'Selecciona una opción para continuar'}
               </span>
             </div>
           </section>

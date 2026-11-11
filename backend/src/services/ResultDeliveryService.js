@@ -1,5 +1,7 @@
 const { NotFoundError, ValidationError, ExternalServiceError } = require('../utils/errors');
-const { hasResponse, isWithdrawn, phaseState } = require('../utils/phases');
+const {
+  hasResponse, isWithdrawn, phaseState, isPhaseReady,
+} = require('../utils/phases');
 
 const BUCKET = process.env.SUPABASE_RESULTS_BUCKET || 'evaluation-results';
 const MODULES = ['A', 'B', 'C'];
@@ -22,10 +24,7 @@ class ResultDeliveryService {
 
   /** A phase is ready when everyone still in it answered (older processes: once published). */
   isPhaseReady(event, module, candidates) {
-    if (module === 'A' && (event.evaluationsPublishedAt || event.status === 'PUBLISHED')) return true;
-    if (module === 'B' && !event.moduleB?.macrocase) return false;
-    if (module === 'C' && !event.moduleC?.microcase) return false;
-    return phaseState(module, candidates).complete;
+    return isPhaseReady(event, module, candidates);
   }
 
   async listPending() {
@@ -97,14 +96,27 @@ class ResultDeliveryService {
     return result;
   }
 
+  /** The company downloads only its own processes' results. */
   async getDownloadUrl(eventId, module, orgId) {
     if (!MODULES.includes(module)) throw new ValidationError('Fase no válida.');
     const event = await this.eventRepo.findById(eventId);
     if (!event || (event.orgId || event.recruiterOrgId) !== orgId) throw new NotFoundError('Proceso no encontrado.');
+    return this.signedUrl(event, module);
+  }
+
+  /** The admin opens any delivered PDF from Resultados, in the browser instead of downloading it. */
+  async getAdminDownloadUrl(eventId, module) {
+    if (!MODULES.includes(module)) throw new ValidationError('Fase no válida.');
+    const event = await this.eventRepo.findById(eventId);
+    if (!event) throw new NotFoundError('Proceso no encontrado.');
+    return this.signedUrl(event, module, { inline: true });
+  }
+
+  async signedUrl(event, module, { inline = false } = {}) {
     const result = event.moduleResults?.[module];
     if (!result?.path || result.status !== 'DELIVERED') throw new NotFoundError('El resultado todavía no está disponible.');
     const { supabase } = require('../config/supabase');
-    const { data, error } = await supabase.storage.from(BUCKET).createSignedUrl(result.path, 60 * 60, { download: result.fileName });
+    const { data, error } = await supabase.storage.from(BUCKET).createSignedUrl(result.path, 60 * 60, inline ? {} : { download: result.fileName });
     if (error || !data?.signedUrl) throw new ExternalServiceError(`No se pudo generar el enlace de descarga: ${error?.message || 'error desconocido'}.`);
     return { url: data.signedUrl, fileName: result.fileName };
   }

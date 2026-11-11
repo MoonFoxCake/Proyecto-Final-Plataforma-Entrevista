@@ -2,18 +2,22 @@ const { adminPermission } = require('../middleware/adminPermission');
 const { Router } = require('express');
 const { checkPersistedRole } = require('../middleware/checkPersistedRole');
 const { validateInput } = require('../middleware/validateInput');
-const { validateParams } = require('../middleware/validateParams');
-const { reviewSchema, phaseParamSchema } = require('../validators/event.schema');
+const { reviewSchema } = require('../validators/event.schema');
 
+const RESULTS = ['results.view', 'results.deliver'];
+
+/**
+ * Resultados: every process with its anonymous participants and answers.
+ * The list also feeds the dashboard and the companies view. Closing a phase
+ * is the company's decision, so it is not offered here.
+ */
 function createAdminReviewRoutes(controller, authService) {
   const router = Router();
   router.use(checkPersistedRole(authService, 'admin'));
-  router.get('/processes', adminPermission('processes.view', 'companies.view', 'dashboard.view', 'evaluations.review', 'evaluations.publish'), controller.list);
-  router.get('/processes/:eventId', adminPermission('processes.view', 'companies.view', 'evaluations.review', 'evaluations.publish'), controller.getProcess);
-  router.get('/processes/:eventId/participants/:anonymousId', adminPermission('evaluations.review', 'evaluations.publish'), controller.getParticipant);
-  router.patch('/processes/:eventId/participants/:anonymousId', adminPermission('evaluations.review'), validateInput(reviewSchema), controller.saveReview);
-  router.post('/processes/:eventId/publish', adminPermission('evaluations.publish'), controller.publish);
-  router.post('/processes/:eventId/phases/:module/close', adminPermission('evaluations.publish'), validateParams(phaseParamSchema), controller.closePhase);
+  router.get('/processes', adminPermission(...RESULTS, 'dashboard.view', 'companies.view'), controller.list);
+  router.get('/processes/:eventId', adminPermission(...RESULTS), controller.getProcess);
+  router.get('/processes/:eventId/participants/:anonymousId', adminPermission(...RESULTS), controller.getParticipant);
+  router.patch('/processes/:eventId/participants/:anonymousId', adminPermission('results.deliver'), validateInput(reviewSchema), controller.saveReview);
   return router;
 }
 

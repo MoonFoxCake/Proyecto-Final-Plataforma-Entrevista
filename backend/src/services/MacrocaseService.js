@@ -1,10 +1,11 @@
 const crypto = require('crypto');
 const { NotFoundError, ValidationError } = require('../utils/errors');
 const {
-  MACROCASE_SCHEMA_VERSION, toSectionedMacrocase, orderedSections, macrocaseAudioPaths,
+  MACROCASE_SCHEMA_VERSION, OPTIONS_PER_QUESTION, RESPONSE_TYPE, toSectionedMacrocase, orderedSections, macrocaseAudioPaths,
 } = require('../utils/macrocase');
 
 const MAX_QUESTION_TEXT = 500;
+const MAX_OPTION_TEXT = 300;
 const MAX_SECTION_TITLE = 120;
 // About 8–9 minutes of speech: within what Azure synthesizes in one request.
 const MAX_NARRATIVE_TEXT = 8000;
@@ -99,18 +100,20 @@ class MacrocaseService {
       name: active.name,
       description: active.description || '',
       instructions: active.instructions || '',
-      responseType: 'likert',
+      responseType: RESPONSE_TYPE,
       defaultTimeLimit: active.defaultTimeLimit ?? 0,
       sections,
     };
   }
 
-  /** Sections with a narrative and at least one question with text, in order. */
+  /** Sections with a narrative and at least one complete question (text and four options), in order. */
   snapshotSections(macrocase) {
+    const complete = (question) => question.text
+      && (question.options || []).filter((option) => option.text).length === OPTIONS_PER_QUESTION;
     return orderedSections(macrocase)
       .map((section) => ({
         ...section,
-        questions: section.questions.filter((question) => question.text),
+        questions: section.questions.filter(complete),
       }))
       .filter((section) => section.narrative?.trim() && section.questions.length)
       .map((section, sectionIndex) => ({
@@ -125,8 +128,18 @@ class MacrocaseService {
             visemes: section.narrativeAudio.visemes || [],
           },
         } : {}),
-        questions: section.questions.map(({ id, text, audioUrl, audioPath, visemes }, index) => ({
-          id, order: index + 1, text, audioUrl: audioUrl || '', audioPath: audioPath || '', visemes: visemes || [],
+        questions: section.questions.map(({
+          id, text, audioUrl, audioPath, visemes, options,
+        }, index) => ({
+          id,
+          order: index + 1,
+          text,
+          audioUrl: audioUrl || '',
+          audioPath: audioPath || '',
+          visemes: visemes || [],
+          options: options.map((option) => ({
+            id: option.id, text: option.text, audioUrl: option.audioUrl || '', audioPath: option.audioPath || '', visemes: option.visemes || [],
+          })),
         })),
       }));
   }
@@ -158,7 +171,7 @@ class MacrocaseService {
       name,
       description: data.description?.trim() || '',
       instructions,
-      responseType: 'likert',
+      responseType: RESPONSE_TYPE,
       defaultTimeLimit,
       active: Boolean(data.active),
       sections,
@@ -173,7 +186,7 @@ class MacrocaseService {
   async updateMacroCase(macrocaseId, data) {
     const existing = await this.getMacroCase(macrocaseId);
     const { introduction, questions, schemaVersion, maxCharacters, ...payload } = data;
-    payload.responseType = 'likert';
+    payload.responseType = RESPONSE_TYPE;
 
     if (payload.name !== undefined) {
       payload.name = parseName(payload.name);
@@ -296,6 +309,7 @@ class MacrocaseService {
     }
     const previousSections = new Map(previous.map((section) => [section.id, section]));
     const previousQuestions = new Map(previous.flatMap((section) => section.questions || []).map((question) => [question.id, question]));
+    const previousOptions = new Map(previous.flatMap((section) => section.questions || []).flatMap((question) => question.options || []).map((option) => [option.id, option]));
     const seenIds = new Set();
     const uniqueId = (id, prefix) => {
       const value = typeof id === 'string' && id.trim() ? id.trim() : newId(prefix);
@@ -315,12 +329,32 @@ class MacrocaseService {
 
       const questions = (Array.isArray(section.questions) ? section.questions : []).map((question, questionIndex) => {
         const text = (question.text || '').trim();
-        checkLength(text, MAX_QUESTION_TEXT, `La pregunta ${questionIndex + 1} de ${label.toLowerCase()}`);
+        const questionLabel = `La pregunta ${questionIndex + 1} de ${label.toLowerCase()}`;
+        checkLength(text, MAX_QUESTION_TEXT, questionLabel);
+        const incomingOptions = Array.isArray(question.options) ? question.options : [];
+        const optionTexts = incomingOptions.map((option) => (typeof option?.text === 'string' ? option.text.trim() : ''));
+        // A question still without text is a draft the bank never uses.
+        if (text && (optionTexts.length !== OPTIONS_PER_QUESTION || optionTexts.some((optionText) => !optionText))) {
+          throw new ValidationError(`${questionLabel} debe tener exactamente ${OPTIONS_PER_QUESTION} opciones de respuesta, todas con texto.`);
+        }
+        if (text && new Set(optionTexts.map((optionText) => optionText.toLowerCase())).size !== OPTIONS_PER_QUESTION) {
+          throw new ValidationError(`${questionLabel} tiene opciones repetidas.`);
+        }
+        const options = incomingOptions.map((option, optionIndex) => {
+          checkLength(optionTexts[optionIndex], MAX_OPTION_TEXT, `La opción ${optionIndex + 1} de ${questionLabel.toLowerCase()}`);
+          return {
+            id: uniqueId(option.id, 'option'),
+            order: optionIndex + 1,
+            text: optionTexts[optionIndex],
+            ...pickAudio(previousOptions.get(option.id)),
+          };
+        });
         return {
           id: uniqueId(question.id, 'question'),
           order: questionIndex + 1,
           text,
           ...(question.resetAudio ? {} : pickAudio(previousQuestions.get(question.id))),
+          options,
         };
       });
 
@@ -356,9 +390,18 @@ class MacrocaseService {
 
       const questions = [];
       for (const question of section.questions) {
-        const voiced = await this.syncVoice(macrocaseId, question, question.id);
+        const { options = [], ...questionItem } = question;
+        const voiced = await this.syncVoice(macrocaseId, questionItem, question.id);
         changed ||= voiced.changed;
-        questions.push(voiced.item);
+        // The avatar also reads every option, each with its own voice, so it
+        // can follow the order each candidate sees.
+        const voicedOptions = [];
+        for (const option of options) {
+          const voicedOption = await this.syncVoice(macrocaseId, option, `${question.id}-${option.id}`);
+          changed ||= voicedOption.changed;
+          voicedOptions.push(voicedOption.item);
+        }
+        questions.push({ ...voiced.item, options: voicedOptions });
       }
 
       result.push({ ...withNarrativeAudio(section, narrative.item), questions });

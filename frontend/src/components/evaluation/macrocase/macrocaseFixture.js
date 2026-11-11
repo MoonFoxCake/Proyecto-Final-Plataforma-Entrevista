@@ -1,15 +1,18 @@
 /**
  * Sample macrocase (Caperucita Roja) used by the Module B tests. Same shape
  * as a `macroCases` document (v2): ordered sections, each with its
- * narrative (paragraphs separated by a blank line) and its questions.
+ * narrative (paragraphs separated by a blank line) and its questions, each
+ * with four options.
  */
+const options = (questionId, texts) => texts.map((text, index) => ({ id: `${questionId}-o${index + 1}`, order: index + 1, text, audioUrl: '' }));
+
 export const DEMO_MACROCASE = {
   id: 'demo-caperucita-roja',
   schemaVersion: 2,
   name: 'Caperucita Roja',
   description: 'Charles Perrault',
   instructions: 'Lee cada parte del cuento con atención.',
-  responseType: 'likert',
+  responseType: 'choice',
   defaultTimeLimit: 30,
   sections: [
     {
@@ -32,8 +35,8 @@ Caperucita Roja partió en seguida a ver a su abuela que vivía en otro pueblo. 
 
 —Pues bien, dijo el lobo, yo también quiero ir a verla; yo iré por este camino, y tú por aquél, y veremos quién llega primero.`,
       questions: [
-        { id: 'demo-b-1', order: 1, text: 'En el lugar de Caperucita Roja, evitaría compartir información personal con un desconocido.', audioUrl: '' },
-        { id: 'demo-b-2', order: 2, text: 'Considero que el lobo debería respetar la seguridad de las otras personas.', audioUrl: '' },
+        { id: 'demo-b-1', order: 1, text: 'En el lugar de Caperucita Roja, ¿qué harías al encontrarte con un desconocido en el bosque?', audioUrl: '', options: options('demo-b-1', ['Le contaría a dónde voy', 'Seguiría mi camino sin dar detalles', 'Le pediría que me acompañe', 'Regresaría a casa']) },
+        { id: 'demo-b-2', order: 2, text: '¿Qué debería hacer el lobo con la información que recibió?', audioUrl: '', options: options('demo-b-2', ['Usarla para su beneficio', 'Respetar la seguridad de la niña', 'Contársela a los leñadores', 'Olvidarla']) },
       ],
     },
     {
@@ -90,8 +93,8 @@ Caperucita Roja se desviste y se mete a la cama y quedó muy asombrada al ver la
 
 Y diciendo estas palabras, este lobo malo se abalanzó sobre Caperucita Roja y se la comió.`,
       questions: [
-        { id: 'demo-b-3', order: 1, text: 'En el lugar del leñador, buscaría ayuda para proteger a las personas en peligro.', audioUrl: '' },
-        { id: 'demo-b-4', order: 2, text: 'En el lugar de la abuela, verificaría la identidad de quien llama antes de abrir.', audioUrl: '' },
+        { id: 'demo-b-3', order: 1, text: 'En el lugar del leñador, ¿qué harías al saber que alguien está en peligro?', audioUrl: '', options: options('demo-b-3', ['Buscaría ayuda', 'Intervendría solo', 'No haría nada', 'Esperaría a ver qué pasa']) },
+        { id: 'demo-b-4', order: 2, text: 'En el lugar de la abuela, ¿qué harías antes de abrir la puerta?', audioUrl: '', options: options('demo-b-4', ['Abriría de inmediato', 'Verificaría quién llama', 'No abriría a nadie', 'Pediría ayuda a un vecino']) },
       ],
     },
   ],

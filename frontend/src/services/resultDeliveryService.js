@@ -17,6 +17,15 @@ export async function getPendingResults() {
   return j.data || [];
 }
 
+/** Temporary link to a delivered PDF, for the admin. */
+export async function getResultUrl(eventId, module) {
+  const t = await token();
+  const r = await fetch(`${API}/admin/results/${eventId}/${module}/download`, { headers: { Authorization: `Bearer ${t}` } });
+  const j = await r.json().catch(() => null);
+  if (!r.ok) throw failure(j, 'No se pudo abrir el PDF.');
+  return j.data;
+}
+
 export async function uploadResult(eventId, module, file) {
   const t = await token();
   const body = new FormData();

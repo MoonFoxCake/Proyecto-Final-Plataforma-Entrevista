@@ -62,8 +62,6 @@
     }
   },
   "evaluation": {
-    "moduleAValidityHours": 24,
-    "moduleBCValidityDays": 3,
     "defaultEntryWindowMinutes": 30
   },
   "emails": {
@@ -71,7 +69,7 @@
     "invitationIntro": "{empresa} te ha invitado a participar en:",
     "moduleBSubject": "Segunda etapa · {evento}",
     "moduleBIntro": "{empresa} te invita a continuar con la segunda etapa de:",
-    "moduleBNote": "En esta etapa leerás un caso y responderás, con una escala del 1 al 5, las preguntas que te hará un asistente virtual. Activa el sonido de tu dispositivo.",
+    "moduleBNote": "En esta etapa leerás un caso y responderás las preguntas que te hará un asistente virtual, eligiendo una de cuatro opciones. Activa el sonido de tu dispositivo.",
     "moduleCSubject": "Tercera etapa · {evento}",
     "moduleCIntro": "{empresa} te invita a continuar con la tercera etapa de:",
     "moduleCNote": "Leerás una historia y responderás preguntas de escala Likert sobre las habilidades seleccionadas.",

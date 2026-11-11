@@ -77,7 +77,9 @@ export function EventLayout() {
     subscription, subscriptionLoading, subscriptionError, planId, currentPlan, hasModuleB, hasModuleC,
   }), [eventId, event, candidates, reload, notify, state, subscription, subscriptionLoading, subscriptionError, planId, currentPlan, hasModuleB, hasModuleC]);
 
-  const when = state.onsite ? formatSession(event?.onsite) : `Disponible desde ${formatDateTime(event?.availableFrom || event?.date)}`;
+  const when = state.onsite
+    ? formatSession(event?.onsite)
+    : `Disponible desde ${formatDateTime(event?.availableFrom || event?.date)}${event?.availableUntil ? ` hasta ${formatDateTime(event.availableUntil)}` : ''}`;
 
   return (
     <div className='min-h-screen bg-[#F7F9FC] lg:flex'>
