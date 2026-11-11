@@ -81,7 +81,7 @@ export function EventLayout() {
 
   return (
     <div className='min-h-screen bg-[#F7F9FC] lg:flex'>
-      <CompanySidebar activeSection='events' onSelect={() => navigate('/company-dashboard')} />
+      <CompanySidebar activeSection='events' onSelect={(section) => navigate(`/company-dashboard?section=${section}`)} />
       <main className='min-w-0 flex-1 px-4 py-6 sm:px-8 sm:py-8'>
         <div className='mx-auto max-w-6xl'>
           <button type='button' onClick={() => navigate('/company-dashboard')} className='rounded text-sm text-[#64748B] hover:text-[#087D79] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0AADA8]/40'>← Eventos</button>

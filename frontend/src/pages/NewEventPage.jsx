@@ -99,7 +99,7 @@ const onsite = form.modalidad === 'presencial';
 
   return (
     <div className='min-h-screen bg-[#F7F9FC] lg:flex'>
-      <CompanySidebar activeSection='events' onSelect={() => navigate('/company-dashboard')} />
+      <CompanySidebar activeSection='events' onSelect={(section) => navigate(`/company-dashboard?section=${section}`)} />
       <main className='min-w-0 flex-1 p-5 sm:p-8'>
         <div className='mx-auto max-w-3xl'>
           <button type='button' onClick={() => navigate('/company-dashboard')} className='text-sm text-[#64748B] hover:text-[#087D79]'>← Volver a Eventos</button>
