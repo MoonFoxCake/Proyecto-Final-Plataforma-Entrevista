@@ -15,7 +15,7 @@ const { ValidationError, ForbiddenError } = require('../utils/errors');
 
 const {
   MACROCASE_SCHEMA_VERSION,
-  getSectionedMacrocase,
+  toSectionedMacrocase: getSectionedMacrocase,
   publicOverview,
   stageView,
   applyAction,

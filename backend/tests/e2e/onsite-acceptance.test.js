@@ -348,11 +348,11 @@ describe('Phase 9 · onsite evaluation, end to end', () => {
     expect(current).toMatchObject({ step: 'narrative', section: { title: 'El encargo', narrative: 'Había una vez una niña.' } });
     current = await advance({ type: 'FINISH_NARRATIVE', sectionId: current.section.id });
     expect(current.section).not.toHaveProperty('narrative');
-    current = await advance({ type: 'ANSWER', questionId: current.question.id, text: 'Ir por el camino principal' });
-    await advance({ type: 'SAVE_DRAFT', questionId: current.question.id, text: 'Que la acompañe' });
+    current = await advance({ type: 'ANSWER', questionId: current.question.id, value: 4 });
+    await advance({ type: 'SAVE_DRAFT', questionId: current.question.id, value: 5 });
 
     // 14. The connection drops; on reconnecting the same stage and draft come back.
-    expect(await stage()).toMatchObject({ step: 'question', question: { text: '¿Qué haría la madre?' }, draft: 'Que la acompañe', progress: { answered: 1 } });
+    expect(await stage()).toMatchObject({ step: 'question', question: { text: '¿Qué haría la madre?' }, draft: 5, progress: { answered: 1 } });
 
     // Then the browser closes: the supervisor recovers the session on the same computer.
     const roster = await request(app).get(`${API}/events/${state.eventId}/onsite?modulo=B`).set(as('applicator-1'));
@@ -366,12 +366,12 @@ describe('Phase 9 · onsite evaluation, end to end', () => {
     const go = (action) => request(app).post(`${API}/invitations/access/macrocase/advance`).send({ token: resumedToken, action }).then((res) => res.body.data);
 
     current = (await request(app).post(`${API}/invitations/access/macrocase/stage`).send({ token: resumedToken })).body.data;
-    expect(current).toMatchObject({ question: { text: '¿Qué haría la madre?' }, draft: 'Que la acompañe' });
-    current = await go({ type: 'ANSWER', questionId: current.question.id, text: 'Que la acompañe' });
-    for (const answer of ['Buscaría ayuda', 'Llamaría a los leñadores']) {
+    expect(current).toMatchObject({ question: { text: '¿Qué haría la madre?' }, draft: 5 });
+    current = await go({ type: 'ANSWER', questionId: current.question.id, value: 5 });
+    for (const value of [2, 3]) {
       expect(current.step).toBe('narrative');
       current = await go({ type: 'FINISH_NARRATIVE', sectionId: current.section.id });
-      current = await go({ type: 'ANSWER', questionId: current.question.id, text: answer });
+      current = await go({ type: 'ANSWER', questionId: current.question.id, value });
     }
     expect(current).toMatchObject({ step: 'review', progress: { answered: 4 } });
 

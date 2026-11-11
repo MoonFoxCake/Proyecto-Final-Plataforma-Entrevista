@@ -17,8 +17,8 @@ test('macrocase actions are a closed set with the fields each one needs', () => 
   expect(ok({ type: 'START' })).toBe(true);
   expect(ok({ type: 'FINISH_NARRATIVE', sectionId: 's1' })).toBe(true);
   expect(ok({ type: 'START_TIMER', questionId: 'q1' })).toBe(true);
-  expect(ok({ type: 'SAVE_DRAFT', questionId: 'q1', text: '' })).toBe(true);
-  expect(ok({ type: 'ANSWER', questionId: 'q1', text: 'Respuesta', timedOut: true })).toBe(true);
+  expect(ok({ type: 'SAVE_DRAFT', questionId: 'q1', value: 1 })).toBe(true);
+  expect(ok({ type: 'ANSWER', questionId: 'q1', value: null, timedOut: true })).toBe(true);
 
   expect(ok({ type: 'GO_BACK' })).toBe(false);
   expect(ok({ type: 'FINISH_NARRATIVE' })).toBe(false);

@@ -71,7 +71,7 @@ describe('InvitationService · Module B (second stage)', () => {
           return event;
         }),
       },
-      organizationRepo: { findById: jest.fn().mockResolvedValue({ id: 'org-1', name: 'TechCorp' }) },
+      organizationRepo: { findById: jest.fn().mockResolvedValue({ id: 'org-1', name: 'TechCorp', subscription: { planId: 'fase-a-b' } }) },
       emailService,
       frontendUrl: 'https://demo.example.com',
       macrocaseService,
@@ -85,13 +85,13 @@ describe('InvitationService · Module B (second stage)', () => {
   }
 
   /** Runs the whole macrocase answering each question with `answer(questionId)`. */
-  async function answerEverything(token, answer = (id) => `Respuesta ${id}`) {
+  async function answerEverything(token, answer = () => 4) {
     let stage = await service.advanceMacrocase(token, { type: 'START' });
     while (stage.step !== 'review') {
       if (stage.step === 'narrative') {
         stage = await service.advanceMacrocase(token, { type: 'FINISH_NARRATIVE', sectionId: stage.section.id });
       } else {
-        stage = await service.advanceMacrocase(token, { type: 'ANSWER', questionId: stage.question.id, text: answer(stage.question.id) });
+        stage = await service.advanceMacrocase(token, { type: 'ANSWER', questionId: stage.question.id, value: answer(stage.question.id) });
       }
     }
     return stage;
@@ -139,7 +139,7 @@ describe('InvitationService · Module B (second stage)', () => {
     expect(access).toMatchObject({ state: 'VALID', module: 'B', candidate: { nombreCompleto: 'María Apta' } });
     expect(access.macrocase).toEqual({
       name: 'Caperucita roja', description: 'Charles Perrault', instructions: 'Lee cada parte con atención.',
-      maxCharacters: 50, defaultTimeLimit: 0, totalSections: 2, totalQuestions: 3,
+      responseType: 'likert', defaultTimeLimit: 0, totalSections: 2, totalQuestions: 3,
     });
   });
 
@@ -167,16 +167,16 @@ describe('InvitationService · Module B (second stage)', () => {
       section: { id: 's1', title: 'El encargo' },
       question: { id: 'q1', order: 1, text: SNAPSHOT.sections[0].questions[0].text, audioUrl: 'https://cdn/q1.mp3', visemes: [] },
       progress: { sectionIndex: 0, questionIndex: 0, sectionQuestions: 2 },
-      draft: '',
+      draft: null,
     });
     // Once the questions start, the narrative is not sent any more.
     expect(question.section).not.toHaveProperty('narrative');
     expect(question.question).not.toHaveProperty('audioPath');
 
-    const second = await service.advanceMacrocase(token, { type: 'ANSWER', questionId: 'q1', text: 'Avisaría' });
+    const second = await service.advanceMacrocase(token, { type: 'ANSWER', questionId: 'q1', value: 4 });
     expect(second).toMatchObject({ step: 'question', question: { id: 'q2' }, progress: { answered: 1 } });
 
-    const nextSection = await service.advanceMacrocase(token, { type: 'ANSWER', questionId: 'q2', text: 'Iría con ella' });
+    const nextSection = await service.advanceMacrocase(token, { type: 'ANSWER', questionId: 'q2', value: 4 });
     expect(nextSection).toMatchObject({ step: 'narrative', section: { id: 's2', order: 2, narrative: 'El lobo la encontró en el bosque.' } });
   });
 
@@ -185,50 +185,49 @@ describe('InvitationService · Module B (second stage)', () => {
     await service.advanceMacrocase(token, { type: 'START' });
 
     // Skipping the narrative or answering a later question does nothing.
-    expect(await service.advanceMacrocase(token, { type: 'ANSWER', questionId: 'q1', text: 'Adelantada' }))
+    expect(await service.advanceMacrocase(token, { type: 'ANSWER', questionId: 'q1', value: 4 }))
       .toMatchObject({ step: 'narrative', progress: { answered: 0 } });
     await service.advanceMacrocase(token, { type: 'FINISH_NARRATIVE', sectionId: 's1' });
-    await service.advanceMacrocase(token, { type: 'ANSWER', questionId: 'q1', text: 'Primera versión' });
+    await service.advanceMacrocase(token, { type: 'ANSWER', questionId: 'q1', value: 4 });
 
     // A second answer to q1 (double click, another tab) does not replace the first.
-    const stage = await service.advanceMacrocase(token, { type: 'ANSWER', questionId: 'q1', text: 'Corregida' });
+    const stage = await service.advanceMacrocase(token, { type: 'ANSWER', questionId: 'q1', value: 4 });
     expect(stage).toMatchObject({ step: 'question', question: { id: 'q2' } });
     // Nor does going back to the first narrative.
     expect(await service.advanceMacrocase(token, { type: 'FINISH_NARRATIVE', sectionId: 's1' })).toMatchObject({ question: { id: 'q2' } });
 
     const progress = [...invitationRepo.progress.values()][0];
-    expect(progress.answers).toEqual([expect.objectContaining({ sectionId: 's1', questionId: 'q1', text: 'Primera versión' })]);
+    expect(progress.answers).toEqual([expect.objectContaining({ sectionId: 's1', questionId: 'q1', value: 4 })]);
   });
 
-  test('requires a non-empty answer within the character limit', async () => {
+  test('requires an integer Likert selection from 1 to 5 and rejects written answers', async () => {
     const token = await invite();
     await service.advanceMacrocase(token, { type: 'START' });
     await service.advanceMacrocase(token, { type: 'FINISH_NARRATIVE', sectionId: 's1' });
-
-    await expect(service.advanceMacrocase(token, { type: 'ANSWER', questionId: 'q1', text: '   ' })).rejects.toThrow('Escribe una respuesta');
-    await expect(service.advanceMacrocase(token, { type: 'ANSWER', questionId: 'q1', text: 'x'.repeat(51) })).rejects.toThrow('50 caracteres');
-    await expect(service.advanceMacrocase(token, { type: 'SAVE_DRAFT', questionId: 'q1', text: 'x'.repeat(51) })).rejects.toThrow('50 caracteres');
-    // A rejected answer leaves the candidate on the same question.
-    expect(await service.getMacrocaseStage(token)).toMatchObject({ step: 'question', question: { id: 'q1' } });
+    for (const value of [null, 0, 6, 1.5, '3', undefined]) {
+      await expect(service.advanceMacrocase(token, { type: 'ANSWER', questionId: 'q1', value })).rejects.toThrow('Selecciona una opción');
+      await expect(service.advanceMacrocase(token, { type: 'SAVE_DRAFT', questionId: 'q1', value })).rejects.toThrow('Selecciona una opción');
+    }
+    await expect(service.advanceMacrocase(token, { type: 'ANSWER', questionId: 'q1', text: 'Respuesta escrita' })).rejects.toThrow('Selecciona una opción');
   });
 
   test('a reload resumes the same stage with the saved draft', async () => {
     const token = await invite();
     await service.advanceMacrocase(token, { type: 'START' });
     await service.advanceMacrocase(token, { type: 'FINISH_NARRATIVE', sectionId: 's1' });
-    await service.advanceMacrocase(token, { type: 'SAVE_DRAFT', questionId: 'q1', text: 'A medio escribir' });
+    await service.advanceMacrocase(token, { type: 'SAVE_DRAFT', questionId: 'q1', value: 2 });
 
-    expect(await service.getMacrocaseStage(token)).toMatchObject({ step: 'question', question: { id: 'q1' }, draft: 'A medio escribir' });
+    expect(await service.getMacrocaseStage(token)).toMatchObject({ step: 'question', question: { id: 'q1' }, draft: 2 });
 
-    await service.advanceMacrocase(token, { type: 'ANSWER', questionId: 'q1', text: 'Terminada' });
-    expect(await service.getMacrocaseStage(token)).toMatchObject({ question: { id: 'q2' }, draft: '' });
+    await service.advanceMacrocase(token, { type: 'ANSWER', questionId: 'q1', value: 4 });
+    expect(await service.getMacrocaseStage(token)).toMatchObject({ question: { id: 'q2' }, draft: null });
   });
 
   test('a resent link resumes the same progress instead of starting over', async () => {
     const token = await invite();
     await service.advanceMacrocase(token, { type: 'START' });
     await service.advanceMacrocase(token, { type: 'FINISH_NARRATIVE', sectionId: 's1' });
-    await service.advanceMacrocase(token, { type: 'ANSWER', questionId: 'q1', text: 'Avisaría' });
+    await service.advanceMacrocase(token, { type: 'ANSWER', questionId: 'q1', value: 4 });
 
     const newToken = await invite();
     await expect(service.getMacrocaseStage(token)).resolves.toEqual({ state: 'CANCELLED' });
@@ -240,7 +239,7 @@ describe('InvitationService · Module B (second stage)', () => {
     await expect(service.submitEvaluation(token, { answers: [] })).rejects.toThrow('Confirma el envío de tu evaluación');
     await expect(service.submitEvaluation(token, { finalize: true })).rejects.toThrow('todas las preguntas');
 
-    const review = await answerEverything(token, (id) => ` Respuesta ${id} `);
+    const review = await answerEverything(token, () => 4);
     expect(review.summary).toEqual([
       { sectionId: 's1', order: 1, title: 'El encargo', total: 2, answered: 2, timedOut: 0 },
       { sectionId: 's2', order: 2, title: 'El bosque', total: 1, answered: 1, timedOut: 0 },
@@ -253,9 +252,9 @@ describe('InvitationService · Module B (second stage)', () => {
       instrumentVersion: 'MACROCASE:macro-1:v2',
       candidateId: approved.id,
       answers: [
-        { sectionId: 's1', sectionTitle: 'El encargo', questionId: 'q1', question: SNAPSHOT.sections[0].questions[0].text, text: 'Respuesta q1' },
-        { sectionId: 's1', sectionTitle: 'El encargo', questionId: 'q2', question: SNAPSHOT.sections[0].questions[1].text, text: 'Respuesta q2' },
-        { sectionId: 's2', sectionTitle: 'El bosque', questionId: 'q3', question: SNAPSHOT.sections[1].questions[0].text, text: 'Respuesta q3' },
+        { sectionId: 's1', sectionTitle: 'El encargo', questionId: 'q1', question: SNAPSHOT.sections[0].questions[0].text, value: 4 },
+        { sectionId: 's1', sectionTitle: 'El encargo', questionId: 'q2', question: SNAPSHOT.sections[0].questions[1].text, value: 4 },
+        { sectionId: 's2', sectionTitle: 'El bosque', questionId: 'q3', question: SNAPSHOT.sections[1].questions[0].text, value: 4 },
       ],
     })]);
     const stored = await candidateRepo.findById(approved.id);
@@ -282,7 +281,7 @@ describe('InvitationService · Module B (second stage)', () => {
     await answerEverything(token);
     await service.submitEvaluation(token, { finalize: true });
     expect(invitationRepo.submissions[0].answers).toEqual([
-      { sectionId: 'section-1', sectionTitle: '', questionId: 'q1', question: '¿Qué haría usted?', text: 'Respuesta q1' },
+      { sectionId: 'section-1', sectionTitle: '', questionId: 'q1', question: '¿Qué haría usted?', value: 4 },
     ]);
   });
 
@@ -312,29 +311,29 @@ describe('InvitationService · Module B (second stage)', () => {
       await service.advanceMacrocase(token, { type: 'START_TIMER', questionId: 'q1' });
 
       jest.advanceTimersByTime(5_000);
-      await expect(service.advanceMacrocase(token, { type: 'ANSWER', questionId: 'q1', text: '', timedOut: true }))
-        .rejects.toThrow('Escribe una respuesta');
+      await expect(service.advanceMacrocase(token, { type: 'ANSWER', questionId: 'q1', value: null, timedOut: true }))
+        .rejects.toThrow('Selecciona una opción');
 
       jest.advanceTimersByTime(25_000);
-      const next = await service.advanceMacrocase(token, { type: 'ANSWER', questionId: 'q1', text: '', timedOut: true });
+      const next = await service.advanceMacrocase(token, { type: 'ANSWER', questionId: 'q1', value: null, timedOut: true });
       expect(next).toMatchObject({ question: { id: 'q2' }, timer: { startedAt: null } });
-      expect([...invitationRepo.progress.values()][0].answers[0]).toMatchObject({ questionId: 'q1', text: '', timedOut: true });
+      expect([...invitationRepo.progress.values()][0].answers[0]).toMatchObject({ questionId: 'q1', value: null, timedOut: true });
     });
 
     test('an answer that arrives well after the deadline is flagged as timed out', async () => {
       const token = await atFirstQuestion();
       await service.advanceMacrocase(token, { type: 'START_TIMER', questionId: 'q1' });
       jest.advanceTimersByTime(60_000);
-      await service.advanceMacrocase(token, { type: 'ANSWER', questionId: 'q1', text: 'Tarde' });
-      expect([...invitationRepo.progress.values()][0].answers[0]).toMatchObject({ text: 'Tarde', timedOut: true });
+      await service.advanceMacrocase(token, { type: 'ANSWER', questionId: 'q1', value: 4 });
+      expect([...invitationRepo.progress.values()][0].answers[0]).toMatchObject({ value: 4, timedOut: true });
     });
 
     test('ignores timedOut when the macrocase has no time limit', async () => {
       const token = await invite();
       await service.advanceMacrocase(token, { type: 'START' });
       await service.advanceMacrocase(token, { type: 'FINISH_NARRATIVE', sectionId: 's1' });
-      await expect(service.advanceMacrocase(token, { type: 'ANSWER', questionId: 'q1', text: '', timedOut: true }))
-        .rejects.toThrow('Escribe una respuesta');
+      await expect(service.advanceMacrocase(token, { type: 'ANSWER', questionId: 'q1', value: null, timedOut: true }))
+        .rejects.toThrow('Selecciona una opción');
     });
   });
 });

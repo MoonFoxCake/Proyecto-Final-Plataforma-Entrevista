@@ -4,9 +4,9 @@ const { ValidationError } = require('./errors');
  * Macrocase content model (v2) and Module B stage machine.
  *
  * A macrocase is a list of ordered sections; each one has a narrative text
- * and one or more open questions:
+ * and one or more Likert statements:
  *
- *   { schemaVersion: 2, name, description, instructions, maxCharacters,
+ *   { schemaVersion: 2, name, description, instructions, responseType: "likert",
  *     defaultTimeLimit, sections: [{ id, order, title, narrative,
  *     narrativeAudio?, questions: [{ id, order, text, audioUrl, visemes … }] }] }
  *
@@ -36,6 +36,8 @@ const ACTIONS = Object.freeze({
   ANSWER: 'ANSWER',
 });
 
+const validLikert = (value) => Number.isInteger(value) && value >= 1 && value <= 5;
+
 const byOrder = (a, b) => (a.order ?? 0) - (b.order ?? 0);
 
 /** Reads any stored macrocase (v1 or v2) as a sectioned one. */
@@ -43,11 +45,12 @@ function toSectionedMacrocase(macrocase) {
   if (!macrocase) return macrocase;
   const { introduction, questions, ...rest } = macrocase;
   if (Array.isArray(macrocase.sections)) {
-    return { ...rest, instructions: rest.instructions || '', schemaVersion: MACROCASE_SCHEMA_VERSION };
+    return { ...rest, instructions: rest.instructions || '', responseType: 'likert', schemaVersion: MACROCASE_SCHEMA_VERSION };
   }
   return {
     ...rest,
     schemaVersion: MACROCASE_SCHEMA_VERSION,
+    responseType: 'likert',
     instructions: rest.instructions || '',
     sections: [{
       id: 'section-1',
@@ -92,11 +95,6 @@ function timeLimitOf(macrocase) {
   return Number.isFinite(seconds) && seconds > 0 ? Math.round(seconds) : 0;
 }
 
-function characterLimitOf(macrocase) {
-  const limit = Number(macrocase.maxCharacters);
-  return limit > 0 ? limit : Infinity;
-}
-
 /** What the candidate may know before starting: no narrative and no question text. */
 function publicOverview(macrocase) {
   const sections = orderedSections(macrocase);
@@ -104,7 +102,7 @@ function publicOverview(macrocase) {
     name: macrocase.name,
     description: macrocase.description || '',
     instructions: macrocase.instructions || '',
-    maxCharacters: Number(macrocase.maxCharacters) > 0 ? Number(macrocase.maxCharacters) : 0,
+    responseType: 'likert',
     defaultTimeLimit: timeLimitOf(macrocase),
     totalSections: sections.length,
     totalQuestions: sections.reduce((total, section) => total + section.questions.length, 0),
@@ -171,7 +169,7 @@ function stageView(macrocase, progress, now = new Date()) {
       text: question.text,
       ...publicAudio(question),
     };
-    view.draft = current.draft?.questionId === question.id ? current.draft.text : '';
+    view.draft = current.draft?.questionId === question.id && validLikert(current.draft.value) ? current.draft.value : null;
     view.timer = { limitSeconds: timeLimitOf(macrocase), startedAt: toDate(current.timerStartedAt) };
   }
   if (current.step === STEPS.REVIEW) {
@@ -205,7 +203,7 @@ function nextPosition(sections, { sectionIndex, questionIndex }) {
  * left (a double click, a second tab, a retried request) changes nothing,
  * so an answer can never be rewritten and no stage can be skipped.
  *
- * @throws {ValidationError} only for invalid content (empty or too long answer)
+ * @throws {ValidationError} for invalid Likert selections
  */
 function applyAction(macrocase, progress, action, now = new Date()) {
   const sections = orderedSections(macrocase);
@@ -232,31 +230,24 @@ function applyAction(macrocase, progress, action, now = new Date()) {
 
     case ACTIONS.SAVE_DRAFT: {
       if (!question || action.questionId !== question.id) return current;
-      const text = String(action.text ?? '');
-      if (text.trim().length > characterLimitOf(macrocase)) {
-        throw new ValidationError(`La respuesta supera los ${characterLimitOf(macrocase)} caracteres.`);
-      }
-      return { ...current, draft: { questionId: question.id, text } };
+      if (!validLikert(action.value)) throw new ValidationError('Selecciona una opción de la escala Likert (1 a 5).');
+      return { ...current, draft: { questionId: question.id, value: action.value } };
     }
 
     case ACTIONS.ANSWER: {
       if (!question || action.questionId !== question.id) return current;
-      const text = String(action.text ?? '').trim();
-      if (text.length > characterLimitOf(macrocase)) {
-        throw new ValidationError(`La respuesta supera los ${characterLimitOf(macrocase)} caracteres.`);
-      }
       const startedAt = toDate(current.timerStartedAt);
       const elapsed = startedAt ? now.getTime() - startedAt.getTime() : 0;
       const timeIsUp = Boolean(limit && startedAt && elapsed >= limit * 1000 - TIMER_GRACE_MS);
       const lateAnswer = Boolean(limit && startedAt && elapsed > limit * 1000 + TIMER_GRACE_MS);
       const timedOut = (action.timedOut === true && timeIsUp) || lateAnswer;
-      if (!text && !timedOut) {
-        throw new ValidationError('Escribe una respuesta para continuar.');
+      if (!validLikert(action.value) && !(action.value === null && timedOut)) {
+        throw new ValidationError('Selecciona una opción de la escala Likert (1 a 5).');
       }
       const answer = {
         sectionId: section.id,
         questionId: question.id,
-        text,
+        value: action.value,
         answeredAt: now,
         ...(timedOut ? { timedOut: true } : {}),
       };
@@ -287,13 +278,17 @@ function finalAnswers(macrocase, progress) {
     throw new ValidationError('Debes responder todas las preguntas antes de enviar la evaluación.');
   }
   return questions.map((question) => {
-    const { text, timedOut } = byId.get(question.id);
+    const answer = byId.get(question.id);
+    const { text, value, timedOut } = answer;
+    // Keep locked written answers recorded before the Likert migration.
+    const legacy = Object.prototype.hasOwnProperty.call(answer, 'text') && !Object.prototype.hasOwnProperty.call(answer, 'value');
+    if (!legacy && !validLikert(value) && !(value === null && timedOut)) throw new ValidationError('La respuesta Likert guardada no es válida.');
     return {
       sectionId: question.sectionId,
       sectionTitle: question.sectionTitle,
       questionId: question.id,
       question: question.text,
-      text,
+      ...(legacy ? { text } : { value }),
       ...(timedOut ? { timedOut: true } : {}),
     };
   });

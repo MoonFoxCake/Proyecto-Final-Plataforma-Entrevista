@@ -97,6 +97,7 @@ class ReviewService {
         number: index + 1,
         question: answer.question,
         text: answer.text,
+        ...(Object.prototype.hasOwnProperty.call(answer, 'value') ? { value: answer.value, label: ANSWER_LABELS[answer.value] || null } : {}),
         timedOut: Boolean(answer.timedOut),
       })),
       sections: this.answersBySection(submission?.answers || []),
@@ -122,6 +123,7 @@ class ReviewService {
         number: index + 1,
         question: answer.question,
         text: answer.text,
+        ...(Object.prototype.hasOwnProperty.call(answer, 'value') ? { value: answer.value, label: ANSWER_LABELS[answer.value] || null } : {}),
         timedOut: Boolean(answer.timedOut),
       });
     });

@@ -18,7 +18,6 @@ const EMPTY_FORM = {
   name: '',
   description: '',
   instructions: '',
-  maxCharacters: 500,
   defaultTimeLimit: 180,
   sections: [],
 };
@@ -222,7 +221,7 @@ function MacrocaseCard({ item, busy, expanded, onToggleExpanded, onToggleActive,
       <div className="flex flex-wrap gap-2 px-5">
         <span className="rounded-lg bg-[#F6F9FC] px-2.5 py-1 text-xs font-medium text-[#475569]">{plural(summary.sections, 'sección', 'secciones')}</span>
         <span className="rounded-lg bg-[#F6F9FC] px-2.5 py-1 text-xs font-medium text-[#475569]">{plural(summary.questions, 'pregunta', 'preguntas')}</span>
-        <span className="rounded-lg bg-[#F6F9FC] px-2.5 py-1 text-xs font-medium text-[#475569]">{item.maxCharacters} caracteres</span>
+        <span className="rounded-lg bg-[#F6F9FC] px-2.5 py-1 text-xs font-medium text-[#475569]">Likert · 1 a 5</span>
         <span className="rounded-lg bg-[#F6F9FC] px-2.5 py-1 text-xs font-medium text-[#475569]">{formatTimeLimit(item.defaultTimeLimit)}</span>
       </div>
 
@@ -452,7 +451,6 @@ export function AdminMacrocasesPage() {
       name: item.name || '',
       description: item.description || '',
       instructions: item.instructions || '',
-      maxCharacters: item.maxCharacters || 500,
       defaultTimeLimit: item.defaultTimeLimit ?? 180,
       sections: sectionsOf(item).map((section) => ({
         id: section.id,
@@ -555,7 +553,6 @@ export function AdminMacrocasesPage() {
 
   const validate = () => {
     if (!form.name.trim()) return { step: 0, field: 'macrocase-name', message: 'Indica el nombre del macrocaso.' };
-    if (!Number.isInteger(Number(form.maxCharacters)) || Number(form.maxCharacters) < 1) return { step: 1, field: 'macrocase-characters', message: 'El máximo de caracteres debe ser un número entero mayor que 0.' };
     if (form.defaultTimeLimit === '' || !Number.isInteger(Number(form.defaultTimeLimit)) || Number(form.defaultTimeLimit) < 0) return { step: 1, field: 'macrocase-time', message: 'El tiempo por pregunta debe ser un número entero igual o mayor que 0.' };
     if (form.sections.length === 0) return { step: 2, message: 'Agrega al menos una sección.' };
     for (const [index, section] of form.sections.entries()) {
@@ -583,7 +580,7 @@ export function AdminMacrocasesPage() {
         name: form.name.trim(),
         description: form.description.trim(),
         instructions: form.instructions.trim(),
-        maxCharacters: Number(form.maxCharacters),
+        responseType: 'likert',
         defaultTimeLimit: Number(form.defaultTimeLimit),
         // Audio fields are managed by the backend: it generates the voice
         // of every narrative and question whose text changed.
@@ -791,15 +788,12 @@ export function AdminMacrocasesPage() {
                 </label>
               </FormSection>}
 
-              {step === 1 && <FormSection title="Respuestas" description="Se aplica a todas las preguntas de este macrocaso.">
+              {step === 1 && <FormSection title="Respuestas" description="Todas las preguntas se responden mediante una única selección en la escala Likert.">
                 <div className="grid gap-4 sm:grid-cols-2">
-                  <label className="block text-xs font-medium text-[#475569]">
-                    Máximo de caracteres por respuesta
-                    <input id="macrocase-characters" type="number" min="1" step="1" value={form.maxCharacters} onChange={(e) => updateField('maxCharacters', e.target.value)} className={inputClass} />
-                  </label>
+                  <div className="rounded-xl border border-[#BDE7E3] bg-[#F0FFFE] p-4 text-sm text-[#087D79]"><p className="font-semibold">Escala Likert de 5 opciones</p><p className="mt-2 text-xs leading-6">De totalmente en desacuerdo (1) a totalmente de acuerdo (5), con una opción neutral (3).</p></div>
                   <label className="block text-xs font-medium text-[#475569]">
                     Tiempo por pregunta (segundos)
-                    <input id="macrocase-time" type="number" min="0" step="1" value={form.defaultTimeLimit} onChange={(e) => updateField('defaultTimeLimit', e.target.value)} className={inputClass} />
+                    <input id="macrocase-time" aria-label="Tiempo por pregunta (segundos)" type="number" min="0" step="1" value={form.defaultTimeLimit} onChange={(e) => updateField('defaultTimeLimit', e.target.value)} className={inputClass} />
                     <span className="mt-1 block font-normal text-[#94A3B8]">{formatTimeLimit(form.defaultTimeLimit)} · 0 = sin límite. Corre desde que el asistente termina de leer.</span>
                   </label>
                 </div>
@@ -807,7 +801,7 @@ export function AdminMacrocasesPage() {
 
               {step === 2 && <FormSection
                 title={`Secciones (${form.sections.length})`}
-                description="El candidato recorre las secciones en orden: el asistente narra el texto de cada una y luego le hace sus preguntas. Al pasar a las preguntas, el texto de la sección deja de estar visible."
+                description="Redacta las preguntas como afirmaciones que puedan responderse con un grado de acuerdo. El candidato recorre las secciones en orden: el asistente narra el texto de cada una y luego le hace sus preguntas. Al pasar a las preguntas, el texto de la sección deja de estar visible."
               >
                 {undo && <div role="status" className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-amber-50 p-3 text-xs text-amber-900"><span>Contenido retirado. Puedes recuperar la última eliminación.</span><button type="button" onClick={() => { setForm(undo); setUndo(null); }} className="font-semibold underline">Deshacer</button></div>}
                 <ol className="space-y-5">
@@ -853,7 +847,7 @@ export function AdminMacrocasesPage() {
                           onRestore={() => restoreGeneratedVoice({ sectionId: section.id })}
                         />
 
-                        <p className="mt-5 text-xs font-semibold uppercase tracking-wide text-[#475569]">Preguntas de esta sección ({section.questions.length})</p>
+                        <p className="mt-5 text-xs font-semibold uppercase tracking-wide text-[#475569]">Afirmaciones de esta sección ({section.questions.length})</p>
                         <ol className="mt-2 space-y-3">
                           {section.questions.map((question, index) => (
                             <li key={question.id} className="rounded-xl border border-[#DDE5EC] bg-[#FAFBFC] p-4">
@@ -868,7 +862,7 @@ export function AdminMacrocasesPage() {
                                 maxLength={500}
                                 rows={2}
                                 aria-label={`Texto de la pregunta ${index + 1} de la sección ${sectionIndex + 1}`}
-                                placeholder="¿Qué haría usted en el lugar de…?"
+                                placeholder="Ej.: En esta situación, informaría del riesgo antes de continuar."
                                 className={`${inputClass} resize-y`}
                               />
                               <VoiceControls

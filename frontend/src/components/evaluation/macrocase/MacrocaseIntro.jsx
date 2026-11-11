@@ -3,7 +3,7 @@ import { formatDuration } from './timeLimit.js';
 const STEPS = [
   ['Lee cada parte del caso', 'El caso se presenta por secciones. Un asistente virtual narra cada una, y puedes leerla en pantalla sin esperar a que termine.'],
   ['Escucha las preguntas de esa parte', 'Después de cada sección, el asistente te hará sus preguntas en voz alta, una a la vez.'],
-  ['Responde por escrito', 'Escribe tu respuesta con tus propias palabras y continúa. Tus respuestas se guardan automáticamente.'],
+  ['Selecciona tu respuesta', 'Indica qué tan de acuerdo estás con cada afirmación en una escala del 1 al 5. Tu selección se guarda automáticamente.'],
 ];
 
 /**
@@ -39,8 +39,7 @@ export function MacrocaseIntro({ macrocase, busy, onStart }) {
         <div className='mt-4 rounded-xl bg-[#F6F9FC] p-4 text-sm text-[#56677B]'>
           <p>🔊 &nbsp;Activa el sonido de tu dispositivo para escuchar al asistente.</p>
           <p className='mt-2'>↻ &nbsp;Si se interrumpe la conexión o recargas la página, continuarás donde te quedaste.</p>
-          {macrocase.maxCharacters > 0 && <p className='mt-2'>✎ &nbsp;Cada respuesta admite hasta {macrocase.maxCharacters} caracteres.</p>}
-          {timeLimit > 0 && <p className='mt-2'>⏱ &nbsp;Tendrás <strong>{formatDuration(timeLimit)}</strong> para responder cada pregunta. El tiempo empieza cuando el asistente termina de leerla; al agotarse, se guarda lo que hayas escrito y pasas a la siguiente.</p>}
+          {timeLimit > 0 && <p className='mt-2'>⏱ &nbsp;Tendrás <strong>{formatDuration(timeLimit)}</strong> para responder cada pregunta. El tiempo empieza cuando el asistente termina de leerla; al agotarse, se guarda tu selección, o se registra sin respuesta si no elegiste una opción, y pasas a la siguiente.</p>}
           <p className='mt-2'>▣ &nbsp;Al final verás un resumen y confirmarás el envío.</p>
         </div>
 

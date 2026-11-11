@@ -249,7 +249,7 @@ describe('MacrocaseService bank and Module B', () => {
     });
     const snapshot = await service.pickSnapshotForModuleB();
 
-    expect(snapshot).toMatchObject({ id: created.id, schemaVersion: 2, name: BASE.name, instructions: BASE.instructions, maxCharacters: 600 });
+    expect(snapshot).toMatchObject({ id: created.id, schemaVersion: 2, name: BASE.name, instructions: BASE.instructions, responseType: 'likert' });
     expect(snapshot.sections.map((section) => [section.id, section.order, section.narrative])).toEqual([
       ['s1', 1, 'Primera parte'], ['s3', 2, 'Tercera parte'],
     ]);

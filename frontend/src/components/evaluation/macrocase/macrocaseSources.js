@@ -35,9 +35,8 @@ export function usableSections(macrocase) {
 export function createLocalMacrocaseSource(macrocase) {
   const sections = usableSections(macrocase);
   const timeLimit = Number(macrocase.defaultTimeLimit) > 0 ? Math.round(Number(macrocase.defaultTimeLimit)) : 0;
-  const maxCharacters = Number(macrocase.maxCharacters) > 0 ? Number(macrocase.maxCharacters) : 0;
   const totalQuestions = sections.reduce((total, section) => total + section.questions.length, 0);
-  let progress = { step: 'intro', sectionIndex: 0, questionIndex: 0, answers: [], draft: '', timerStartedAt: null };
+  let progress = { step: 'intro', sectionIndex: 0, questionIndex: 0, answers: [], draft: null, timerStartedAt: null };
 
   const view = () => {
     const section = sections[progress.sectionIndex];
@@ -48,7 +47,7 @@ export function createLocalMacrocaseSource(macrocase) {
         name: macrocase.name,
         description: macrocase.description || '',
         instructions: macrocase.instructions || '',
-        maxCharacters,
+        responseType: 'likert',
         defaultTimeLimit: timeLimit,
         totalSections: sections.length,
         totalQuestions,
@@ -92,21 +91,24 @@ export function createLocalMacrocaseSource(macrocase) {
     if (action.type === 'START' && progress.step === 'intro') {
       progress = { ...progress, step: 'narrative' };
     } else if (action.type === 'FINISH_NARRATIVE' && progress.step === 'narrative' && action.sectionId === section.id) {
-      progress = { ...progress, step: 'question', questionIndex: 0, draft: '', timerStartedAt: null };
+      progress = { ...progress, step: 'question', questionIndex: 0, draft: null, timerStartedAt: null };
     } else if (action.type === 'START_TIMER' && question?.id === action.questionId && timeLimit && !progress.timerStartedAt) {
       progress = { ...progress, timerStartedAt: new Date().toISOString() };
     } else if (action.type === 'SAVE_DRAFT' && question?.id === action.questionId) {
-      progress = { ...progress, draft: action.text };
+      if (!Number.isInteger(action.value) || action.value < 1 || action.value > 5) throw new Error('Selecciona una opción de la escala Likert (1 a 5).');
+      progress = { ...progress, draft: action.value };
     } else if (action.type === 'ANSWER' && question?.id === action.questionId) {
-      const text = action.text.trim();
-      if (!text && !(timeLimit && action.timedOut)) throw new Error('Escribe una respuesta para continuar.');
-      const answers = [...progress.answers, { sectionId: section.id, questionId: question.id, text, ...(timeLimit && action.timedOut ? { timedOut: true } : {}) }];
+      const value = action.value;
+      const elapsed = progress.timerStartedAt ? Date.now() - new Date(progress.timerStartedAt).getTime() : 0;
+      const timedOut = Boolean(timeLimit && progress.timerStartedAt && ((action.timedOut && elapsed >= timeLimit * 1000) || elapsed > timeLimit * 1000 + 5000));
+      if (!(Number.isInteger(value) && value >= 1 && value <= 5) && !(value === null && timedOut)) throw new Error('Selecciona una opción para continuar.');
+      const answers = [...progress.answers, { sectionId: section.id, questionId: question.id, value, ...(timedOut ? { timedOut: true } : {}) }];
       const next = progress.questionIndex + 1 < section.questions.length
         ? { step: 'question', questionIndex: progress.questionIndex + 1 }
         : progress.sectionIndex + 1 < sections.length
           ? { step: 'narrative', sectionIndex: progress.sectionIndex + 1, questionIndex: 0 }
           : { step: 'review' };
-      progress = { ...progress, ...next, answers, draft: '', timerStartedAt: null };
+      progress = { ...progress, ...next, answers, draft: null, timerStartedAt: null };
     }
     return view();
   };

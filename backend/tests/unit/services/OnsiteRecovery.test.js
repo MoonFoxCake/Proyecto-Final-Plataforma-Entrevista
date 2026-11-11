@@ -99,8 +99,8 @@ describe('onsite incident recovery', () => {
     const session = await access.login(card.code, LAB_PC);
     await invitations.advanceMacrocase(session.token, { type: 'START' });
     await invitations.advanceMacrocase(session.token, { type: 'FINISH_NARRATIVE', sectionId: 's1' });
-    await invitations.advanceMacrocase(session.token, { type: 'ANSWER', questionId: 'q1', text: 'Primera respuesta' });
-    await invitations.advanceMacrocase(session.token, { type: 'SAVE_DRAFT', questionId: 'q2', text: 'A medio escribir' });
+    await invitations.advanceMacrocase(session.token, { type: 'ANSWER', questionId: 'q1', value: 4 });
+    await invitations.advanceMacrocase(session.token, { type: 'SAVE_DRAFT', questionId: 'q2', value: 2 });
     return { card, token: session.token };
   }
 
@@ -121,14 +121,14 @@ describe('onsite incident recovery', () => {
     expect(resumed.state).toBe('VALID');
 
     await expect(invitations.getMacrocaseStage(resumed.token)).resolves.toMatchObject({
-      step: 'question', question: { id: 'q2' }, draft: 'A medio escribir', progress: { answered: 1 },
+      step: 'question', question: { id: 'q2' }, draft: 2, progress: { answered: 1 },
     });
-    await invitations.advanceMacrocase(resumed.token, { type: 'ANSWER', questionId: 'q2', text: 'Segunda respuesta' });
+    await invitations.advanceMacrocase(resumed.token, { type: 'ANSWER', questionId: 'q2', value: 5 });
     await expect(invitations.submitEvaluation(resumed.token, { finalize: true })).resolves.toMatchObject({ state: 'COMPLETED' });
 
     // One evaluation, one submission, with both answers.
     expect(repos.invitationRepo.submissions).toHaveLength(1);
-    expect(repos.invitationRepo.submissions[0].answers.map((answer) => answer.text)).toEqual(['Primera respuesta', 'Segunda respuesta']);
+    expect(repos.invitationRepo.submissions[0].answers.map((answer) => answer.value)).toEqual([4, 5]);
     await expect(invitations.submitEvaluation(oldToken, { finalize: true })).resolves.toEqual({ state: 'CANCELLED' });
   });
 
@@ -150,7 +150,7 @@ describe('onsite incident recovery', () => {
     const revoked = await credentials.revoke('event-1', 'org-1', card.credentialId, 'supervisor', 'Uso indebido');
 
     expect(revoked).toMatchObject({ status: 'REVOKED', revokedBy: 'supervisor', revokeReason: 'Uso indebido' });
-    await expect(invitations.advanceMacrocase(token, { type: 'ANSWER', questionId: 'q2', text: 'x' })).resolves.toEqual({ state: 'CANCELLED' });
+    await expect(invitations.advanceMacrocase(token, { type: 'ANSWER', questionId: 'q2', value: 1 })).resolves.toEqual({ state: 'CANCELLED' });
     expect(repos.invitationRepo.data.find((item) => item.channel === 'onsite')).toMatchObject({ status: 'CANCELLED', cancelledBy: 'supervisor', cancelReason: 'Uso indebido' });
   });
 
@@ -190,7 +190,7 @@ describe('onsite incident recovery', () => {
 
   test('after the final submission nothing can be reissued or revoked', async () => {
     const { card, token } = await startAndAnswerFirstQuestion();
-    await invitations.advanceMacrocase(token, { type: 'ANSWER', questionId: 'q2', text: 'Fin' });
+    await invitations.advanceMacrocase(token, { type: 'ANSWER', questionId: 'q2', value: 5 });
     await invitations.submitEvaluation(token, { finalize: true });
 
     await expect(credentials.reissue('event-1', 'org-1', card.credentialId, 'supervisor')).rejects.toThrow('ya completó el Módulo B');

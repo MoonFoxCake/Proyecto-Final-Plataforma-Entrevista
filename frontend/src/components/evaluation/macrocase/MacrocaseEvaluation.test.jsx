@@ -54,7 +54,7 @@ describe('MacrocaseEvaluation', () => {
         const isLast = sectionIndex === 1 && index === section.questions.length - 1;
         const next = screen.getByRole('button', { name: isLast ? 'Ir al resumen →' : 'Continuar →' });
         expect(next.disabled).toBe(true);
-        fireEvent.change(screen.getByLabelText('Tu respuesta'), { target: { value: `  Respuesta ${question.id}  ` } });
+        fireEvent.click(screen.getByRole('radio', { name: /Totalmente de acuerdo/ }));
         fireEvent.click(next);
       }
     }
@@ -96,7 +96,7 @@ describe('MacrocaseEvaluation', () => {
     await waitFor(() => expect(speak).toHaveBeenCalledTimes(2));
   });
 
-  test('when the time runs out it keeps what was written and moves on', async () => {
+  test('when the time runs out it keeps the selected Likert option and moves on', async () => {
     const macrocase = {
       ...DEMO_MACROCASE,
       defaultTimeLimit: 1,
@@ -109,15 +109,15 @@ describe('MacrocaseEvaluation', () => {
 
     // The countdown starts once the question has been read.
     await waitFor(() => expect(screen.getByRole('timer').getAttribute('aria-label')).toMatch(/Tiempo restante/), { timeout: 2000 });
-    fireEvent.change(screen.getByLabelText('Tu respuesta'), { target: { value: 'Buscaría ayuda' } });
+    fireEvent.click(screen.getByRole('radio', { name: /Totalmente de acuerdo/ }));
 
     expect(await screen.findByRole('heading', { name: SECTION_2.questions[1].text }, { timeout: 3000 })).toBeTruthy();
-    expect(screen.getByLabelText('Tu respuesta').value).toBe('');
+    expect(screen.getAllByRole('radio').every((input) => !input.checked)).toBe(true);
     expect(await screen.findByRole('heading', { name: 'Finalizar evaluación' }, { timeout: 4000 })).toBeTruthy();
     expect(screen.getByText('2 por tiempo')).toBeTruthy();
   }, 10000);
 
-  test('resumes the saved stage with its draft and saves the draft while typing', async () => {
+  test('resumes the saved stage with its draft and saves a changed selection', async () => {
     const questionStage = {
       state: 'VALID',
       step: 'question',
@@ -125,7 +125,7 @@ describe('MacrocaseEvaluation', () => {
       progress: { sectionIndex: 1, totalSections: 2, questionIndex: 0, sectionQuestions: 1, answered: 2, totalQuestions: 3 },
       section: { id: 's2', order: 2, title: 'El bosque' },
       question: { id: 'q3', order: 1, text: '¿Y en el lugar del lobo?', audioUrl: '', visemes: [] },
-      draft: 'A medio escribir',
+      draft: 2,
       timer: { limitSeconds: 0, startedAt: null },
       serverNow: new Date().toISOString(),
     };
@@ -138,10 +138,10 @@ describe('MacrocaseEvaluation', () => {
 
     expect(await screen.findByRole('heading', { name: '¿Y en el lugar del lobo?' })).toBeTruthy();
     expect(screen.getByText('Sección', { exact: false }).textContent).toMatch(/Sección 2 de 2/);
-    expect(screen.getByLabelText('Tu respuesta').value).toBe('A medio escribir');
+    expect(screen.getByRole('radio', { name: /^En desacuerdo$/ }).checked).toBe(true);
 
-    fireEvent.change(screen.getByLabelText('Tu respuesta'), { target: { value: 'A medio escribir, ya casi' } });
-    await waitFor(() => expect(source.advance).toHaveBeenCalledWith({ type: 'SAVE_DRAFT', questionId: 'q3', text: 'A medio escribir, ya casi' }), { timeout: 2500 });
+    fireEvent.click(screen.getByRole('radio', { name: /Totalmente de acuerdo/ }));
+    await waitFor(() => expect(source.advance).toHaveBeenCalledWith({ type: 'SAVE_DRAFT', questionId: 'q3', value: 5 }), { timeout: 2500 });
     expect(await screen.findByText('Borrador guardado')).toBeTruthy();
   });
 
@@ -156,12 +156,12 @@ describe('MacrocaseEvaluation', () => {
     });
     render(<MacrocaseEvaluation source={source} />);
 
-    fireEvent.change(await screen.findByLabelText('Tu respuesta'), { target: { value: 'Avisaría' } });
+    fireEvent.click(await screen.findByRole('radio', { name: /Totalmente de acuerdo/ }));
     fireEvent.click(screen.getByRole('button', { name: 'Continuar →' }));
 
     expect((await screen.findByRole('alert')).textContent).toBe('Sin conexión con el servidor.');
     expect(screen.getByRole('heading', { name: SECTION_1.questions[0].text })).toBeTruthy();
-    expect(screen.getByLabelText('Tu respuesta').value).toBe('Avisaría');
+    expect(screen.getByRole('radio', { name: /Totalmente de acuerdo/ }).checked).toBe(true);
   });
 
   test('tells the host page when the session is closed midway', async () => {

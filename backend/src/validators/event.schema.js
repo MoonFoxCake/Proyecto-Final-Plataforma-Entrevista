@@ -119,16 +119,16 @@ const macrocaseStageSchema = z.object({ token: accessToken }).strict();
 
 const stageId = z.string().min(1).max(120);
 // `timedOut`: the question's time ran out and the answer goes as it was (it
-// may be empty); the service only accepts it once the timer really expired.
+// may be null); the service only accepts it once the timer really expired.
 const macrocaseActionSchema = z.object({
   token: accessToken,
   action: z.discriminatedUnion('type', [
     z.object({ type: z.literal('START') }).strict(),
     z.object({ type: z.literal('FINISH_NARRATIVE'), sectionId: stageId }).strict(),
     z.object({ type: z.literal('START_TIMER'), questionId: stageId }).strict(),
-    z.object({ type: z.literal('SAVE_DRAFT'), questionId: stageId, text: z.string().max(5000) }).strict(),
+    z.object({ type: z.literal('SAVE_DRAFT'), questionId: stageId, value: z.number().int().min(1).max(5) }).strict(),
     z.object({
-      type: z.literal('ANSWER'), questionId: stageId, text: z.string().max(5000), timedOut: z.boolean().optional(),
+      type: z.literal('ANSWER'), questionId: stageId, value: z.number().int().min(1).max(5).nullable(), timedOut: z.boolean().optional(),
     }).strict(),
   ]),
 }).strict();

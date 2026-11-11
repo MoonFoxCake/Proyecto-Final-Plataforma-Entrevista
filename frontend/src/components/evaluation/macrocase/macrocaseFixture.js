@@ -9,7 +9,7 @@ export const DEMO_MACROCASE = {
   name: 'Caperucita Roja',
   description: 'Charles Perrault',
   instructions: 'Lee cada parte del cuento con atención.',
-  maxCharacters: 600,
+  responseType: 'likert',
   defaultTimeLimit: 30,
   sections: [
     {
@@ -32,8 +32,8 @@ Caperucita Roja partió en seguida a ver a su abuela que vivía en otro pueblo. 
 
 —Pues bien, dijo el lobo, yo también quiero ir a verla; yo iré por este camino, y tú por aquél, y veremos quién llega primero.`,
       questions: [
-        { id: 'demo-b-1', order: 1, text: '¿Qué haría usted en el lugar de Caperucita Roja?', audioUrl: '' },
-        { id: 'demo-b-2', order: 2, text: '¿Qué haría usted en el lugar del lobo?', audioUrl: '' },
+        { id: 'demo-b-1', order: 1, text: 'En el lugar de Caperucita Roja, evitaría compartir información personal con un desconocido.', audioUrl: '' },
+        { id: 'demo-b-2', order: 2, text: 'Considero que el lobo debería respetar la seguridad de las otras personas.', audioUrl: '' },
       ],
     },
     {
@@ -90,8 +90,8 @@ Caperucita Roja se desviste y se mete a la cama y quedó muy asombrada al ver la
 
 Y diciendo estas palabras, este lobo malo se abalanzó sobre Caperucita Roja y se la comió.`,
       questions: [
-        { id: 'demo-b-3', order: 1, text: '¿Qué haría usted en el lugar del leñador?', audioUrl: '' },
-        { id: 'demo-b-4', order: 2, text: '¿Qué haría usted en el lugar de la abuela de Caperucita Roja?', audioUrl: '' },
+        { id: 'demo-b-3', order: 1, text: 'En el lugar del leñador, buscaría ayuda para proteger a las personas en peligro.', audioUrl: '' },
+        { id: 'demo-b-4', order: 2, text: 'En el lugar de la abuela, verificaría la identidad de quien llama antes de abrir.', audioUrl: '' },
       ],
     },
   ],

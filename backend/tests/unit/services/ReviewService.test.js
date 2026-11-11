@@ -118,6 +118,20 @@ describe('ReviewService', () => {
     expect(moduleB.sections[1].answers[0]).toMatchObject({ text: '', timedOut: true });
   });
 
+  test('shows numeric Likert choices and unanswered timeouts alongside legacy written answers', () => {
+    const detail = service.moduleBDetail({ moduleB: { macrocase: { name: 'Caso Likert' } } }, { moduleB: { status: 'COMPLETED' } }, {
+      answers: [
+        { questionId: 'q1', sectionId: 's1', question: 'Comunicaría el riesgo.', value: 5 },
+        { questionId: 'q2', sectionId: 's1', question: 'Pediría ayuda.', value: null, timedOut: true },
+        { questionId: 'q3', sectionId: 's1', question: 'Respuesta anterior', text: 'Texto histórico.' },
+      ],
+    });
+    expect(detail.answers[0]).toMatchObject({ value: 5, label: 'Totalmente de acuerdo' });
+    expect(detail.sections[0].answers[0]).toMatchObject({ value: 5, label: 'Totalmente de acuerdo' });
+    expect(detail.answers[1]).toMatchObject({ value: null, label: null, timedOut: true });
+    expect(detail.answers[2]).toMatchObject({ text: 'Texto histórico.' });
+  });
+
   test('blocks publication until every response is reviewed', async () => {
     await expect(service.publish(event.id, 'admin-1')).rejects.toThrow('Debes revisar a todos los participantes antes de publicar.');
   });

@@ -82,7 +82,7 @@ class MacrocaseService {
       name: active.name,
       description: active.description || '',
       instructions: active.instructions || '',
-      maxCharacters: active.maxCharacters,
+      responseType: 'likert',
       defaultTimeLimit: active.defaultTimeLimit,
       sections,
     };
@@ -139,7 +139,7 @@ class MacrocaseService {
       name: data.name.trim(),
       description: data.description?.trim() || '',
       instructions,
-      maxCharacters: Number(data.maxCharacters),
+      responseType: 'likert',
       defaultTimeLimit: Number(data.defaultTimeLimit),
       active: Boolean(data.active),
       sections,
@@ -153,7 +153,8 @@ class MacrocaseService {
 
   async updateMacroCase(macrocaseId, data) {
     const existing = await this.getMacroCase(macrocaseId);
-    const { introduction, questions, schemaVersion, ...payload } = data;
+    const { introduction, questions, schemaVersion, maxCharacters, ...payload } = data;
+    payload.responseType = 'likert';
 
     if (payload.name !== undefined) {
       payload.name = payload.name.trim();
@@ -166,10 +167,6 @@ class MacrocaseService {
     if (payload.instructions !== undefined) {
       payload.instructions = payload.instructions?.trim() || '';
       checkLength(payload.instructions, MAX_INSTRUCTIONS_TEXT, 'Las instrucciones');
-    }
-
-    if (payload.maxCharacters !== undefined) {
-      payload.maxCharacters = Number(payload.maxCharacters);
     }
 
     if (payload.defaultTimeLimit !== undefined) {

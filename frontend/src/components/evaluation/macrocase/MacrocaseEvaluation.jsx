@@ -162,8 +162,8 @@ export function MacrocaseEvaluation({ source, completedFootnote, onCompleted, on
           stage={stage}
           isLast={isLast}
           busy={busy}
-          onAnswer={({ questionId, text, timedOut }) => run({ type: 'ANSWER', questionId, text, ...(timedOut ? { timedOut: true } : {}) })}
-          onSaveDraft={(questionId, text) => background({ type: 'SAVE_DRAFT', questionId, text })}
+          onAnswer={({ questionId, value, timedOut }) => run({ type: 'ANSWER', questionId, value, ...(timedOut ? { timedOut: true } : {}) })}
+          onSaveDraft={(questionId, value) => background({ type: 'SAVE_DRAFT', questionId, value })}
           onStartTimer={(questionId) => background({ type: 'START_TIMER', questionId })}
         />
       </>

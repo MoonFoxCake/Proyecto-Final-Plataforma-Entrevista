@@ -58,13 +58,14 @@ test('creates through three steps and preserves response settings and section co
   await renderPage();
   fillNew();
   step('Respuestas');
-  change('Máximo de caracteres por respuesta', '750');
+  expect(screen.queryByLabelText('Máximo de caracteres por respuesta')).toBeNull();
+  expect(screen.getByText('Escala Likert de 5 opciones')).toBeTruthy();
   change(/Tiempo por pregunta/, '0');
   step('Secciones y preguntas');
   step('Crear macrocaso');
   await waitFor(() => expect(api.createMacroCase).toHaveBeenCalledTimes(1));
   expect(api.createMacroCase).toHaveBeenCalledWith(expect.objectContaining({
-    name: 'Nuevo caso', maxCharacters: 750, defaultTimeLimit: 0,
+    name: 'Nuevo caso', responseType: 'likert', defaultTimeLimit: 0,
     sections: [expect.objectContaining({ narrative: 'Mi nueva historia.', questions: [expect.objectContaining({ text: '¿Cómo actuarías?' })] })],
   }));
   expect(await screen.findByRole('article', { name: 'Nuevo caso' })).toBeTruthy();
@@ -75,11 +76,11 @@ test('validates numeric values and focuses the correct earlier step without subm
   await renderPage();
   fillNew();
   step('Respuestas');
-  change('Máximo de caracteres por respuesta', '1.5');
+  change('Tiempo por pregunta (segundos)', '1.5');
   step('Secciones y preguntas');
   step('Crear macrocaso');
   expect((await screen.findByRole('alert')).textContent).toContain('número entero');
-  expect(document.activeElement).toBe(screen.getByLabelText('Máximo de caracteres por respuesta'));
+  expect(document.activeElement).toBe(screen.getByLabelText('Tiempo por pregunta (segundos)'));
   expect(api.createMacroCase).not.toHaveBeenCalled();
 });
 

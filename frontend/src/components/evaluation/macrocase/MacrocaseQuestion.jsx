@@ -5,6 +5,8 @@ import { formatClock } from './timeLimit.js';
 
 // Short pause between the avatar appearing and its first words.
 const QUESTION_DELAY_MS = 700;
+const LIKERT_OPTIONS = ['Totalmente en desacuerdo', 'En desacuerdo', 'Neutral', 'De acuerdo', 'Totalmente de acuerdo'];
+const isSelection = (value) => Number.isInteger(value) && value >= 1 && value <= 5;
 // The countdown starts when the avatar finishes reading; if the audio never
 // reports its end, it starts anyway after this long.
 const MAX_READING_WAIT_MS = 45_000;
@@ -29,21 +31,20 @@ function deadlineFrom(stage) {
 
 /**
  * One question: the avatar asks it aloud and the candidate answers in a
- * text box. The draft is saved as the candidate types, so a reload brings
+ * five-option Likert scale. The selection is saved, so a reload brings
  * it back. Answering locks it: there is no way back.
  *
  * With a time limit, the countdown starts on the server once the question
  * has been read (`onStartTimer`), so reloading does not reset it. When it
- * runs out, whatever was written is sent as `timedOut`.
+ * runs out, the current selection is sent as `timedOut`.
  */
 export function MacrocaseQuestion({ stage, isLast, busy, onAnswer, onSaveDraft, onStartTimer }) {
   const { question, progress } = stage;
-  const maxCharacters = stage.macrocase.maxCharacters > 0 ? stage.macrocase.maxCharacters : undefined;
   const timeLimit = stage.timer?.limitSeconds || 0;
   const speech = useAvatarSpeech(question);
-  const [draft, setDraft] = useState(stage.draft || '');
+  const [draft, setDraft] = useState(isSelection(stage.draft) ? stage.draft : null);
   const [draftStatus, setDraftStatus] = useState(null);
-  const savedDraftRef = useRef(stage.draft || '');
+  const savedDraftRef = useRef(isSelection(stage.draft) ? stage.draft : null);
   const [deadline, setDeadline] = useState(() => deadlineFrom(stage));
   const [now, setNow] = useState(() => Date.now());
   const answeredRef = useRef(false);
@@ -84,11 +85,10 @@ export function MacrocaseQuestion({ stage, isLast, busy, onAnswer, onSaveDraft, 
 
   const answer = (timedOut) => {
     if (answeredRef.current || Date.now() < retryAtRef.current) return;
-    const text = draft.trim();
-    if (!text && !timedOut) return;
+    if (!isSelection(draft) && !timedOut) return;
     answeredRef.current = true;
     speech.stop();
-    Promise.resolve(onAnswer({ questionId: question.id, text, timedOut })).then((ok) => {
+    Promise.resolve(onAnswer({ questionId: question.id, value: draft, timedOut })).then((ok) => {
       // Still on this question (e.g. the request failed): allow another try,
       // not on every countdown tick.
       if (ok === false) {
@@ -104,7 +104,7 @@ export function MacrocaseQuestion({ stage, isLast, busy, onAnswer, onSaveDraft, 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [now, deadline]);
 
-  // Save the draft a moment after the candidate stops typing.
+  // Save the draft a moment after the candidate changes their selection.
   useEffect(() => {
     if (draft === savedDraftRef.current) return undefined;
     const timeout = setTimeout(async () => {
@@ -145,18 +145,29 @@ export function MacrocaseQuestion({ stage, isLast, busy, onAnswer, onSaveDraft, 
               )}
             </div>
             <h1 className='mt-5 text-lg font-semibold leading-8 text-[#10233A]'>{question.text}</h1>
-            <p className='mt-2 text-sm text-[#7C8AA0]'>Responde con tus propias palabras. Explica qué harías y por qué.</p>
+            <p className='mt-2 text-sm text-[#7C8AA0]'>Selecciona qué tan de acuerdo estás con esta afirmación. Elige una sola opción.</p>
 
-            <label htmlFor='macrocase-answer' className='sr-only'>Tu respuesta</label>
-            <textarea
-              id='macrocase-answer'
-              value={draft}
-              onChange={(event) => setDraft(event.target.value)}
-              maxLength={maxCharacters}
-              rows={8}
-              placeholder='Escribe tu respuesta aquí…'
-              className='mt-6 w-full resize-y rounded-xl border border-[#D9E2EA] p-4 text-sm leading-6 text-[#10233A] placeholder:text-[#9AA8B8] focus:border-[#0AADA8] focus:outline-none focus:ring-2 focus:ring-[#0AADA8]/20'
-            />
+            <fieldset disabled={busy} role='radiogroup' aria-label='Escala Likert de cinco opciones' className='mt-9'>
+              <legend className='sr-only'>Selecciona una opción del 1 al 5</legend>
+              <div className='relative mx-3 h-11'>
+                <div className='absolute left-0 right-0 top-1/2 h-2 -translate-y-1/2 rounded-full bg-[#DDE5EC]' />
+                <div className='absolute left-0 top-1/2 h-2 -translate-y-1/2 rounded-full bg-[#18A9A4] transition-all' style={{ width: draft === null ? '0%' : `${(draft - 1) * 25}%` }} />
+                {LIKERT_OPTIONS.map((label, index) => {
+                  const value = index + 1;
+                  const selected = draft === value;
+                  const passed = draft !== null && value <= draft;
+                  return <label key={value} className='absolute top-1/2 grid h-11 w-11 -translate-x-1/2 -translate-y-1/2 cursor-pointer place-items-center' style={{ left: `${index * 25}%` }}>
+                    <input type='radio' name={`macrocase-${question.id}`} value={value} aria-label={label} checked={selected} onChange={() => setDraft(value)}
+                      className={`h-7 w-7 cursor-pointer appearance-none rounded-full border-4 border-white shadow transition focus:outline-none focus:ring-2 focus:ring-[#18A9A4] focus:ring-offset-2 disabled:cursor-not-allowed ${passed ? 'bg-[#18A9A4]' : 'bg-[#AEBCCA]'} ${selected ? 'scale-125' : 'hover:scale-110'}`} />
+                  </label>;
+                })}
+              </div>
+              <div aria-hidden='true' className='relative mx-3 mt-2 h-4 text-xs font-semibold text-[#7C8AA0]'>
+                {LIKERT_OPTIONS.map((label, index) => <span key={label} className={`absolute -translate-x-1/2 ${draft === index + 1 ? 'text-[#0A8F8A]' : ''}`} style={{ left: `${index * 25}%` }}>{index + 1}</span>)}
+              </div>
+              <div aria-hidden='true' className='mt-3 flex justify-between gap-4 text-xs text-[#8A98A9]'><span>Muy en desacuerdo</span><span className='text-right'>Muy de acuerdo</span></div>
+              <p className='mt-6 min-h-6 text-center text-sm font-semibold text-[#0A8F8A]' aria-live='polite'>{draft === null ? 'Selecciona una opción para continuar' : LIKERT_OPTIONS[draft - 1]}</p>
+            </fieldset>
             {timeLimit > 0 && (
               <div className='mt-3 h-1 overflow-hidden rounded-full bg-[#E5EBF0]' aria-hidden='true'>
                 <div className={`h-full rounded-full transition-[width] duration-300 ease-linear ${timeRunningOut ? 'bg-amber-500' : 'bg-[#17AAA5]'}`} style={{ width: `${(remaining / timeLimit) * 100}%` }} />
@@ -165,14 +176,13 @@ export function MacrocaseQuestion({ stage, isLast, busy, onAnswer, onSaveDraft, 
             <p className='sr-only' aria-live='assertive'>{timeRunningOut ? `Quedan ${TIME_WARNING_SECONDS} segundos o menos` : ''}</p>
             <div className='mt-2 flex justify-between gap-3 text-xs text-[#8A98A9]'>
               <span aria-live='polite' className={draftStatus === 'error' ? 'text-amber-700' : ''}>
-                {draft.trim() ? (DRAFT_STATUS[draftStatus] || '') : 'Escribe una respuesta para continuar'}
+                {isSelection(draft) ? (DRAFT_STATUS[draftStatus] || 'Selección lista para continuar') : 'Selecciona una opción para continuar'}
               </span>
-              {maxCharacters && <span className={draft.length >= maxCharacters ? 'font-semibold text-amber-700' : ''}>{draft.length} / {maxCharacters}</span>}
             </div>
           </section>
 
           <div className='mt-6 flex flex-col items-end gap-2'>
-            <button type='button' onClick={() => answer(false)} disabled={!draft.trim() || busy} className='rounded-xl bg-[#13A9A4] px-6 py-3 text-sm font-semibold text-white transition hover:bg-[#0F8F8B] disabled:cursor-not-allowed disabled:bg-[#BCC7D1]'>
+            <button type='button' onClick={() => answer(false)} disabled={!isSelection(draft) || busy} className='rounded-xl bg-[#13A9A4] px-6 py-3 text-sm font-semibold text-white transition hover:bg-[#0F8F8B] disabled:cursor-not-allowed disabled:bg-[#BCC7D1]'>
               {isLast ? 'Ir al resumen →' : 'Continuar →'}
             </button>
             <p className='text-xs text-[#7C8AA0]'>Al continuar, tu respuesta queda registrada y no podrás modificarla.</p>
