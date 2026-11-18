@@ -110,6 +110,12 @@ class ResendEmailService {
     return this.send({ to: email, subject: `Fase ${module} lista para entrega · ${eventName}`, html });
   }
 
+  /** Password recovery: a link to the platform's own page to choose a new password. */
+  async sendPasswordReset({ email, url }) {
+    const html = layout('RECUPERAR CONTRASEÑA', `<h1>Restablece tu contraseña</h1><p>Recibimos una solicitud para restablecer la contraseña de tu cuenta de NexoPerfil (<strong>${esc(email)}</strong>).</p><p><a href='${esc(url)}' style='display:inline-block;background:#0aada8;color:white;text-decoration:none;padding:13px 20px;border-radius:10px;font-weight:bold'>Elegir una contraseña nueva</a></p><p style='margin-top:24px;color:#718096;font-size:13px'>El enlace vence en una hora y solo se puede usar una vez. Si no solicitaste este cambio, ignora este correo: tu contraseña actual sigue funcionando.</p>`);
+    return this.send({ to: email, subject: 'Restablece tu contraseña de NexoPerfil', html });
+  }
+
   async getEmailStatus(emailId) {
     this.requireApiKey();
     const response = await fetch(`https://api.resend.com/emails/${encodeURIComponent(emailId)}`, {

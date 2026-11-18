@@ -7,6 +7,7 @@ const {
   companyUserSchema,
   setRoleSchema,
   updateSubscriptionSchema,
+  passwordResetSchema,
 } = require('../validators/auth.schema');
 
 /**
@@ -19,6 +20,12 @@ function createPublicAuthRoutes(authController) {
     '/register',
     validateInput(registerSchema),
     authController.register
+  );
+
+  router.post(
+    '/password-reset',
+    validateInput(passwordResetSchema),
+    authController.requestPasswordReset
   );
 
   return router;

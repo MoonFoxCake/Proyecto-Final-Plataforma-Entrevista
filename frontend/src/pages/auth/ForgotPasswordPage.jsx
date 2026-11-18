@@ -10,8 +10,8 @@ const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const COOLDOWN_SECONDS = 30;
 
 function recoveryError(error) {
-  if (error?.code === 'auth/too-many-requests') return 'Has realizado demasiados intentos. Espera unos minutos e inténtalo de nuevo.';
-  if (error?.code === 'auth/network-request-failed') return 'No pudimos conectarnos. Verifica tu conexión e inténtalo de nuevo.';
+  if (error?.response?.status === 429) return 'Has realizado demasiadas solicitudes. Espera unos minutos e inténtalo de nuevo.';
+  if (error?.request && !error?.response) return 'No pudimos conectarnos. Verifica tu conexión e inténtalo de nuevo.';
   return 'No pudimos enviar el enlace en este momento. Inténtalo de nuevo.';
 }
 
@@ -38,7 +38,7 @@ export function ForgotPasswordPage() {
       setError('Ingresa tu correo electrónico.');
       return;
     }
-    if (normalizedEmail.toLowerCase().endswith('@admin.nexoperfil.invalid')) {
+    if (normalizedEmail.toLowerCase().endsWith('@admin.nexoperfil.invalid')) {
       setError('Para recuperar una cuenta administrativa sin correo, contacta al propietario de la plataforma.');
       return;
     }
@@ -55,14 +55,7 @@ export function ForgotPasswordPage() {
       setCooldown(COOLDOWN_SECONDS);
       if (isResend) setFeedback('Enlace reenviado. Revisa también tu carpeta de spam.');
     } catch (requestError) {
-      // Preserve a neutral response even if enumeration protection is disabled.
-      if (requestError?.code === 'auth/user-not-found') {
-        setSent(true);
-        setCooldown(COOLDOWN_SECONDS);
-        if (isResend) setFeedback('Solicitud procesada. Revisa también tu carpeta de spam.');
-      } else {
-        setError(recoveryError(requestError));
-      }
+      setError(recoveryError(requestError));
     } finally {
       setLoading(false);
     }
@@ -149,7 +142,7 @@ export function ForgotPasswordPage() {
             </>
           )}
 
-          <p className="mt-8 text-center text-xs text-[#D1D5DC]">© 2025 Nexo Perfil · Todos los derechos reservados</p>
+          <p className="mt-8 text-center text-xs text-[#D1D5DC]">© {new Date().getFullYear()} NexoPerfil · Todos los derechos reservados</p>
         </div>
       </main>
     </div>

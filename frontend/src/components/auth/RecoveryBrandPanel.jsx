@@ -9,12 +9,22 @@ const STEPS = [
   'Crea una nueva contraseña',
 ];
 
+// Facts of this flow: Firebase's reset codes last one hour and work once,
+// the backend accepts 3 requests per address every 15 minutes, and the new
+// password needs at least 8 characters (ResetPasswordPage).
+const REQUEST_FACTS = [
+  { value: '1 hora', label: 'Vigencia del enlace' },
+  { value: '1 uso', label: 'Cada enlace sirve una vez' },
+  { value: '3 envíos', label: 'Cada 15 minutos por correo' },
+];
+const RESET_FACTS = [
+  { value: '8+', label: 'Caracteres como mínimo' },
+  { value: '1 uso', label: 'Este enlace sirve una vez' },
+  { value: '1 hora', label: 'Vigencia del enlace' },
+];
+
 export function RecoveryBrandPanel({ currentStep = 0, email = '', reset = false }) {
-  const stats = [
-    { value: '256-bit', label: 'Cifrado SSL' },
-    { value: '10 min', label: reset ? 'Sesión activa' : 'Expiración del enlace' },
-    { value: '100%', label: 'Proceso seguro' },
-  ];
+  const stats = reset ? RESET_FACTS : REQUEST_FACTS;
 
   return (
     <AuthBackdrop className="hidden w-[738px] shrink-0 lg:block">

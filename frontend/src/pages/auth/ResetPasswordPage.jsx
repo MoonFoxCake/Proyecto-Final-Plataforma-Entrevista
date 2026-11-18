@@ -137,7 +137,7 @@ export function ResetPasswordPage() {
             </div>
           )}
 
-          <p className="mt-8 text-center text-xs text-[#D1D5DC]">© 2025 Nexo Perfil · Todos los derechos reservados</p>
+          <p className="mt-8 text-center text-xs text-[#D1D5DC]">© {new Date().getFullYear()} NexoPerfil · Todos los derechos reservados</p>
         </div>
       </main>
     </div>

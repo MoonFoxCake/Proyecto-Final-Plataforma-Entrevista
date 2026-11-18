@@ -47,4 +47,9 @@ const updateSubscriptionSchema = z.object({
   planId: z.enum(['fase-a', 'fase-a-b', 'completo']),
 }).strict();
 
-module.exports = { registerSchema, companyUserSchema, setRoleSchema, updateSubscriptionSchema };
+/** Payload for POST /auth/password-reset */
+const passwordResetSchema = z.object({
+  email: z.string().trim().email().max(254),
+}).strict();
+
+module.exports = { registerSchema, companyUserSchema, setRoleSchema, updateSubscriptionSchema, passwordResetSchema };

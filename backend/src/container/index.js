@@ -46,6 +46,7 @@ const { PrintableService } = require('../services/PrintableService');
 const OnsiteApplicationService = require('../services/OnsiteApplicationService');
 const OnsiteAccessService = require('../services/OnsiteAccessService');
 const AttemptLimiter = require('../utils/AttemptLimiter');
+const { PasswordResetService, PASSWORD_RESET_LIMITS } = require('../services/PasswordResetService');
 
 const MINUTE_MS = 60 * 1000;
 // Failed onsite logins (unknown or malformed codes). Per browser: a candidate
@@ -191,6 +192,12 @@ function createContainer(type = 'firestore') {
     onsiteApplicationService,
     onsiteAccessService,
     authService: new AuthService(repos.userRepo, repos.organizationRepo),
+    passwordResetService: new PasswordResetService({
+      identity,
+      emailService,
+      frontendUrl: process.env.FRONTEND_URL || process.env.CORS_ORIGIN,
+      limiter: new AttemptLimiter({ rules: PASSWORD_RESET_LIMITS }),
+    }),
     tenantService: new TenantService(repos.organizationRepo),
     eventService,
     candidateService,

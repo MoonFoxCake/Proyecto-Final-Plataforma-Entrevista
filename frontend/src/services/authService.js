@@ -2,7 +2,6 @@ import {
   EmailAuthProvider, reauthenticateWithCredential, updatePassword,
   confirmPasswordReset as firebaseConfirmPasswordReset,
   onAuthStateChanged as firebaseOnAuthStateChanged,
-  sendPasswordResetEmail,
   sendEmailVerification,
   signInWithEmailAndPassword,
   signOut,
@@ -81,16 +80,15 @@ export async function login(email, password) {
 }
 
 /**
- * Sends Firebase's password recovery email. The current origin keeps this
- * valid in development and production without hardcoding an environment.
+ * Asks the backend to e-mail a recovery link. The e-mail comes from the
+ * platform and its link opens /reset-password with Firebase's one-time code.
+ * The answer is the same whether the account exists or not.
  *
  * @param {string} email
  * @returns {Promise<void>}
  */
 export async function requestPasswordReset(email) {
-  await sendPasswordResetEmail(auth, email, {
-    url: window.location.origin + '/reset-password',
-  });
+  await api.post('/auth/password-reset', { email });
 }
 
 /** @param {string} oobCode @returns {Promise<string>} */

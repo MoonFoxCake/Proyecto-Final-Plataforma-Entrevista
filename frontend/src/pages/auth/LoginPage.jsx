@@ -133,7 +133,7 @@ export function LoginPage() {
           </form>
 
           <p className="mt-6 text-center text-xs leading-4 text-[#D1D5DC]">
-            © 2025 Nexo Perfil · Todos los derechos reservados
+            © {new Date().getFullYear()} NexoPerfil · Todos los derechos reservados
           </p>
         </div>
       </div>

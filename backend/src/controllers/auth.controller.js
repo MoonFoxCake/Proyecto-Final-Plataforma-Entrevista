@@ -3,10 +3,29 @@
  * logic here — delegates to {@link AuthService}.
  */
 class AuthController {
-  /** @param {import('../services/AuthService')} authService */
-  constructor(authService) {
+  /**
+   * @param {import('../services/AuthService')} authService
+   * @param {import('../services/PasswordResetService').PasswordResetService} [passwordResetService]
+   */
+  constructor(authService, passwordResetService) {
     this.service = authService;
+    this.passwordResetService = passwordResetService;
   }
+
+  /** Same answer whether the account exists or not; 429 when asked too often. */
+  requestPasswordReset = async (req, res, next) => {
+    try {
+      const result = await this.passwordResetService.request(req.body.email, { ip: req.ip });
+      res.set('Cache-Control', 'no-store');
+      if (result.state === 'TOO_MANY_REQUESTS') {
+        res.set('Retry-After', String(result.retryAfterSeconds)).status(429);
+        return res.json({ error: { message: 'Demasiadas solicitudes. Espera unos minutos e inténtalo de nuevo.', statusCode: 429 } });
+      }
+      return res.status(202).json({ data: { sent: true } });
+    } catch (error) {
+      return next(error);
+    }
+  };
 
   /** @type {import('express').RequestHandler} */
   register = async (req, res, next) => {

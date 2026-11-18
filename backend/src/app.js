@@ -85,7 +85,7 @@ function createApp(container = createContainer('firestore')) {
 
   // Public: account creation happens before the caller has a token to
   // verify, so this can't sit behind verifyToken like everything else.
-  const authController = new AuthController(container.authService);
+  const authController = new AuthController(container.authService, container.passwordResetService);
   const invitationController = new InvitationController(container.invitationService);
   app.use('/api/v1/auth', createPublicAuthRoutes(authController));
   app.use('/api/v1/invitations', createPublicInvitationRoutes(invitationController));
